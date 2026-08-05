@@ -1,0 +1,148 @@
+Fill out Workday and Greenhouse job applications in one click, using a profile you enter once and that never leaves your computer.
+
+Applying to jobs means typing the same information over and over: your name, your address, your last three employers, your degree, your graduation date. Workday: Better Autofill enters all of it for you, so you can spend your time on the parts of an application that actually matter.
+
+
+WHAT IT FILLS
+
+Personal details
+• First and last name, email, phone number
+• LinkedIn or portfolio URL
+• Street address, city, state, postal code, country
+
+Work experience
+• Company, job title, and location for each role
+• Start and end dates, including "I currently work here"
+• Role description
+
+Education
+• School, degree, and field of study
+• Start and end dates
+• Expected graduation month and year
+• GPA
+
+Skills and languages
+• Comma-separated skill lists
+• Primary language
+
+Application questions
+• Are you legally authorized to work in this country?
+• Will you now or in the future require sponsorship?
+• Are you 18 years of age or older?
+• Have you previously worked for this company?
+• How did you hear about us?
+
+Voluntary self-identification
+• Gender, race and ethnicity, veteran status, disability status
+• Optional master toggle that selects the "decline to self-identify" or
+  "prefer not to answer" option on every disclosure question at once
+
+Resume
+• Stores your resume file and attaches it to the application's upload field
+
+
+SUPPORTED JOB BOARDS
+
+Workday (enabled by default)
+Works on any company careers site hosted on myworkdayjobs.com. Multi-page
+applications are handled as you go: the extension watches for new form
+sections and keeps filling as you click through each step.
+
+Greenhouse (optional, off until you turn it on)
+Supports both generations of Greenhouse boards - the classic boards.greenhouse.io
+forms and the newer job-boards.greenhouse.io React application - including forms
+that companies embed in their own careers pages.
+
+Greenhouse support is off by default and requests no permissions at install
+time. Turn it on under "Supported Portals" in the side panel and Chrome will
+ask for access to Greenhouse domains at that moment. Switch the toggle back off
+and access is revoked immediately.
+
+
+PRIVACY
+
+This extension has no backend. There is no account, no sign-in, and no server
+belonging to this extension for your data to be sent to.
+
+• Your profile is stored locally using Chrome's storage API
+• Nothing is uploaded, synced, or backed up by us
+• No analytics, no tracking, no telemetry, no third-party services or SDKs
+• No external fonts, scripts, or stylesheets are loaded at runtime
+• Your data leaves the browser only when you click the autofill button, which
+  types it into the job application in front of you - exactly as you would have
+  typed it yourself
+
+Your self-identification answers (gender, race and ethnicity, veteran status,
+disability status) are entirely optional. Leave them blank and those questions
+are left untouched. They are stored locally like everything else and are used
+only to answer the corresponding voluntary questions when you ask the extension
+to fill a form.
+
+The extension can only run on the job board domains listed above. It has no
+access to any other website you visit.
+
+Delete everything at any time with the "Delete All Data" button in the side
+panel. Uninstalling the extension also removes all stored data.
+
+Full privacy policy:
+https://github.com/N2pium/Workday-Better-Autofill-GCE/blob/master/PRIVACY_POLICY.md
+
+
+HOW TO USE
+
+1. Click the extension icon to open the side panel. Unlike a popup, the panel
+   stays open while you work through the form.
+2. Fill in your profile and click "Save Profile". You only do this once.
+3. Open a job application on a supported board.
+4. Click "AUTOFILL ACTIVE PAGE".
+5. Review what was filled, correct anything the form does differently, and
+   submit.
+
+Step 5 matters. Companies customise these forms heavily, and question wording
+varies from posting to posting. The extension matches fields by their labels and
+fills what it recognises. Always read the application over before you submit it.
+
+
+BACKUP AND RESTORE
+
+Export your profile to a JSON file and import it on another computer, or keep it
+as a backup before clearing your browser data.
+
+
+DESIGN NOTES
+
+A few deliberate choices worth knowing about:
+
+• When the extension is unsure, it leaves the field blank rather than guessing.
+  A blank field costs you a few seconds; a wrong answer goes out on a real job
+  application under your name.
+• Fields that already contain a value are never overwritten, so anything you
+  typed yourself or a resume parser filled in stays as you left it.
+• Degree and GPA answers are mapped to whatever options the board actually
+  offers - a "Bachelor of Science" becomes "Bachelors" or "Bachelors Degree"
+  depending on the form. If a board offers no option matching your degree, the
+  field is left for you.
+• Greenhouse permissions are requested only if you ask for Greenhouse support,
+  not at install time.
+
+
+LIMITATIONS
+
+• Only Workday and Greenhouse are supported. Other job boards are not.
+• Heavily customised forms, or questions phrased in unusual ways, may not be
+  recognised. The extension fills what it can and leaves the rest.
+• Some employers use screening questions specific to one posting. Those are
+  yours to answer.
+• This is an autofill tool, not an auto-apply bot. It never submits an
+  application for you. You review and submit every one yourself.
+
+
+OPEN SOURCE
+
+The complete source code is available for anyone to read, audit, or contribute
+to:
+
+https://github.com/N2pium/Workday-Better-Autofill-GCE
+
+Released under the MIT License. Bug reports and suggestions are welcome through
+the repository's issue tracker.
