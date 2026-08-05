@@ -22,6 +22,10 @@ A Chrome extension that automates filling job application forms on Workday and G
 - Choose your referral source
 - Master toggle to auto-decline all voluntary self-identification questions
 
+✨ **Backup & Restore**
+- Export your profile to a JSON file
+- Import it on another computer
+
 ✨ **Privacy-First**
 - All data stored locally — no cloud sync, no servers, no tracking
 - Zero third-party analytics or services
@@ -36,11 +40,11 @@ A Chrome extension that automates filling job application forms on Workday and G
 3. Confirm permissions when prompted
 
 ### Manual Installation (Development)
-1. Clone this repository: `git clone https://github.com/N2pium/EasyApply.git`
+1. Clone this repository: `git clone https://github.com/N2pium/Workday-Better-Autofill-GCE.git`
 2. Open Chrome and navigate to `chrome://extensions/`
 3. Enable "Developer mode" (toggle in top right)
 4. Click "Load unpacked"
-5. Select the EasyApply folder
+5. Select the Workday-Better-Autofill-GCE folder
 
 ## How to Use
 
@@ -145,7 +149,7 @@ Data is also deleted if you uninstall the extension.
 
 ## Support
 
-- **Issue found?** Check the [GitHub Issues](https://github.com/N2pium/EasyApply/issues)
+- **Issue found?** Check the [GitHub Issues](https://github.com/N2pium/Workday-Better-Autofill-GCE/issues)
 - **Have a suggestion?** Open a new issue with details
 - **Questions?** Review the [Features Guide](FEATURES_GUIDE.md) for detailed information
 
@@ -178,12 +182,6 @@ This project is open source. Review the GitHub repository for license details.
 - Enhanced Job Preferences UI
 - Master toggle for auto-declining disclosures
 - Improved form detection and multi-page support
-- Better error handling and logging
-
-### v1.1
-- Initial Workday support
-- Basic autofill for personal info, education, experience
-- Profile preferences storage
 
 ## Contributing
 
@@ -198,4 +196,4 @@ For major changes, open an issue first to discuss.
 
 **Made with ❤️ for job seekers everywhere.**
 
-Questions or feedback? Visit the [GitHub repo](https://github.com/N2pium/EasyApply).
+Questions or feedback? Visit the [GitHub repo](https://github.com/N2pium/Workday-Better-Autofill-GCE).
