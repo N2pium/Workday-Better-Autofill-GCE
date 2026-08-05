@@ -1,6 +1,11 @@
 # Web Store upload packages built by package.ps1
 workday-better-autofill-v*.zip
 
+# Raw screenshots -- these are full-screen captures containing real profile
+# data, tab titles and bookmarks. Keep them out of the public repo. Put
+# sanitised store assets in design/store/ instead.
+Screenshot*.png
+
 # OS noise
 Thumbs.db
 desktop.ini
