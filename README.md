@@ -171,9 +171,19 @@ The extension is built with:
 
 See [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) for technical deep-dive.
 
+### Building the Web Store package
+
+```powershell
+powershell -ExecutionPolicy Bypass -File package.ps1
+```
+
+This produces `workday-better-autofill-v<version>.zip` containing only the
+files Chrome needs. Source artwork (`design/`) and developer notes are
+excluded — the zip is what every user downloads, so it stays minimal.
+
 ## License
 
-This project is open source. Review the GitHub repository for license details.
+Released under the [MIT License](LICENSE).
 
 ## Changelog
 

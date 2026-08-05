@@ -1,0 +1,7 @@
+# Web Store upload packages built by package.ps1
+workday-better-autofill-v*.zip
+
+# OS noise
+Thumbs.db
+desktop.ini
+.DS_Store
