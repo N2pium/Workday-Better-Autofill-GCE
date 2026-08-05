@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy - Workday: Better Autofill</title>
+<meta name="description" content="Privacy policy for the Workday: Better Autofill Chrome extension.">
+<!-- GENERATED FILE - do not edit.
+     Source: PRIVACY_POLICY.md   Rebuild: node design/build-privacy.mjs -->
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 3rem 1.25rem 5rem;
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1c2024; background: #fff;
+  }
+  main { max-width: 44rem; margin: 0 auto; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .5rem; letter-spacing: -.02em; }
+  h2 { font-size: 1.2rem; margin: 2.25rem 0 .6rem; letter-spacing: -.01em; }
+  p, li { margin: .6rem 0; }
+  ul, ol { padding-left: 1.4rem; }
+  li::marker { color: #8a9099; }
+  a { color: #2563c9; }
+  code {
+    font: .9em/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+    background: #f1f3f5; padding: .15em .4em; border-radius: 4px;
+  }
+  strong { font-weight: 600; }
+  footer {
+    margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid #e6e8eb;
+    font-size: .875rem; color: #6b7280;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e6e8eb; background: #16181a; }
+    li::marker { color: #6b7280; }
+    a { color: #7aa7f0; }
+    code { background: #24272b; }
+    footer { border-top-color: #2a2e33; color: #9aa1aa; }
+  }
+</style>
+</head>
+<body>
+<main>
+<h1>Privacy Policy</h1>
+<p><strong>Effective Date:</strong> 2026-07-10</p>
+<h2>Overview</h2>
+<p>This extension ("Workday: Better Autofill") autofills job application forms on supported job portals (Workday and, optionally, Greenhouse). It is designed to operate <strong>entirely locally on your device</strong>.</p>
+<h2>Data Collection &amp; Storage</h2>
+<ol>
+<li><strong>What is stored</strong>: Only the profile information you type into the extension yourself — name, contact details, address, work history, education, skills, languages, job preferences, an optional resume file, and optional voluntary self-identification answers (gender, race/ethnicity, veteran status, disability status).</li>
+<li><strong>Where it is stored</strong>: All data is stored locally in your browser using the Chrome Storage API (<code>chrome.storage.local</code>). It is never synced, uploaded, or backed up by us.</li>
+<li><strong>No remote servers</strong>: We do not operate any backend servers, analytics, or tracking. Your data is <strong>never</strong> transmitted to us or to any third party. It leaves your browser only when <strong>you</strong> explicitly click the autofill button, which enters your data into the job application form you are viewing — exactly as if you had typed it yourself.</li>
+<li><strong>Sensitive data</strong>: The voluntary self-identification fields (race, gender, veteran status, disability) are entirely optional, are used solely to fill the corresponding voluntary questions on application forms at your request, and are stored locally like all other data. Leaving them blank means those questions are left untouched (unless you enable the "Decline All Disclosures" option, which selects the decline/prefer-not-to-answer choice).</li>
+</ol>
+<h2>Permissions</h2>
+<ul>
+<li><strong>storage</strong> — saves your profile locally so you don't have to re-type it.</li>
+<li><strong>activeTab / scripting</strong> — lets the extension fill the job application form in the tab you are viewing when you click the autofill button.</li>
+<li><strong>sidePanel</strong> — displays the extension UI in the browser side panel.</li>
+<li><strong>Host permission <code>*://*.myworkdayjobs.com/*</code></strong> — required to autofill Workday application pages.</li>
+<li><strong>Optional host permissions <code>*://boards.greenhouse.io/*</code> and <code>*://job-boards.greenhouse.io/*</code></strong> — requested <strong>only if you enable Greenhouse support</strong> in the extension's "Supported Portals" settings. You can revoke this at any time by turning the toggle off or via Chrome's extension settings.</li>
+</ul>
+<p>The extension runs only on the job portal domains listed above and has no access to any other website.</p>
+<h2>Data Deletion</h2>
+<p>You can delete all stored data at any time by clicking the <strong>"Delete All Data"</strong> button in the extension panel. This immediately and permanently clears all local storage associated with the extension. Uninstalling the extension also removes all stored data.</p>
+<h2>Data Sales &amp; Third Parties</h2>
+<p>We do not sell, share, transfer, or disclose your data to anyone. There are no third-party services, SDKs, or analytics in this extension.</p>
+<h2>Changes</h2>
+<p>If this policy changes, the updated version will be published at this same location with a new effective date.</p>
+<h2>Contact</h2>
+<p>If you have any questions, you can review the source code or contact the developer via the Chrome Web Store listing.</p>
+<footer>
+  Chrome extension &ldquo;Workday: Better Autofill&rdquo; &middot;
+  <a href="https://github.com/N2pium/Workday-Better-Autofill-GCE">Source code on GitHub</a>
+</footer>
+</main>
+</body>
+</html>

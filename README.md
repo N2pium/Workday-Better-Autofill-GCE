@@ -112,7 +112,9 @@ You can revoke Greenhouse access at any time via the toggle or Chrome's extensio
 - Does NOT share data with third parties
 - Only sends data to job application forms when you click autofill
 
-See the full [Privacy Policy](PRIVACY_POLICY.md) for details.
+See the full [Privacy Policy](PRIVACY_POLICY.md) for details. The published
+copy linked from the Chrome Web Store listing is served by GitHub Pages from
+`docs/`.
 
 ## Data Deletion
 
@@ -178,8 +180,19 @@ powershell -ExecutionPolicy Bypass -File package.ps1
 ```
 
 This produces `workday-better-autofill-v<version>.zip` containing only the
-files Chrome needs. Source artwork (`design/`) and developer notes are
-excluded — the zip is what every user downloads, so it stays minimal.
+files Chrome needs. Source artwork (`design/`), the published policy page
+(`docs/`) and developer notes are excluded — the zip is what every user
+downloads, so it stays minimal.
+
+### Editing the privacy policy
+
+`PRIVACY_POLICY.md` is the single source of truth. `docs/index.html` — the
+page the store listing links to — is generated from it. After editing the
+policy, regenerate the page so the two cannot drift:
+
+```bash
+node design/build-privacy.mjs
+```
 
 ## License
 
