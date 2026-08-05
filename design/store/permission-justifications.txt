@@ -1,0 +1,62 @@
+Paste-ready text for the Chrome Web Store Developer Dashboard.
+Each block below goes in the matching field on the "Privacy practices" tab.
+Every field has a 1000-character limit; counts are noted per block.
+
+===== SINGLE PURPOSE =====
+Workday: Better Autofill has one purpose: filling in job application forms on supported job boards using profile information the user has entered and saved in the extension.
+
+The user enters their details once - name, contact information, address, work history, education, skills, and optional voluntary self-identification answers - into the extension's side panel, where they are stored locally in the browser. When the user opens a job application on a supported board and clicks the autofill button, the extension matches the form's fields to that saved information and enters it, the same way the user would have typed it.
+
+The extension does nothing else. It does not submit applications, search for or recommend jobs, alter pages other than filling in their form fields, or operate on any site outside the supported job boards.
+
+===== storage =====
+The storage permission is used to save the user's application profile locally, so it does not have to be re-entered for every job application.
+
+Using chrome.storage.local, the extension stores: name, email, phone, LinkedIn URL, postal address, work history, education, skills, primary language, job preferences (work authorization, sponsorship requirement, former employee status, referral source), optional voluntary self-identification answers, and an optional resume file.
+
+This is the only place the extension keeps data. Nothing is written to a remote server, synced across devices, or shared with anyone. The user can erase all of it at any time with the "Delete All Data" button in the side panel, and uninstalling the extension removes it as well.
+
+Without this permission the user would have to retype their entire profile for every application, which is the problem the extension exists to solve.
+
+===== activeTab =====
+activeTab is used to fill the job application in the tab the user is looking at, at the moment they ask for it.
+
+When the user clicks "AUTOFILL ACTIVE PAGE" in the side panel, the extension needs to identify the active tab and send it a message telling its content script to begin filling. activeTab scopes that to the single tab the user is acting on, rather than granting standing access to their tabs.
+
+This access is exercised only in response to that explicit click. The extension does not read, monitor, or act on tabs in the background, and it does not use this permission to observe browsing activity.
+
+===== scripting =====
+The scripting permission is used to run the extension's own bundled autofill code on supported job board pages.
+
+It serves two functions:
+
+1. Injecting the autofill logic into a supported page so it can read the form's field labels and enter the user's saved profile information.
+
+2. Registering and unregistering the optional Greenhouse content scripts at runtime. Greenhouse support is off by default; when the user enables it under "Supported Portals", the extension registers those scripts with chrome.scripting.registerContentScripts, and unregisters them when the user turns it off. This keeps the extension least-privilege - installing it never grants Greenhouse access - and lets the toggle take effect on already-open tabs without a refresh.
+
+Every script injected ships inside the extension package. No code is downloaded or executed from any external source.
+
+===== sidePanel =====
+sidePanel is used to display the extension's interface.
+
+The profile form is long: personal details, address, multiple work history entries, multiple education entries, skills, job preferences, and voluntary self-identification answers. A browser action popup closes the moment the user clicks anywhere on the page, which makes it unsuitable here - the user needs to see their saved information while working through a multi-page job application, and to click the autofill button again after advancing to each new step.
+
+The side panel stays open alongside the page, so the user can fill a step, click "Next", and autofill the following step without reopening the interface each time.
+
+The panel displays only the extension's own page (popup.html) from inside the extension package.
+
+===== HOST PERMISSIONS =====
+Host access to *://*.myworkdayjobs.com/* is required for the extension's core function: reading the field labels on a Workday job application and entering the user's saved profile information into them. Workday applications are served from company-specific subdomains of myworkdayjobs.com, so a wildcard is needed to cover each employer's careers site.
+
+The Greenhouse hosts (*://boards.greenhouse.io/* and *://job-boards.greenhouse.io/*) are declared as OPTIONAL host permissions and are not requested at install time. Chrome asks for them only if the user turns on Greenhouse support in the side panel's "Supported Portals" section, and switching that toggle off revokes the access. They are matched inside iframes as well, because many employers embed the Greenhouse form in their own careers page.
+
+The extension requests no access to any other site.
+
+===== REMOTE CODE =====
+This extension does not use remote code.
+
+All JavaScript it executes - background.js, content.js, greenhouse.js, greenhouse-main.js and popup.js - is contained in the uploaded package and can be reviewed there. Nothing is fetched, downloaded, injected or evaluated from an external source. There are no calls to eval() or new Function(), no remote script tags, no modules loaded from a CDN, and no network requests at all: the extension contains no fetch or XMLHttpRequest calls.
+
+It loads no remote resources of any kind either. Styles and images are packaged locally and no web fonts are requested, so opening the side panel makes no external network request.
+
+One note for review: greenhouse-main.js runs in the page's main world so it can interact with the page's own React components. That file ships inside the extension package like every other script.
