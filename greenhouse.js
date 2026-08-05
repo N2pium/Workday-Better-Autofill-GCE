@@ -54,6 +54,8 @@
             ghFillLocation();
             ghUploadResume();
             ghFillLegacySelects();
+            ghFillEducationTextFields();
+            ghFillCheckboxGroups();
             await ghFillComboboxes();
         } catch (e) {
             console.error('Greenhouse Autofill: Error during fill', e);
@@ -183,6 +185,94 @@
     }
 
     /**
+     * 3b. EDUCATION YEARS (and a free-text GPA)
+     * Greenhouse renders the year fields as plain text inputs, so neither the
+     * <select> pass nor the combobox pass reaches them.
+     */
+    function ghFillEducationTextFields() {
+        const edu = (ghProfile.education && ghProfile.education[0]) || {};
+        if (!edu.startDate && !edu.endDate && !edu.gpa) return;
+
+        const inputs = document.querySelectorAll(
+            'input[type="text"], input[type="number"], input:not([type])'
+        );
+
+        inputs.forEach(input => {
+            if (input.value) return;                                        // never overwrite
+            if (input.getAttribute('role') === 'combobox') return;
+            if (input.getAttribute('aria-autocomplete') === 'list') return;
+
+            const label = ghLabelTextForElement(input).toLowerCase();
+            if (!label) return;
+            const has = (...k) => k.some(s => label.includes(s));
+
+            // Don't let school dates leak into an employment-history section
+            if (has('employment', 'work experience', 'employer', 'company', 'position')) return;
+
+            const wantsEnd = has('graduat') || has('end', 'completion', 'finish');
+            const wantsStart = has('start', 'began');
+
+            let value = '';
+            if (has('year')) {
+                if (wantsEnd) value = edu.endDate && edu.endDate.year;
+                else if (wantsStart) value = edu.startDate && edu.startDate.year;
+            } else if (has('month')) {
+                // A text month box takes the numeric form the profile stores;
+                // only dropdowns need the month name.
+                if (wantsEnd) value = edu.endDate && edu.endDate.month;
+                else if (wantsStart) value = edu.startDate && edu.startDate.month;
+            } else if (has('gpa', 'grade point')) {
+                value = edu.gpa;                                            // banded dropdowns go through the combobox pass
+            }
+
+            if (value) {
+                ghSetNativeValue(input, String(value));
+                console.log(`Greenhouse Autofill: "${label.slice(0, 40)}" -> ${value}`);
+            }
+        });
+    }
+
+    /**
+     * 3c. "How did you hear about <company>?" is a select-all-that-apply
+     * checkbox group, not a dropdown, so the combobox pass never sees it.
+     * Tick only the box matching the user's configured referral source.
+     */
+    function ghFillCheckboxGroups() {
+        const prefs = ghProfile.jobPreferences || {};
+        const source = prefs.sourceReferral;
+        if (!source) return;
+
+        const boxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+        if (!boxes.length) return;
+
+        const groups = new Map();
+        boxes.forEach(box => {
+            const q = ghQuestionTextForElement(box);
+            if (!groups.has(q)) groups.set(q, []);
+            groups.get(q).push(box);
+        });
+
+        groups.forEach((items, question) => {
+            if (!/hear about/i.test(question)) return;
+            if (items.some(b => b.checked)) return;   // already answered
+
+            const s = ghNorm(source);
+            const target =
+                items.find(b => ghNorm(ghLabelTextForElement(b)) === s) ||
+                items.find(b => {
+                    const l = ghNorm(ghLabelTextForElement(b));
+                    return l && s && (l.includes(s) || s.includes(l));
+                }) ||
+                items.find(b => /other/i.test(ghLabelTextForElement(b)));
+
+            if (target && !target.checked) {
+                target.click();   // click() so React's onChange handler runs
+                console.log(`Greenhouse Autofill: checked "${ghLabelTextForElement(target).trim()}"`);
+            }
+        });
+    }
+
+    /**
      * 4. NEW BOARDS: react-select comboboxes, delegated to the MAIN world
      * helper (greenhouse-main.js) which calls react-select's selectOption().
      */
@@ -268,6 +358,44 @@
             return decline ? { values: declineValues, declineOk: true } : null;
         if (has('race', 'ethnic'))
             return (demo.race || decline) ? { values: [demo.race || ''].filter(Boolean).concat(decline ? declineValues : []), declineOk: decline } : null;
+        // --- Education dates / GPA -------------------------------------
+        // Only claim a date field if it clearly belongs to education. A form
+        // that also asks for employment dates would otherwise get the school
+        // dates written into it.
+        const isEmploymentDate = has('employment', 'work experience', 'job title', 'employer', 'company', 'position');
+        if (!isEmploymentDate) {
+            // Deliberately narrow. A miss just means the user fills that one
+            // field by hand; a false positive puts wrong dates on a real job
+            // application, so loose matches like "to"/"from" are not used.
+            const graduation = has('graduat');
+            const wantsEnd = graduation || has('end', 'completion', 'finish');
+            const wantsStart = has('start', 'began');
+
+            if (has('month')) {
+                if (wantsEnd) {
+                    const c = ghMonthCandidates(edu.endDate && edu.endDate.month);
+                    if (c.length) return { values: c };
+                }
+                if (wantsStart) {
+                    const c = ghMonthCandidates(edu.startDate && edu.startDate.month);
+                    if (c.length) return { values: c };
+                }
+            }
+            // Years are usually plain text boxes (handled in
+            // ghFillEducationTextFields) but some boards use a dropdown.
+            if (has('year')) {
+                if (wantsEnd && edu.endDate && edu.endDate.year)
+                    return { values: [String(edu.endDate.year)] };
+                if (wantsStart && edu.startDate && edu.startDate.year)
+                    return { values: [String(edu.startDate.year)] };
+            }
+        }
+        if (has('gpa', 'grade point')) {
+            const c = ghGpaCandidates(edu.gpa);
+            if (c.length) return { values: c };
+            return null;
+        }
+
         if (has('school', 'university', 'institution'))
             return edu.school ? { values: [edu.school], acceptFirst: true } : null;
         if (has('degree'))
@@ -284,6 +412,43 @@
 
     function ghNorm(s) {
         return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    const GH_MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+
+    /**
+     * Greenhouse renders month pickers as dropdowns of month NAMES, but the
+     * profile stores a numeric month ("09"). Return name-first candidates so a
+     * name dropdown matches exactly, with the numeric forms kept as fallbacks
+     * for boards that list "01".."12" instead.
+     */
+    function ghMonthCandidates(month) {
+        if (!month) return [];
+        const raw = String(month).trim();
+        const n = parseInt(raw.replace(/\D/g, ''), 10);
+        if (n >= 1 && n <= 12) {
+            const name = GH_MONTH_NAMES[n - 1];
+            return [name, name.slice(0, 3), String(n).padStart(2, '0'), String(n)];
+        }
+        const byName = GH_MONTH_NAMES.find(m => ghNorm(m) === ghNorm(raw) || ghNorm(m).startsWith(ghNorm(raw)));
+        return byName ? [byName, byName.slice(0, 3)] : [];
+    }
+
+    /**
+     * GPA questions are a banded dropdown on a 4.0 scale, not a free number.
+     * Returns [] for anything outside 0-4.0 (e.g. a 5.0- or 100-scale GPA)
+     * rather than guessing a band, since a wrong GPA on a real application is
+     * worse than an unanswered one.
+     */
+    function ghGpaCandidates(gpa) {
+        if (!gpa) return [];
+        const v = parseFloat(String(gpa).replace(/[^0-9.]/g, ''));
+        if (!isFinite(v) || v <= 0 || v > 4.0) return [];
+        if (v >= 3.6) return ['3.6-4.0', '3.6 - 4.0', '3.6+'];
+        if (v >= 3.3) return ['3.3-3.59', '3.3 - 3.59'];
+        if (v >= 3.0) return ['3.0-3.29', '3.0 - 3.29'];
+        return ['2.99 or below', '2.99 and below', 'Below 3.0'];
     }
 
     function ghIsDeclineIntent(value) {
@@ -379,6 +544,32 @@
             return true;
         }
         return false;
+    }
+
+    // The group-level question for a checkbox/radio, as opposed to the label
+    // of the individual option.
+    function ghQuestionTextForElement(el) {
+        const fs = el.closest('fieldset');
+        if (fs) {
+            const legend = fs.querySelector('legend');
+            if (legend && legend.innerText) return legend.innerText;
+        }
+        const grp = el.closest('[role="group"], fieldset');
+        if (grp) {
+            const aria = grp.getAttribute('aria-label');
+            if (aria) return aria;
+            const by = grp.getAttribute('aria-labelledby');
+            if (by) {
+                const ref = document.getElementById(by.split(' ')[0]);
+                if (ref && ref.innerText) return ref.innerText;
+            }
+        }
+        let node = el.parentElement;
+        for (let i = 0; i < 5 && node; i++, node = node.parentElement) {
+            const cand = node.querySelector('legend, label, h2, h3, h4');
+            if (cand && !cand.contains(el) && cand.innerText) return cand.innerText;
+        }
+        return '';
     }
 
     function ghFindSelectByLabel(labelKeys) {

@@ -80,8 +80,10 @@
     }
 
     async function fillCombobox(item) {
+        // NOTE: this selector must stay identical to the one greenhouse.js
+        // enumerates, or item.index refers to a different element here.
         const input = (item.id && document.getElementById(item.id))
-            || document.querySelectorAll('input[role="combobox"]')[item.index];
+            || document.querySelectorAll('input[role="combobox"], input[aria-autocomplete="list"]')[item.index];
         if (!input) return { ok: false, reason: 'input not found', label: item.label };
 
         let api = findSelectApi(input);
