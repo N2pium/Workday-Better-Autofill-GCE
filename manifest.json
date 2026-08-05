@@ -1,20 +1,30 @@
 {
     "manifest_version": 3,
     "name": "Workday: Better Autofill",
-    "version": "1.0",
-    "description": "Autofills Workday job applications, including experience, education, and legal disclosures.",
-    "privacy_policy": "PRIVACY_POLICY.md",
-    "homepage_url": "https://github.com/N2pium/NBA-Website",
+    "version": "1.2",
+    "description": "Autofills job applications on Workday and Greenhouse, including experience, education, and legal disclosures.",
+    "privacy_policy": "https://raw.githubusercontent.com/N2pium/EasyApply/master/PRIVACY_POLICY.md",
+    "homepage_url": "https://github.com/N2pium/EasyApply",
     "permissions": [
         "storage",
         "activeTab",
-        "scripting"
+        "scripting",
+        "sidePanel"
     ],
     "host_permissions": [
         "*://*.myworkdayjobs.com/*"
     ],
+    "optional_host_permissions": [
+        "*://boards.greenhouse.io/*",
+        "*://job-boards.greenhouse.io/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "side_panel": {
+        "default_path": "popup.html"
+    },
     "action": {
-        "default_popup": "popup.html",
         "default_icon": {
             "16": "icons/icon16.png",
             "48": "icons/icon48.png",

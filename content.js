@@ -44,7 +44,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "fill_form") {
         console.log("Workday Autoplay: Received fill_form request.");
         // Reload data to ensure freshness
-        chrome.storage.local.get(['personalInfo', 'address', 'education', 'workExperience', 'skills', 'language', 'jobPreferences', 'resume', 'resumeMeta'], (result) => {
+        chrome.storage.local.get(['personalInfo', 'address', 'education', 'workExperience', 'skills', 'language', 'jobPreferences', 'demographics', 'resume', 'resumeMeta'], (result) => {
             userProfile = result;
             console.log('Workday Autoplay: Profile loaded for filling', userProfile);
             startObserver();
@@ -84,6 +84,9 @@ async function scanAndFill() {
         fillFieldByFuzzyLabel(['first name', 'given name'], userProfile.personalInfo.firstName);
         fillFieldByFuzzyLabel(['last name', 'family name', 'surname'], userProfile.personalInfo.lastName);
         fillFieldByFuzzyLabel(['phone', 'mobile'], userProfile.personalInfo.phone);
+        // Phone Device Type dropdown — select Mobile
+        await selectWorkdayDropdown('Phone Device Type', 'Mobile');
+        await selectWorkdayDropdown('Device Type', 'Mobile');
         fillFieldByFuzzyLabel(['email'], userProfile.personalInfo.email);
         fillFieldByFuzzyLabel(['linkedin', 'website', 'url'], userProfile.personalInfo.linkedinUrl);
 
@@ -156,6 +159,9 @@ async function scanAndFill() {
         // Degree Dropdown
         if (edu.degree) {
             await handleDropdown(['degree', 'qualification'], edu.degree);
+            // Also try selectWorkdayDropdown as fallback — more reliable for Workday's
+            // custom selectSelectedOption / selectWidget elements
+            await selectWorkdayDropdown('Degree', edu.degree);
         }
 
         if (edu.startDate) await fillDate('first year attended', edu.startDate);
@@ -192,6 +198,14 @@ async function scanAndFill() {
 
     console.log("Workday Autoplay: Scan completed.");
     isScanning = false;
+
+    // Notify the side panel so it can show live status
+    try {
+        chrome.runtime.sendMessage({ action: 'fill_complete' }, () => {
+            // Reading lastError prevents "Unchecked runtime.lastError" noise when panel is closed
+            void chrome.runtime.lastError;
+        });
+    } catch (e) { /* panel closed, extension reloaded, etc. */ }
 
     // Permanently disconnect observer after this scan to prevent loops
     if (observer) {
@@ -1262,6 +1276,27 @@ async function handleJobPreferences() {
 
         // Also try aria-label approach
         await selectByAriaLabel('source', prefs.sourceReferral);
+    }
+
+    // 5. US Citizenship — always answer Yes
+    const citizenshipKeywords = [
+        'citizen of the united states',
+        'u.s. citizen',
+        'us citizen',
+        'united states citizen',
+        'are you a citizen'
+    ];
+    // Try radio-button style first
+    let citizenAnswered = await answerYesNo(citizenshipKeywords, 'Yes');
+    // Try Workday dropdown style as fallback
+    if (!citizenAnswered) {
+        citizenAnswered = await selectWorkdayDropdown('citizen of the United States', 'Yes');
+    }
+    if (!citizenAnswered) {
+        citizenAnswered = await selectWorkdayDropdown('U.S. Citizen', 'Yes');
+    }
+    if (!citizenAnswered) {
+        await selectWorkdayDropdown('citizenship', 'Yes');
     }
 }
 

@@ -245,6 +245,29 @@
         <div id="resumeStatus" class="helper" style="margin-top:4px; color: var(--primary);"></div>
       </section>
 
+      <!-- Supported Portals -->
+      <section>
+        <h2>Supported Portals</h2>
+        <p class="helper">Workday is always enabled. Turn on other portals below — Chrome will ask you to approve
+          access to that site.</p>
+        <div class="input-group checkbox-group">
+          <input type="checkbox" id="greenhouseToggle" />
+          <label for="greenhouseToggle">Greenhouse (boards.greenhouse.io)</label>
+        </div>
+        <p class="helper" style="margin-top: 4px;">After enabling, refresh any Greenhouse tab that is already open.</p>
+      </section>
+
+      <!-- Backup -->
+      <section>
+        <h2>Backup</h2>
+        <p class="helper">Save your profile to a file, or restore it on another computer</p>
+        <div class="row">
+          <button type="button" id="exportBtn" class="add-btn half">⬇ Export Profile</button>
+          <button type="button" id="importBtn" class="add-btn half">⬆ Import Profile</button>
+        </div>
+        <input type="file" id="importFile" accept=".json,application/json" style="display:none" />
+      </section>
+
       <div class="sticky-footer">
         <button type="button" id="deleteBtn"
           style="background-color: transparent; border: 1px solid #ef4444; color: #ef4444; margin-bottom: 8px;">Delete

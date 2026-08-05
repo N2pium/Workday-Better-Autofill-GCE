@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // Load saved data
-    chrome.storage.local.get(['personalInfo', 'address', 'education', 'workExperience', 'skills', 'language', 'jobPreferences', 'resumeMeta'], (result) => {
+    chrome.storage.local.get(['personalInfo', 'address', 'education', 'workExperience', 'skills', 'language', 'jobPreferences', 'demographics', 'resumeMeta'], (result) => {
         // Personal Info
         if (result.personalInfo) {
             document.getElementById('firstName').value = result.personalInfo.firstName || '';
@@ -303,17 +303,123 @@ document.addEventListener('DOMContentLoaded', () => {
             if (tabs.length === 0) return;
 
             const activeTab = tabs[0];
+            // Known portal hosts. We still attempt the message on unknown URLs
+            // because Greenhouse forms are often embedded in an iframe on a
+            // company's own careers page — the content script lives in the iframe.
+            const SUPPORTED_HOSTS = ['myworkdayjobs.com', 'boards.greenhouse.io', 'job-boards.greenhouse.io'];
+            const looksSupported = activeTab.url && SUPPORTED_HOSTS.some(h => activeTab.url.includes(h));
+
             chrome.tabs.sendMessage(activeTab.id, { action: 'fill_form' }, (response) => {
                 if (chrome.runtime.lastError) {
                     console.log("Could not send message, maybe content script isn't loaded yet.");
-                    statusCtx.textContent = "Error: Refresh page and try again.";
+                    statusCtx.textContent = looksSupported
+                        ? 'Error: Refresh the page and try again.'
+                        : 'Not a supported job page (Workday / Greenhouse).';
                     statusCtx.style.color = '#ef4444';
                 } else {
                     console.log("Message sent", response);
-                    statusCtx.textContent = "Autofill started...";
+                    statusCtx.textContent = "Autofill running...";
                     statusCtx.style.color = '#10b981';
                 }
             });
         });
+    });
+
+    // Supported Portals: Greenhouse opt-in via optional host permissions.
+    // The permission request MUST come from a user gesture (this click).
+    // background.js watches permissions.onAdded/onRemoved and registers or
+    // unregisters the Greenhouse content script accordingly.
+    const GH_ORIGINS = ['*://boards.greenhouse.io/*', '*://job-boards.greenhouse.io/*'];
+    const ghToggle = document.getElementById('greenhouseToggle');
+
+    chrome.permissions.contains({ origins: GH_ORIGINS }, (granted) => {
+        ghToggle.checked = !!granted;
+    });
+
+    ghToggle.addEventListener('change', () => {
+        if (ghToggle.checked) {
+            chrome.permissions.request({ origins: GH_ORIGINS }, (granted) => {
+                ghToggle.checked = !!granted;
+                statusCtx.textContent = granted
+                    ? 'Greenhouse support enabled.'
+                    : 'Permission declined — Greenhouse stays off.';
+                statusCtx.style.color = granted ? '#10b981' : '#f59e0b';
+                setTimeout(() => { statusCtx.textContent = ''; }, 4000);
+            });
+        } else {
+            chrome.permissions.remove({ origins: GH_ORIGINS }, (removed) => {
+                ghToggle.checked = !removed;
+                if (removed) {
+                    statusCtx.textContent = 'Greenhouse support disabled.';
+                    statusCtx.style.color = '#94a3b8';
+                    setTimeout(() => { statusCtx.textContent = ''; }, 3000);
+                }
+            });
+        }
+    });
+
+    // Live status from content script (side panel stays open, so we can show this)
+    chrome.runtime.onMessage.addListener((msg) => {
+        if (msg.action === 'fill_complete') {
+            statusCtx.textContent = 'Autofill complete ✓';
+            statusCtx.style.color = '#10b981';
+            setTimeout(() => { statusCtx.textContent = ''; }, 5000);
+        }
+    });
+
+    // Collapsible sections — click a section title to collapse/expand it
+    document.querySelectorAll('form section h2').forEach(h2 => {
+        h2.addEventListener('click', () => {
+            h2.parentElement.classList.toggle('collapsed');
+        });
+    });
+
+    // Export Profile (full backup, including resume)
+    document.getElementById('exportBtn').addEventListener('click', () => {
+        chrome.storage.local.get(null, (data) => {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `workday-autofill-profile-${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            statusCtx.textContent = 'Profile exported.';
+            statusCtx.style.color = '#10b981';
+            setTimeout(() => { statusCtx.textContent = ''; }, 3000);
+        });
+    });
+
+    // Import Profile
+    const importFile = document.getElementById('importFile');
+    document.getElementById('importBtn').addEventListener('click', () => importFile.click());
+    importFile.addEventListener('change', () => {
+        const file = importFile.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const data = JSON.parse(reader.result);
+                if (!data || typeof data !== 'object' || Array.isArray(data)) {
+                    throw new Error('Invalid profile format');
+                }
+                chrome.storage.local.set(data, () => {
+                    if (chrome.runtime.lastError) {
+                        statusCtx.textContent = 'Error importing (file too large?)';
+                        statusCtx.style.color = '#ef4444';
+                    } else {
+                        // Reload panel so the form reflects imported data
+                        location.reload();
+                    }
+                });
+            } catch (err) {
+                statusCtx.textContent = 'Error: Not a valid profile file.';
+                statusCtx.style.color = '#ef4444';
+                setTimeout(() => { statusCtx.textContent = ''; }, 4000);
+            }
+        };
+        reader.readAsText(file);
+        importFile.value = ''; // Allow re-importing the same file
     });
 });
