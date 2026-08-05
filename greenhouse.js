@@ -163,7 +163,7 @@
         // Education static selects (legacy)
         const edu = ghProfile.education && ghProfile.education[0];
         if (edu) {
-            if (edu.degree) ghFillSelectFuzzy(document.getElementById('education_degree_0'), edu.degree);
+            if (edu.degree) ghFillSelectSpec(document.getElementById('education_degree_0'), ghDegreeSpec(edu.degree));
             if (edu.fieldOfStudy) ghFillSelectFuzzy(document.getElementById('education_discipline_0'), edu.fieldOfStudy);
             if (edu.startDate) {
                 ghFillSelectFuzzy(document.getElementById('education_start_month_0'), edu.startDate.month);
@@ -398,8 +398,10 @@
 
         if (has('school', 'university', 'institution'))
             return edu.school ? { values: [edu.school], acceptFirst: true } : null;
-        if (has('degree'))
-            return edu.degree ? { values: [edu.degree] } : null;
+        // Boards label this "Degree", but just as often "Highest Level of
+        // Education" or "Education Level", which the old check never matched.
+        if (has('degree', 'level of education', 'education level', 'highest level', 'qualification'))
+            return ghDegreeSpec(edu.degree);
         if (has('discipline', 'field of study', 'major'))
             return edu.fieldOfStudy ? { values: [edu.fieldOfStudy], acceptFirst: true } : null;
         if (has('country'))
@@ -433,6 +435,66 @@
         }
         const byName = GH_MONTH_NAMES.find(m => ghNorm(m) === ghNorm(raw) || ghNorm(m).startsWith(ghNorm(raw)));
         return byName ? [byName, byName.slice(0, 3)] : [];
+    }
+
+    /**
+     * The profile stores verbose degree names ("Bachelor of Science") but most
+     * boards list coarse ones ("Bachelors", "Bachelors Degree"). Map the
+     * profile value to a level, then offer that level's common spellings.
+     *
+     * Order is significant: pickOption returns on the first candidate that
+     * matches anything, so canonical names go first and the user's verbose
+     * original goes LAST. Leading with the verbose name lets its prefix
+     * collide -- "Doctor of Philosophy" shares 9 characters with "Doctor of
+     * Medicine" but only 6 with "Doctorate", so a PhD would land on MD.
+     *
+     * More specific levels are tested before the general ones they contain
+     * (JD/MD before doctorate, MBA before master).
+     *
+     * `reject` drops options that merely CONTAIN a generic candidate but mean
+     * something narrower -- "Accelerated Masters" contains "Masters", so a
+     * plain MA would otherwise land on a programme the user was never in. If
+     * rejecting leaves nothing, the field stays blank, which is the intended
+     * outcome: the board simply has no option for this degree.
+     */
+    const GH_DEGREE_LEVELS = [
+        { test: /high school|secondary|\bged\b/i,
+          values: ['High School Diploma', 'High School', 'High School or equivalent', 'Secondary School', 'GED'] },
+        { test: /juris doctor|\bjd\b|law degree/i,
+          values: ['Juris Doctor', 'JD', 'Juris Doctor (JD)', 'Law Degree', 'Doctorate'] },
+        { test: /doctor of medicine|\bmd\b/i,
+          values: ['MD', 'Doctor of Medicine', 'Doctorate'] },
+        { test: /master of business|\bmba\b/i,
+          values: ['MBA', 'Master of Business Administration', 'Masters Degree', "Master's Degree", 'Masters'],
+          reject: 'accelerated|dual|joint|combined' },
+        { test: /doctor|doctorate|phd|ph\.d/i,
+          values: ['Doctorate', 'Doctorate Degree', 'Doctoral Degree', 'PhD', 'Doctor of Philosophy'],
+          reject: 'accelerated|dual|joint|combined' },
+        { test: /master/i,
+          values: ['Masters Degree', "Master's Degree", 'Masters', 'Master', 'Graduate Degree'],
+          reject: 'accelerated|dual|joint|combined' },
+        { test: /bachelor|\bba\b|\bbs\b/i,
+          values: ['Bachelors Degree', "Bachelor's Degree", 'Bachelors', 'Bachelor', 'Undergraduate Degree'],
+          reject: 'accelerated|dual|joint|combined' },
+        { test: /associate|\baa\b|\bas\b/i,
+          values: ['Associates Degree', "Associate's Degree", 'Associates', 'Associate'],
+          reject: 'accelerated|dual|joint|combined' },
+        { test: /certificate|certification/i,
+          values: ['Certificate', 'Certification'],
+          reject: 'advanced' },
+    ];
+
+    // Returns { values, reject? } or null.
+    function ghDegreeSpec(degree) {
+        if (!degree) return null;
+        const level = GH_DEGREE_LEVELS.find(l => l.test.test(degree));
+        const values = level ? level.values.slice() : [];
+        if (!values.some(v => ghNorm(v) === ghNorm(degree))) values.push(degree);
+        if (!values.length) return null;
+        // Never reject on a word the user's own degree contains.
+        const reject = level && level.reject && !new RegExp(level.reject, 'i').test(degree)
+            ? level.reject : undefined;
+        return reject ? { values, reject } : { values };
     }
 
     /**
@@ -517,10 +579,14 @@
         }
     }
 
-    function ghFillSelectFuzzy(select, desired) {
+    function ghFillSelectFuzzy(select, desired, reject) {
         if (!select || select.tagName !== 'SELECT' || !desired) return false;
 
-        const options = Array.from(select.options);
+        let options = Array.from(select.options);
+        if (reject) {
+            const re = new RegExp(reject, 'i');
+            options = options.filter(o => !re.test(o.textContent || ''));
+        }
         const target = ghNorm(desired);
 
         let match = options.find(o => ghNorm(o.textContent) === target || ghNorm(o.value) === target);
@@ -570,6 +636,15 @@
             if (cand && !cand.contains(el) && cand.innerText) return cand.innerText;
         }
         return '';
+    }
+
+    // Try each spelling in order, stopping at the first that matches an option.
+    function ghFillSelectSpec(select, spec) {
+        if (!select || !spec || !spec.values) return false;
+        for (const c of spec.values) {
+            if (ghFillSelectFuzzy(select, c, spec.reject)) return true;
+        }
+        return false;
     }
 
     function ghFindSelectByLabel(labelKeys) {

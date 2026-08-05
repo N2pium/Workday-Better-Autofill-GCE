@@ -53,8 +53,15 @@
      * vs option "United States +1" (long common prefix), or "Decline to
      * Self-Identify" vs "I don't wish to answer" (decline-intent fallback).
      */
-    function pickOption(options, candidates, declineOk) {
-        const flat = flatten(options).filter(o => o && o.label != null);
+    function pickOption(options, candidates, declineOk, reject) {
+        let flat = flatten(options).filter(o => o && o.label != null);
+        // Drop options that merely contain a generic candidate but mean
+        // something narrower ("Accelerated Masters" for a plain MA). Applied
+        // unconditionally: if nothing survives, no option is the right one.
+        if (reject) {
+            const re = new RegExp(reject, 'i');
+            flat = flat.filter(o => !re.test(String(o.label)));
+        }
         for (const desired of candidates) {
             const t = norm(desired);
             if (!t) continue;
@@ -94,7 +101,7 @@
             return { ok: true, reason: 'already has value', label: item.label };
         }
 
-        let opt = pickOption(api.options, item.values, item.declineOk);
+        let opt = pickOption(api.options, item.values, item.declineOk, item.reject);
 
         // Async selects (e.g. School) load options only after typing:
         // drive the input's React onChange, wait, then re-read fresh props.
@@ -108,7 +115,7 @@
                 } catch (e) { /* ignore */ }
                 await new Promise(r => setTimeout(r, 1500));
                 api = findSelectApi(input) || api;
-                opt = pickOption(api.options, item.values, item.declineOk);
+                opt = pickOption(api.options, item.values, item.declineOk, item.reject);
                 if (!opt && item.acceptFirst) {
                     opt = flatten(api.options)[0] || null;
                 }
