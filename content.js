@@ -301,41 +301,54 @@ async function handleDropdown(keys, value) {
     if (!value) return;
 
     for (const key of keys) {
-        const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${key.toLowerCase()}")]/following::*[self::button or @role="combobox"][1]`;
-        const trigger = getElementByXpath(xpath);
+        try {
+            const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${key.toLowerCase()}")]/following::*[self::button or @role="combobox"][1]`;
+            const trigger = getElementByXpath(xpath);
 
-        if (trigger) {
+            if (!trigger) continue;
+
             if (trigger.innerText.includes(value) || trigger.value === value) continue;
 
             console.log(`Workday Autoplay: Found dropdown trigger for ${key}`, trigger);
+            scrollIntoViewIfNeeded(trigger);
             trigger.click();
 
-            // Wait for options
-            await new Promise(r => setTimeout(r, 500));
+            const hasOptions = await waitForCondition(() => {
+                return document.querySelector('div[role="option"], div[role="listitem"]') !== null;
+            }, 3000);
+
+            if (!hasOptions) {
+                console.warn(`Workday Autoplay: No options appeared for ${key}`);
+                continue;
+            }
 
             const optionXpath = `//div[@role="option" or @role="listitem"]//div[text()="${value}"] | //div[@role="option" and contains(text(), "${value}")]`;
-            const option = getElementByXpath(optionXpath);
+            let option = getElementByXpath(optionXpath);
+
+            if (!option) {
+                const searchInput = document.querySelector('input[type="search"], input[aria-label="Search"]');
+                if (searchInput) {
+                    scrollIntoViewIfNeeded(searchInput);
+                    setNativeValue(searchInput, value);
+                    await waitForCondition(() => {
+                        const opts = document.querySelectorAll('div[role="option"], div[role="listitem"]');
+                        return opts.length > 0;
+                    }, 2000);
+                    option = getElementByXpath(optionXpath);
+                }
+            }
 
             if (option) {
                 console.log(`Workday Autoplay: Found option ${value}`, option);
+                scrollIntoViewIfNeeded(option);
                 option.click();
-                // Cooldown after selection as per Phase 5 Req 2
-                await new Promise(r => setTimeout(r, 500));
-                return; // Done
+                await new Promise(r => setTimeout(r, 300));
+                return;
+            } else {
+                console.warn(`Workday Autoplay: Option ${value} not found for ${key}`);
             }
-
-            // Try search input fallback logic here if needed...
-            const searchInput = document.querySelector('input[type="search"], input[aria-label="Search"]');
-            if (searchInput) {
-                setNativeValue(searchInput, value);
-                await new Promise(r => setTimeout(r, 1000));
-                const filteredOption = getElementByXpath(optionXpath);
-                if (filteredOption) {
-                    filteredOption.click();
-                    await new Promise(r => setTimeout(r, 500));
-                    return;
-                }
-            }
+        } catch (e) {
+            console.error(`Workday Autoplay: Error handling dropdown for ${key}:`, e);
         }
     }
 }
