@@ -188,6 +188,47 @@ Fix is a prefix match (`[data-automation-id^="formField"]`), but check each of
 the three call sites separately — widening the container changes which label a
 field resolves to, so re-run the label-collision model afterwards.
 
+### F4 — degree never matches across spelling variants (user-reported, 2026-08-07)
+
+Fixed in `913d56f`. The user writes a degree as `BS`, `Bachelor of Science` or
+`Bachelors`; the option list uses whichever of those the tenant prefers. The
+generic exact → case-insensitive → substring chain connects none of them, and
+the apostrophe in `Bachelor's Degree` breaks it on its own.
+
+It also **mis-picked**: `"bachelor of science".includes("ba")` is true via
+"**BA**chelor", so a BA silently selected a BS whenever science was listed first.
+
+`matchDegreeOption` reduces both sides to a level (+ field where stated).
+Passed explicitly to the degree dropdown only — the matcher param defaults to
+`null`, so Country/State keep literal matching. On genuine ambiguity
+("Bachelors" against both BA and BS) it returns nothing rather than guessing.
+
+Modelled over six realistic option lists: 29 new fills, 1 corrected mis-pick,
+0 regressions. Harness worth rebuilding if this is touched again.
+
+### F5 — option highlights but never commits (user-reported, 2026-08-07)
+
+Fixed in `d5ea89a`. Observed on Country in My Information: the correct row
+highlights and nothing is selected.
+
+`el.click()` dispatches **only** a click event — no pointerdown/mousedown/mouseup.
+Workday rows commonly commit on `mousedown` so the menu tears down before blur,
+so the bare click reached no handler. The hover state is CSS `:hover` and proves
+only that the right row was found.
+
+`commitOptionSelection()` clicks, verifies the popper actually tore down, and
+only then replays a full pointer sequence on the **leaf** text element (handlers
+may sit on the inner `<div>` while `OPTION_SELECTOR` returns the `<li>`; events
+bubble up so the leaf covers both). **Escalation only** — nothing extra fires
+when the plain click already worked, so multiselect widgets cannot toggle a
+freshly-set value back off.
+
+Routed: `handleDropdown`, `selectWorkdayDropdown` (all three match paths),
+`handleDateDropdown`. Still clicking directly and **not yet investigated**:
+`handleSearchablePicker` (675), `handleLanguages` (821/836/852),
+`selectByAriaLabel` (1153). If a picker or language selection shows the same
+highlight-but-no-commit symptom, route it through the same helper.
+
 ### Confirmed working (do not touch)
 
 `addressLine1`, `postalCode`, resume skip-if-uploaded, language skip-if-exists,
@@ -230,3 +271,7 @@ Append one line per firing. Keep it short.
 - `2026-08-07` — DOM screenshots captured. F1, F2 root causes confirmed; F3 found.
 - `2026-08-07` — **F1 fixed** (scoped listbox lookup, 4 call sites). Awaiting a
   real-run console log to confirm. F2 and F3 still open.
+- `2026-08-07` — Two new user-reported failures. **F5 fixed** (`d5ea89a`,
+  verified option commit + pointer replay). **F4 fixed** (`913d56f`, degree
+  level/field matching, modelled old-vs-new). F1, F4, F5 all now awaiting the
+  same real-run verification; F2 and F3 still open.
