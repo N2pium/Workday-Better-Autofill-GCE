@@ -974,76 +974,75 @@ function handleTerms() {
 }
 
 async function selectWorkdayDropdown(label, desiredValue) {
-    const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${label.toLowerCase()}")]/following::div[@data-automation-id="selectSelectedOption" or @data-automation-id="selectWidget"][1] | //label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${label.toLowerCase()}")]/parent::*/following-sibling::div//div[@data-automation-id="selectSelectedOption" or @data-automation-id="selectWidget"]`;
+    try {
+        const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${label.toLowerCase()}")]/following::div[@data-automation-id="selectSelectedOption" or @data-automation-id="selectWidget"][1] | //label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${label.toLowerCase()}")]/parent::*/following-sibling::div//div[@data-automation-id="selectSelectedOption" or @data-automation-id="selectWidget"]`;
 
-    let trigger = getElementByXpath(xpath);
-    if (!trigger) {
-        const btnXpath = `//button[@aria-label and contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${label.toLowerCase()}")]`;
-        trigger = getElementByXpath(btnXpath);
-    }
+        let trigger = getElementByXpath(xpath);
+        if (!trigger) {
+            const btnXpath = `//button[@aria-label and contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${label.toLowerCase()}")]`;
+            trigger = getElementByXpath(btnXpath);
+        }
 
-    if (!trigger) return false;
+        if (!trigger) return false;
 
-    if (trigger.innerText.includes(desiredValue)) {
-        console.log(`Workday Autoplay: ${label} already set to ${desiredValue}`);
-        return true;
-    }
+        if (trigger.innerText.includes(desiredValue)) {
+            console.log(`Workday Autoplay: ${label} already set to ${desiredValue}`);
+            return true;
+        }
 
-    console.log(`Workday Autoplay: Opening dropdown for ${label}`);
-    trigger.click();
+        console.log(`Workday Autoplay: Opening dropdown for ${label}`);
+        scrollIntoViewIfNeeded(trigger);
+        trigger.click();
 
-    await new Promise(r => setTimeout(r, 500)); // Wait for listbox
+        const listbox = await waitForElement('ul[role="listbox"], div[role="listbox"]', 3000);
+        if (!listbox) {
+            console.warn(`Workday Autoplay: Listbox didn't appear for ${label}`);
+            return false;
+        }
 
-    // BUG FIX: Use exact text matching instead of partial matching
-    // Find the listbox container
-    const listbox = document.querySelector('ul[role="listbox"]') || document.querySelector('div[role="listbox"]');
-
-    if (listbox) {
-        // Get all option elements
         const options = listbox.querySelectorAll('li[role="option"], div[role="option"]');
-
         console.log(`Workday Autoplay: Found ${options.length} options for ${label}`);
 
-        // Iterate through options and find EXACT match
         for (const opt of options) {
             const optionText = opt.innerText.trim();
-
-            // EXACT MATCH - prevents selecting "Tennessee" when looking for "Indiana"
             if (optionText === desiredValue) {
                 console.log(`Workday Autoplay: Found exact match: "${optionText}" for ${label}`);
+                scrollIntoViewIfNeeded(opt);
                 opt.click();
                 opt.dispatchEvent(new Event('click', { bubbles: true }));
-                await new Promise(r => setTimeout(r, 500)); // Cooldown
+                await new Promise(r => setTimeout(r, 300));
                 return true;
             }
         }
 
-        // If no exact match, try case-insensitive exact match
         for (const opt of options) {
             const optionText = opt.innerText.trim();
             if (optionText.toLowerCase() === desiredValue.toLowerCase()) {
                 console.log(`Workday Autoplay: Found case-insensitive exact match: "${optionText}" for ${label}`);
+                scrollIntoViewIfNeeded(opt);
                 opt.click();
                 opt.dispatchEvent(new Event('click', { bubbles: true }));
-                await new Promise(r => setTimeout(r, 500));
+                await new Promise(r => setTimeout(r, 300));
                 return true;
             }
         }
-    }
 
-    // Fallback to old XPath method with partial matching (kept for compatibility)
-    console.warn(`Workday Autoplay: No exact match found, trying partial match for ${label}`);
-    const optionXpath = `//div[@role="option"]//div[contains(text(), "${desiredValue}")] | //div[@role="option" and contains(text(), "${desiredValue}")]`;
-    const option = getElementByXpath(optionXpath);
+        console.warn(`Workday Autoplay: No exact match found, trying partial match for ${label}`);
+        const optionXpath = `//div[@role="option"]//div[contains(text(), "${desiredValue}")] | //div[@role="option" and contains(text(), "${desiredValue}")]`;
+        const option = getElementByXpath(optionXpath);
 
-    if (option) {
-        console.log(`Workday Autoplay: Selecting ${desiredValue} for ${label} (partial match)`);
-        option.click();
-        await new Promise(r => setTimeout(r, 500)); // Cooldown
-        return true;
-    } else {
-        console.warn(`Workday Autoplay: Option '${desiredValue}' not found for ${label}`);
-        // Click trigger again to close if needed? Or just leave it.
+        if (option) {
+            console.log(`Workday Autoplay: Selecting ${desiredValue} for ${label} (partial match)`);
+            scrollIntoViewIfNeeded(option);
+            option.click();
+            await new Promise(r => setTimeout(r, 300));
+            return true;
+        } else {
+            console.warn(`Workday Autoplay: Option '${desiredValue}' not found for ${label}`);
+            return false;
+        }
+    } catch (e) {
+        console.error(`Workday Autoplay: Error in selectWorkdayDropdown for ${label}:`, e);
         return false;
     }
 }
@@ -1167,6 +1166,49 @@ function getElementByXpath(path) {
     } catch (e) {
         console.error("XPath error", e);
         return null;
+    }
+}
+
+async function waitForElement(selector, timeout = 5000, interval = 100) {
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeout) {
+        const el = document.querySelector(selector);
+        if (el && el.offsetParent !== null) return el;
+        await new Promise(r => setTimeout(r, interval));
+    }
+    return null;
+}
+
+async function waitForCondition(checkFn, timeout = 5000, interval = 100) {
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeout) {
+        if (checkFn()) return true;
+        await new Promise(r => setTimeout(r, interval));
+    }
+    return false;
+}
+
+async function retryAsync(fn, maxRetries = 3, delayMs = 500) {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await fn();
+        } catch (e) {
+            if (i === maxRetries - 1) throw e;
+            console.warn(`Retry ${i + 1}/${maxRetries} after error:`, e.message);
+            await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+        }
+    }
+}
+
+function isElementVisible(el) {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.height > 0 && rect.width > 0 && rect.top < window.innerHeight && rect.bottom > 0;
+}
+
+function scrollIntoViewIfNeeded(el) {
+    if (!isElementVisible(el)) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 }
 

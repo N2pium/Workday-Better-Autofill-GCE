@@ -1,15 +1,15 @@
 :root {
-  --primary: #3b82f6;
-  --primary-hover: #2563eb;
-  --accent: #8b5cf6;
-  --bg: #0f172a;
-  --card-bg: #1e293b;
-  --text: #f8fafc;
-  --text-muted: #94a3b8;
-  --border: #334155;
-  --ring: rgba(59, 130, 246, 0.5);
-  --success: #10b981;
-  --danger: #ef4444;
+  --primary: #d4a574;
+  --primary-hover: #bf9156;
+  --accent: #a8b5a0;
+  --bg: #1a1612;
+  --card-bg: #2d2a27;
+  --text: #f5f1ed;
+  --text-muted: #a29790;
+  --border: #3a3531;
+  --ring: rgba(212, 165, 116, 0.3);
+  --success: #6b9e7a;
+  --danger: #e67873;
 }
 
 body {
@@ -53,8 +53,7 @@ h1 {
 .autofill-btn {
   width: 100%;
   padding: 14px;
-  background: linear-gradient(135deg, #ec4899, #a855f7);
-  /* Vibrant pink/purple */
+  background: var(--primary);
   color: white;
   border: none;
   border-radius: 8px;
@@ -62,12 +61,13 @@ h1 {
   font-size: 14px;
   cursor: pointer;
   letter-spacing: 0.5px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  transition: transform 0.1s, opacity 0.2s;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 0 20px rgba(212, 165, 116, 0.3);
+  transition: transform 0.1s, box-shadow 0.3s ease, opacity 0.2s;
 }
 
 .autofill-btn:hover {
   opacity: 0.95;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 0 30px rgba(212, 165, 116, 0.5);
 }
 
 .autofill-btn:active {
@@ -101,6 +101,20 @@ h2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: relative;
+  padding-left: 8px;
+}
+
+h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 3px;
+  background: var(--primary);
+  border-radius: 50%;
 }
 
 h2::after {
@@ -162,7 +176,7 @@ textarea {
 input:focus,
 textarea:focus {
   outline: none;
-  border-color: var(--primary);
+  border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--ring);
 }
 
