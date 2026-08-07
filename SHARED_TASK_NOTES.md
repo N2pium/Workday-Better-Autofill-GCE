@@ -83,16 +83,48 @@ Option 'Indiana' not found for State
 
 Identical shape for "how did you hear about us" → `Option 'LinkedIn' not found`.
 
-Exactly **1** option on two structurally different dropdowns. That constancy is
-the clue — a partially-rendered list would give varying counts. Leading theories,
-NOT yet distinguished:
-  - `document.querySelector('ul[role="listbox"]')` takes the *first* listbox in
-    document order, which may not be the one that just opened.
-  - Workday renders a single placeholder/search row before real options load.
+**CAUSE CONFIRMED** from `tools/Phone-inspectElement.png` and
+`tools/School-inspectElement.png`. It is the wrong-listbox theory. Not a timing
+problem — **adding delay will never fix this.**
 
-**Do not fix this by adding another delay before confirming which it is.** The
-fix differs completely between the two causes. Needs a DOM dump of an *open*
-dropdown.
+Workday renders an open dropdown into a **popper portal at the very end of
+`<body>`, outside `#root`**:
+
+```html
+<body>
+  <div id="root"> …entire page… </div>
+  <div style="z-index:30;position:absolute" data-popper-placement="bottom">
+    <div visibility="opened">
+      <ul role="listbox" id="z7h36" class="css-18ub1qj">   ← the real options
+        <li role="option"><div>Fax</div></li>
+        <li role="option" aria-selected="true"><div>Mobile</div></li>
+```
+
+But *inside* `#root`, every multiselect pill widget (School, Field of Study,
+Country Phone Code) contains its own listbox holding the selected pills:
+
+```html
+<ul role="listbox" data-automation-id="selectedItemList" aria-label="items selected">
+  <li role="presentation">
+    <div role="option" data-automation-id="selectedItem"
+         aria-label="Purdue University, Calumet, press delete to clear value.">
+```
+
+`document.querySelector('ul[role="listbox"]')` is unscoped, so it returns the
+**first in document order** — a `selectedItemList` with exactly one selected pill.
+Hence "Found 1 options", every time, regardless of which dropdown was opened.
+
+This also explains the user's original complaint that autofill works
+*intermittently*: whether it breaks depends on whether any pill widget happens to
+be populated earlier in the DOM at that moment.
+
+Fix direction: scope to the open dropdown. Exclude
+`[data-automation-id="selectedItemList"]`, and/or anchor on the portal
+(`[data-popper-placement]`, `[visibility="opened"]`). Do **not** just take the
+last match — verify visibility.
+
+Affects `selectWorkdayDropdown`, `handleDropdown`, `handleDateDropdown`, and
+`handleLanguages`, all of which use the same unscoped query.
 
 ### F2 — searchable picker never finds its input (2 occurrences)
 
@@ -101,9 +133,45 @@ Could not find searchBox for school
 Could not find searchBox for field of study
 ```
 
-`handleSearchablePicker` looks for `input[data-automation-id="searchBox"]`.
-Duke Energy's education section either does not use that automation id, or the
-label → `formField` container traversal does not reach it.
+**CAUSE CONFIRMED** from `tools/School-inspectElement.png`. There is no
+`searchBox` on this form. School and Field of Study are multiselect widgets:
+
+```html
+<div data-automation-id="formField-school" data-fkit-id="education-20--school">
+  <label for="education-20--school">
+  <div data-automation-id="multiSelectContainer" data-uxi-widget-type="multiselect">
+    <div data-automation-id="multiselectInputContainer">
+      <div data-automation-hiddensearch="false">   ← the search input lives here
+```
+
+Also a trap for the existing fallback: `data-automation-id="promptOption"` is
+used for the **selected pill's** text, not only for dropdown suggestions —
+
+```html
+<p data-automation-id="promptOption" data-automation-label="Purdue University, Calumet">
+```
+
+so `handleSearchablePicker`'s "click the first promptOption" fallback can click
+an already-selected pill. Any fix must scope promptOption lookups to the open
+dropdown portal, same as F1.
+
+### F3 — `formField` container selector never matches (NEW, from DOM)
+
+`fillFieldByFuzzyLabel`, `fillGPA`, and `autoAnswerRadioExact` all use:
+
+```js
+input.closest('div[data-automation-id="formField"]')
+```
+
+That is an **exact** attribute match. Workday actually emits
+`formField-school`, `formField-degree`, `formField-gradeAverage` — confirmed on
+three separate fields. The selector therefore never matches on this form, and
+the third label-resolution strategy is silently dead. Only `aria-label` and
+`label[for]` are doing any work.
+
+Fix is a prefix match (`[data-automation-id^="formField"]`), but check each of
+the three call sites separately — widening the container changes which label a
+field resolves to, so re-run the label-collision model afterwards.
 
 ### Confirmed working (do not touch)
 
