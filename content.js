@@ -343,8 +343,7 @@ async function handleDropdown(keys, value) {
 
             if (option) {
                 console.log(`Workday Autoplay: Found option ${value}`, option);
-                scrollIntoViewIfNeeded(option);
-                option.click();
+                await commitOptionSelection(option, key);
                 await new Promise(r => setTimeout(r, 300));
                 return;
             } else {
@@ -406,8 +405,7 @@ async function handleDateDropdown(groupLabel, type, value) {
         const option = opts.find(o => o.innerText.trim() === String(value))
             || opts.find(o => o.innerText.toLowerCase().includes(needle));
         if (option) {
-            scrollIntoViewIfNeeded(option);
-            option.click();
+            await commitOptionSelection(option, `${groupLabel}/${type}`);
             await new Promise(r => setTimeout(r, 200));
         }
     } catch (e) {
@@ -1067,9 +1065,7 @@ async function selectWorkdayDropdown(label, desiredValue) {
             const optionText = opt.innerText.trim();
             if (optionText === desiredValue) {
                 console.log(`Workday Autoplay: Found exact match: "${optionText}" for ${label}`);
-                scrollIntoViewIfNeeded(opt);
-                opt.click();
-                opt.dispatchEvent(new Event('click', { bubbles: true }));
+                await commitOptionSelection(opt, label);
                 await new Promise(r => setTimeout(r, 300));
                 return true;
             }
@@ -1079,9 +1075,7 @@ async function selectWorkdayDropdown(label, desiredValue) {
             const optionText = opt.innerText.trim();
             if (optionText.toLowerCase() === desiredValue.toLowerCase()) {
                 console.log(`Workday Autoplay: Found case-insensitive exact match: "${optionText}" for ${label}`);
-                scrollIntoViewIfNeeded(opt);
-                opt.click();
-                opt.dispatchEvent(new Event('click', { bubbles: true }));
+                await commitOptionSelection(opt, label);
                 await new Promise(r => setTimeout(r, 300));
                 return true;
             }
@@ -1095,8 +1089,7 @@ async function selectWorkdayDropdown(label, desiredValue) {
 
         if (option) {
             console.log(`Workday Autoplay: Selecting ${desiredValue} for ${label} (partial match)`);
-            scrollIntoViewIfNeeded(option);
-            option.click();
+            await commitOptionSelection(option, label);
             await new Promise(r => setTimeout(r, 300));
             return true;
         } else {
@@ -1272,6 +1265,59 @@ function scrollIntoViewIfNeeded(el) {
     if (!isElementVisible(el)) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+}
+
+/**
+ * Click a dropdown option and confirm the selection actually took.
+ *
+ * `el.click()` dispatches ONLY a click event — no pointerdown/mousedown/mouseup.
+ * Workday rows frequently commit on mousedown so the menu tears down before the
+ * input blurs, in which case the bare click reaches no handler at all and the
+ * row just sits there highlighted. Observed on Country in My Information: the
+ * correct row highlights and nothing is selected.
+ *
+ * The pointer replay is ESCALATION ONLY. When the plain click already works
+ * nothing extra is dispatched, which keeps multiselect widgets from toggling a
+ * freshly-set value straight back off.
+ */
+async function commitOptionSelection(option, label = '') {
+    if (!option) return false;
+    scrollIntoViewIfNeeded(option);
+
+    // Options are <li role="option"><div>Text</div></li> and the handler may be
+    // bound to the inner element. Events bubble up, so dispatching on the leaf
+    // covers a handler at any level; dispatching on the li would not reach it.
+    const leaf = Array.from(option.querySelectorAll('*'))
+        .find(el => el.children.length === 0 && el.textContent.trim());
+    const target = leaf || option;
+
+    const before = findOpenListbox();
+    // A committed selection tears the popper down. Still open with the same
+    // listbox means the click did not reach a handler.
+    const settled = () => findOpenListbox() !== before || getOpenListboxOptions().length === 0;
+
+    target.click();
+    if (await waitForCondition(settled, 600)) return true;
+
+    console.log(`Workday Autoplay: plain click did not commit${label ? ` for ${label}` : ''}, replaying pointer sequence`);
+    const rect = target.getBoundingClientRect();
+    const init = {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        view: window,
+        button: 0,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2
+    };
+    for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click']) {
+        const Ctor = type.startsWith('pointer') && window.PointerEvent ? PointerEvent : MouseEvent;
+        target.dispatchEvent(new Ctor(type, init));
+    }
+
+    const ok = await waitForCondition(settled, 600);
+    if (!ok) console.warn(`Workday Autoplay: option did not commit${label ? ` for ${label}` : ''} even after pointer replay`);
+    return ok;
 }
 
 // Every dropdown seen on Duke Energy uses role="option". listitem is carried
