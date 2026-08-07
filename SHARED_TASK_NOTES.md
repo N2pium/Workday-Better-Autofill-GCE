@@ -48,8 +48,9 @@ None have been exercised against an actual application.
 | `7ec1d5e` | `handleDateDropdown` — poll for options |
 | _"Stop fuzzy label matching from writing one value into several fields"_ | `fillFieldByFuzzyLabel` rewritten: first matching key wins, exact label beats substring. Added `collectLabelTexts` + `normalizeLabel`. |
 
-**`retryAsync` is currently dead code** — defined but never called. Either use it
-or remove it; do not leave it as decoration.
+**`retryAsync` and `waitForElement` are both dead code** — defined, never called.
+`waitForElement` became unused when F1's fix replaced its one call site. Either
+use them or remove them; do not leave them as decoration.
 
 ## Considered and deliberately NOT done
 
@@ -71,6 +72,20 @@ are also not yet re-tested against the loop's four dynamic-wait commits.
 
 **These are observed, not hypothesised. Prefer them over anything in the
 speculative candidate list below.**
+
+### F1 — FIXED IN CODE, NOT YET VERIFIED ON A REAL RUN
+
+Fix: `findOpenListbox()` / `getOpenListboxOptions()` scope every option lookup to
+the dropdown that is actually open. Applied to `selectWorkdayDropdown`,
+`handleDropdown`, `handleDateDropdown`, `handleLanguages`.
+
+**Verification pending.** Re-run the extension on the Duke Energy form with this
+branch loaded and check the console. Success looks like `Found 50 options for
+State` (not `Found 1`) followed by an exact match. If it still reports 1, the
+`selectedItemList` exclusion is not sufficient and the popper anchoring needs
+re-examining — do not add delays.
+
+Original evidence follows.
 
 ### F1 — dropdown option list reads as 1 item, selection fails (2 occurrences)
 
@@ -212,3 +227,6 @@ Append one line per firing. Keep it short.
 - `2026-08-07` — Fixed `fillFieldByFuzzyLabel` multi-field writes (candidate #2).
   Still no DOM capture available; fix was validated against a modelled label set,
   not a real form. Needs confirming on the Duke Energy pages.
+- `2026-08-07` — DOM screenshots captured. F1, F2 root causes confirmed; F3 found.
+- `2026-08-07` — **F1 fixed** (scoped listbox lookup, 4 call sites). Awaiting a
+  real-run console log to confirm. F2 and F3 still open.

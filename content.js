@@ -313,28 +313,31 @@ async function handleDropdown(keys, value) {
             scrollIntoViewIfNeeded(trigger);
             trigger.click();
 
-            const hasOptions = await waitForCondition(() => {
-                return document.querySelector('div[role="option"], div[role="listitem"]') !== null;
-            }, 3000);
+            // Scoped to the open dropdown throughout — see findOpenListbox.
+            const hasOptions = await waitForCondition(() => getOpenListboxOptions().length > 0, 3000);
 
             if (!hasOptions) {
                 console.warn(`Workday Autoplay: No options appeared for ${key}`);
                 continue;
             }
 
-            const optionXpath = `//div[@role="option" or @role="listitem"]//div[text()="${value}"] | //div[@role="option" and contains(text(), "${value}")]`;
-            let option = getElementByXpath(optionXpath);
+            const pick = () => {
+                const opts = getOpenListboxOptions();
+                const needle = value.toLowerCase();
+                return opts.find(o => o.innerText.trim() === value)
+                    || opts.find(o => o.innerText.trim().toLowerCase() === needle)
+                    || opts.find(o => o.innerText.toLowerCase().includes(needle));
+            };
+
+            let option = pick();
 
             if (!option) {
                 const searchInput = document.querySelector('input[type="search"], input[aria-label="Search"]');
                 if (searchInput) {
                     scrollIntoViewIfNeeded(searchInput);
                     setNativeValue(searchInput, value);
-                    await waitForCondition(() => {
-                        const opts = document.querySelectorAll('div[role="option"], div[role="listitem"]');
-                        return opts.length > 0;
-                    }, 2000);
-                    option = getElementByXpath(optionXpath);
+                    await waitForCondition(() => !!pick(), 2000);
+                    option = pick();
                 }
             }
 
@@ -393,14 +396,15 @@ async function handleDateDropdown(groupLabel, type, value) {
         scrollIntoViewIfNeeded(trigger);
         trigger.click();
 
-        const hasOptions = await waitForCondition(() => {
-            return document.querySelector('div[role="option"]') !== null;
-        }, 2000);
+        // Scoped to the open dropdown — see findOpenListbox.
+        const hasOptions = await waitForCondition(() => getOpenListboxOptions().length > 0, 2000);
 
         if (!hasOptions) return;
 
-        const optionXpath = `//div[@role="option" and contains(text(), "${value}")]`;
-        const option = getElementByXpath(optionXpath);
+        const needle = String(value).toLowerCase();
+        const opts = getOpenListboxOptions();
+        const option = opts.find(o => o.innerText.trim() === String(value))
+            || opts.find(o => o.innerText.toLowerCase().includes(needle));
         if (option) {
             scrollIntoViewIfNeeded(option);
             option.click();
@@ -805,11 +809,11 @@ async function handleLanguages(languageData) {
             // Now select the language from the dropdown
             console.log(`Workday Autoplay: Selecting language: ${languageData.name}`);
 
-            // Find the option with exact or partial match
-            const listbox = document.querySelector('ul[role="listbox"]') || document.querySelector('div[role="listbox"]');
+            // Scoped to the open dropdown — an unscoped lookup finds the
+            // selected-pill listbox of some other multiselect widget instead.
+            const options = getOpenListboxOptions();
 
-            if (listbox) {
-                const options = listbox.querySelectorAll('li[role="option"], div[role="option"]');
+            if (options.length) {
 
                 // Try exact match first
                 for (const opt of options) {
@@ -1047,13 +1051,16 @@ async function selectWorkdayDropdown(label, desiredValue) {
         scrollIntoViewIfNeeded(trigger);
         trigger.click();
 
-        const listbox = await waitForElement('ul[role="listbox"], div[role="listbox"]', 3000);
-        if (!listbox) {
-            console.warn(`Workday Autoplay: Listbox didn't appear for ${label}`);
+        // Wait for the OPEN dropdown to carry options, not merely for some
+        // listbox to exist. The selected-pill listboxes always exist, so the
+        // previous waitForElement returned instantly with the wrong element.
+        await waitForCondition(() => getOpenListboxOptions().length > 0, 3000);
+        const options = getOpenListboxOptions();
+
+        if (!options.length) {
+            console.warn(`Workday Autoplay: No dropdown options appeared for ${label}`);
             return false;
         }
-
-        const options = listbox.querySelectorAll('li[role="option"], div[role="option"]');
         console.log(`Workday Autoplay: Found ${options.length} options for ${label}`);
 
         for (const opt of options) {
@@ -1080,9 +1087,11 @@ async function selectWorkdayDropdown(label, desiredValue) {
             }
         }
 
+        // Partial match, still scoped to the open dropdown. The previous global
+        // XPath could match an option belonging to a different widget entirely.
         console.warn(`Workday Autoplay: No exact match found, trying partial match for ${label}`);
-        const optionXpath = `//div[@role="option"]//div[contains(text(), "${desiredValue}")] | //div[@role="option" and contains(text(), "${desiredValue}")]`;
-        const option = getElementByXpath(optionXpath);
+        const needle = desiredValue.toLowerCase();
+        const option = options.find(opt => opt.innerText.toLowerCase().includes(needle));
 
         if (option) {
             console.log(`Workday Autoplay: Selecting ${desiredValue} for ${label} (partial match)`);
@@ -1263,6 +1272,68 @@ function scrollIntoViewIfNeeded(el) {
     if (!isElementVisible(el)) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+}
+
+// Every dropdown seen on Duke Energy uses role="option". listitem is carried
+// over from what handleDropdown matched previously, so that scoping these
+// lookups does not quietly drop support for a Workday variant we have not
+// captured.
+const OPTION_SELECTOR = '[role="option"], [role="listitem"]';
+
+/**
+ * Locate the dropdown that is currently OPEN.
+ *
+ * Workday portals an open dropdown to the very end of <body>, outside #root,
+ * inside a popper wrapper:
+ *
+ *   <div data-popper-placement="bottom"><div visibility="opened">
+ *     <ul role="listbox"><li role="option"><div>Mobile</div></li>…
+ *
+ * Separately, every multiselect pill widget INSIDE #root carries its own
+ * listbox holding the currently-selected pills as role="option":
+ *
+ *   <ul role="listbox" data-automation-id="selectedItemList" aria-label="items selected">
+ *     <li role="presentation"><div role="option">Purdue University, Calumet</div>
+ *
+ * An unscoped document.querySelector('[role="listbox"]') returns whichever comes
+ * first in document order, which is a pill container, and its single selected
+ * pill then reads as the entire option list. That produced "Found 1 options" on
+ * every dropdown and made State and referral-source selection fail silently.
+ * It also made autofill look intermittent: it only misbehaves once some pill
+ * widget on the page is populated.
+ */
+function findOpenListbox() {
+    const candidates = Array.from(document.querySelectorAll('ul[role="listbox"], div[role="listbox"]'))
+        .filter(el => el.getAttribute('data-automation-id') !== 'selectedItemList')
+        // Rendered check only. Deliberately NOT a viewport test: the popper is
+        // absolutely positioned and can sit outside the current scroll window.
+        .filter(el => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+        });
+
+    if (!candidates.length) return null;
+
+    // Prefer the portalled one when present; otherwise consider everything left.
+    const portalled = candidates.filter(el => el.closest('[data-popper-placement], [visibility="opened"]'));
+    const pool = portalled.length ? portalled : candidates;
+
+    // Among those, the one that actually carries options wins.
+    let best = null;
+    let bestCount = -1;
+    for (const el of pool) {
+        const n = el.querySelectorAll(OPTION_SELECTOR).length;
+        if (n > bestCount) {
+            best = el;
+            bestCount = n;
+        }
+    }
+    return best;
+}
+
+function getOpenListboxOptions() {
+    const listbox = findOpenListbox();
+    return listbox ? Array.from(listbox.querySelectorAll(OPTION_SELECTOR)) : [];
 }
 
 /**
