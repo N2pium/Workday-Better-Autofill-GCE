@@ -62,6 +62,55 @@ Do not re-propose these without new evidence:
 - **Refactoring the XPath helpers into a shared abstraction.** Cosmetic; touches
   every fill path; high regression risk for zero user-visible gain.
 
+## OBSERVED FAILURES — real run, Duke Energy, 2026-08-07
+
+Source: `tools/console.png`, the extension's own log from an actual application.
+Line numbers match commit `a0ba197` exactly (`content.js:1005` and `:570`), i.e.
+**the published version** — these are shipping bugs, not loop regressions. They
+are also not yet re-tested against the loop's four dynamic-wait commits.
+
+**These are observed, not hypothesised. Prefer them over anything in the
+speculative candidate list below.**
+
+### F1 — dropdown option list reads as 1 item, selection fails (2 occurrences)
+
+```
+Opening dropdown for State
+Found 1 options for State
+No exact match found, trying partial match for State
+Option 'Indiana' not found for State
+```
+
+Identical shape for "how did you hear about us" → `Option 'LinkedIn' not found`.
+
+Exactly **1** option on two structurally different dropdowns. That constancy is
+the clue — a partially-rendered list would give varying counts. Leading theories,
+NOT yet distinguished:
+  - `document.querySelector('ul[role="listbox"]')` takes the *first* listbox in
+    document order, which may not be the one that just opened.
+  - Workday renders a single placeholder/search row before real options load.
+
+**Do not fix this by adding another delay before confirming which it is.** The
+fix differs completely between the two causes. Needs a DOM dump of an *open*
+dropdown.
+
+### F2 — searchable picker never finds its input (2 occurrences)
+
+```
+Could not find searchBox for school
+Could not find searchBox for field of study
+```
+
+`handleSearchablePicker` looks for `input[data-automation-id="searchBox"]`.
+Duke Energy's education section either does not use that automation id, or the
+label → `formField` container traversal does not reach it.
+
+### Confirmed working (do not touch)
+
+`addressLine1`, `postalCode`, resume skip-if-uploaded, language skip-if-exists,
+all three disclosure auto-declines, and `answerYesNo` on "previously worked for
+Duke Energy".
+
 ## Candidate areas (unstarted, roughly highest value first)
 
 1. `retryAsync` is unused — decide its fate.
