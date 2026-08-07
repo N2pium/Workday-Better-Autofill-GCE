@@ -536,103 +536,98 @@ async function handleWebsitesSection(url) {
 async function handleSearchablePicker(keys, value) {
     if (!value) return;
 
-    // Try to find the searchBox input directly by data-automation-id
-    let input = null;
+    try {
+        let input = null;
 
-    // Look for searchBox near a label matching our keys
-    for (const key of keys) {
-        const labelXpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${key.toLowerCase()}")]`;
-        const label = getElementByXpath(labelXpath);
-        if (label) {
-            // Find the searchBox in the same form field container
-            const container = label.closest('div[data-automation-id="formField"]') || label.parentElement;
-            if (container) {
-                input = container.querySelector('input[data-automation-id="searchBox"]');
+        for (const key of keys) {
+            const labelXpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${key.toLowerCase()}")]`;
+            const label = getElementByXpath(labelXpath);
+            if (label) {
+                const container = label.closest('div[data-automation-id="formField"]') || label.parentElement;
+                if (container) {
+                    input = container.querySelector('input[data-automation-id="searchBox"]');
+                    if (input) break;
+                }
+            }
+        }
+
+        if (!input) {
+            for (const key of keys) {
+                input = document.querySelector(`input[data-automation-id="searchBox"][id*="${key.toLowerCase().replace(/\s+/g, '')}"]`);
                 if (input) break;
             }
         }
-    }
 
-    // Fallback: find any searchBox with matching aria-describedby or id pattern
-    if (!input) {
-        for (const key of keys) {
-            input = document.querySelector(`input[data-automation-id="searchBox"][id*="${key.toLowerCase().replace(/\s+/g, '')}"]`);
-            if (input) break;
+        if (!input) {
+            input = findElementByFuzzyLabel(keys);
         }
-    }
 
-    // Final fallback: old method
-    if (!input) {
-        input = findElementByFuzzyLabel(keys);
-    }
+        if (!input) {
+            console.log(`Workday Autoplay: Could not find searchBox for ${keys[0]}`);
+            return;
+        }
 
-    if (!input) {
-        console.log(`Workday Autoplay: Could not find searchBox for ${keys[0]}`);
-        return;
-    }
+        if (input.value && input.value.toLowerCase().includes(value.toLowerCase())) {
+            console.log(`Workday Autoplay: ${keys[0]} already filled with ${value}, skipping.`);
+            return;
+        }
 
-    // Check if already filled
-    if (input.value && input.value.toLowerCase().includes(value.toLowerCase())) {
-        console.log(`Workday Autoplay: ${keys[0]} already filled with ${value}, skipping.`);
-        return;
-    }
+        console.log(`Workday Autoplay: Handling Searchable Picker for ${keys[0]}`, input);
 
-    console.log(`Workday Autoplay: Handling Searchable Picker for ${keys[0]}`, input);
+        scrollIntoViewIfNeeded(input);
+        input.focus();
+        setNativeValue(input, value);
 
-    // Focus and type the value
-    input.focus();
-    setNativeValue(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
 
-    // Trigger input events to make Workday respond
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
+        await waitForCondition(() => {
+            const prompts = document.querySelectorAll('[data-automation-id="promptOption"]');
+            return prompts.length > 0;
+        }, 3000);
 
-    // Wait for suggestions to load
-    await new Promise(r => setTimeout(r, 1500));
+        let option = document.querySelector(`[data-automation-id="promptOption"][data-automation-label*="${value}"]`);
 
-    // Look for promptOption using data-automation-label attribute (Workday's way)
-    let option = document.querySelector(`[data-automation-id="promptOption"][data-automation-label*="${value}"]`);
-
-    // Try case-insensitive match on data-automation-label
-    if (!option) {
-        const allPrompts = document.querySelectorAll('[data-automation-id="promptOption"]');
-        for (const prompt of allPrompts) {
-            const label = prompt.getAttribute('data-automation-label') || prompt.innerText || '';
-            if (label.toLowerCase().includes(value.toLowerCase())) {
-                option = prompt;
-                break;
+        if (!option) {
+            const allPrompts = document.querySelectorAll('[data-automation-id="promptOption"]');
+            for (const prompt of allPrompts) {
+                const label = prompt.getAttribute('data-automation-label') || prompt.innerText || '';
+                if (label.toLowerCase().includes(value.toLowerCase())) {
+                    option = prompt;
+                    break;
+                }
             }
         }
-    }
 
-    // Fallback: match by text content
-    if (!option) {
-        const promptOptionXpath = `//*[@data-automation-id="promptOption" and contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${value.toLowerCase()}")]`;
-        option = getElementByXpath(promptOptionXpath);
-    }
-
-    // Fallback to role="option" elements
-    if (!option) {
-        const optionXpath = `//div[@role="option"]//div[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${value.toLowerCase()}")]`;
-        option = getElementByXpath(optionXpath);
-    }
-
-    if (option) {
-        console.log(`Workday Autoplay: Found matching option for ${value}`, option);
-        option.click();
-    } else {
-        // Click first available option as fallback
-        const firstOption = document.querySelector('[data-automation-id="promptOption"], div[role="option"]');
-        if (firstOption) {
-            console.log(`Workday Autoplay: No exact match, clicking first option`);
-            firstOption.click();
-        } else {
-            console.log(`Workday Autoplay: No options found for ${value}`);
+        if (!option) {
+            const promptOptionXpath = `//*[@data-automation-id="promptOption" and contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${value.toLowerCase()}")]`;
+            option = getElementByXpath(promptOptionXpath);
         }
-    }
 
-    // Cooldown to ensure selection registers
-    await new Promise(r => setTimeout(r, 500));
+        if (!option) {
+            const optionXpath = `//div[@role="option"]//div[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${value.toLowerCase()}")]`;
+            option = getElementByXpath(optionXpath);
+        }
+
+        if (option) {
+            console.log(`Workday Autoplay: Found matching option for ${value}`, option);
+            scrollIntoViewIfNeeded(option);
+            option.click();
+        } else {
+            const firstOption = document.querySelector('[data-automation-id="promptOption"], div[role="option"]');
+            if (firstOption) {
+                console.log(`Workday Autoplay: No exact match, clicking first option`);
+                scrollIntoViewIfNeeded(firstOption);
+                firstOption.click();
+            } else {
+                console.log(`Workday Autoplay: No options found for ${value}`);
+            }
+        }
+
+        await new Promise(r => setTimeout(r, 300));
+    } catch (e) {
+        console.error(`Workday Autoplay: Error in handleSearchablePicker for ${keys[0]}:`, e);
+    }
 }
 
 // 4. Language Handling - Enhanced with Add Button Workflow
