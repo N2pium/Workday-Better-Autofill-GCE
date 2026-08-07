@@ -73,7 +73,36 @@ are also not yet re-tested against the loop's four dynamic-wait commits.
 **These are observed, not hypothesised. Prefer them over anything in the
 speculative candidate list below.**
 
-### F1 — FIXED IN CODE, NOT YET VERIFIED ON A REAL RUN
+### F1 — **VERIFIED FIXED** on a real run, 2026-08-07 18:17
+
+`tools/State-inspectElement-New.png` shows `Found 250 options for State` at
+`content.js:1064`, line numbers matching `c2787de` exactly. Previously `Found 1`.
+The scoped listbox lookup works. **Do not revisit.**
+
+The same run exposed F6 below, which is what actually kept State failing.
+
+### F6 — several dropdowns open at once; biggest list wins (2026-08-07)
+
+Fixed in `2017a55`. `Found 250 options for State` — but 250 is the **Country**
+list, not a state list. Both new screenshots show two poppers open at the same
+time: Workday does not reliably tear down the previous dropdown, and
+`findOpenListbox` broke ties by *most options wins*, so Country's 250 entries
+beat every dropdown opened after it.
+
+This is the real cause of `Option 'Indiana' not found for State` and
+`Option 'LinkedIn' not found` — both **survived the F1 fix**, which is why the
+F1 verification looked ambiguous at first glance.
+
+Now takes the **last** list carrying options: poppers append to the end of
+`<body>` and `querySelectorAll` returns document order, so last == just opened.
+
+**Still open, deliberately not attempted:** nothing closes the stale dropdown.
+It now only overlays fields visually (Middle Name is covered in both shots)
+rather than corrupting matching. Sending `Escape` after a confirmed commit is
+the obvious next step, but it risks reverting the selection on some widgets and
+was not worth the gamble without evidence. Test it before assuming it is safe.
+
+### F1 — original analysis (superseded, kept for context)
 
 Fix: `findOpenListbox()` / `getOpenListboxOptions()` scope every option lookup to
 the dropdown that is actually open. Applied to `selectWorkdayDropdown`,
@@ -208,8 +237,19 @@ Modelled over six realistic option lists: 29 new fills, 1 corrected mis-pick,
 
 ### F5 — option highlights but never commits (user-reported, 2026-08-07)
 
-Fixed in `d5ea89a`. Observed on Country in My Information: the correct row
-highlights and nothing is selected.
+Fixed in `d5ea89a`, **corrected in `2017a55`** — read this whole entry before
+touching it. Reported as "hovers over the correct country but doesn't select it".
+
+**The original diagnosis was wrong.** `tools/FoundbutNotSelected.png` shows
+`aria-selected="true"` on the United States of America row with the trigger
+already reading "United States of America". Country **does** select. It simply
+never closes, and the stale menu then poisoned every later dropdown via F6.
+That is what made it look unselected.
+
+So the commit check must be `aria-selected` / node detachment, **never** popper
+teardown — teardown reads this success as a failure. The pointer replay below is
+still worth keeping for widgets that genuinely ignore a bare click, but it has
+not yet been shown to be necessary on any observed field.
 
 `el.click()` dispatches **only** a click event — no pointerdown/mousedown/mouseup.
 Workday rows commonly commit on `mousedown` so the menu tears down before blur,
@@ -275,3 +315,11 @@ Append one line per firing. Keep it short.
   verified option commit + pointer replay). **F4 fixed** (`913d56f`, degree
   level/field matching, modelled old-vs-new). F1, F4, F5 all now awaiting the
   same real-run verification; F2 and F3 still open.
+- `2026-08-07` — New screenshots from an 18:17 run on `c2787de`. **F1 VERIFIED
+  FIXED** (250 options, was 1). Found **F6**: stacked poppers + "biggest list
+  wins" made every dropdown after Country read Country's 250 options — the
+  actual cause of the surviving Indiana/LinkedIn failures. Fixed in `2017a55`,
+  which also corrects F5's commit check (Country selects but never closes, so
+  teardown was the wrong signal). F2, F3 still open; F4 still unverified.
+  **Lesson: two of three "fixes" this session were aimed at the wrong cause
+  until a screenshot arrived. Weight real DOM evidence far above code reading.**
