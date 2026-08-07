@@ -1297,13 +1297,16 @@ async function commitOptionSelection(option, label = '') {
         .find(el => el.children.length === 0 && el.textContent.trim());
     const target = leaf || option;
 
-    const before = findOpenListbox();
-    // A committed selection tears the popper down. Still open with the same
-    // listbox means the click did not reach a handler.
-    const settled = () => findOpenListbox() !== before || getOpenListboxOptions().length === 0;
+    // Do NOT verify by watching the popper tear down. Country commits and leaves
+    // its menu open (tools/FoundbutNotSelected.png shows aria-selected="true" on
+    // the row with the trigger already reading "United States of America"), so a
+    // teardown check reads that success as a failure and escalates for nothing.
+    // Either the row reports itself selected, or the menu closed and took the
+    // node with it.
+    const committed = () => option.getAttribute('aria-selected') === 'true' || !option.isConnected;
 
     target.click();
-    if (await waitForCondition(settled, 600)) return true;
+    if (await waitForCondition(committed, 600)) return true;
 
     console.log(`Workday Autoplay: plain click did not commit${label ? ` for ${label}` : ''}, replaying pointer sequence`);
     const rect = target.getBoundingClientRect();
@@ -1321,7 +1324,7 @@ async function commitOptionSelection(option, label = '') {
         target.dispatchEvent(new Ctor(type, init));
     }
 
-    const ok = await waitForCondition(settled, 600);
+    const ok = await waitForCondition(committed, 600);
     if (!ok) console.warn(`Workday Autoplay: option did not commit${label ? ` for ${label}` : ''} even after pointer replay`);
     return ok;
 }
@@ -1457,17 +1460,18 @@ function findOpenListbox() {
     const portalled = candidates.filter(el => el.closest('[data-popper-placement], [visibility="opened"]'));
     const pool = portalled.length ? portalled : candidates;
 
-    // Among those, the one that actually carries options wins.
-    let best = null;
-    let bestCount = -1;
-    for (const el of pool) {
-        const n = el.querySelectorAll(OPTION_SELECTOR).length;
-        if (n > bestCount) {
-            best = el;
-            bestCount = n;
-        }
-    }
-    return best;
+    // Workday does not reliably tear down the previous popper, so SEVERAL can be
+    // open at once. Confirmed on Duke Energy (tools/State-inspectElement-New.png):
+    // Country's list was still up when State opened, so picking whichever list
+    // carried the most options meant every later dropdown read Country's 250
+    // entries — "Found 250 options for State" followed by "Option 'Indiana' not
+    // found for State", and the same for the referral-source dropdown.
+    //
+    // Poppers are appended to the end of <body>, and querySelectorAll returns
+    // document order, so the LAST one carrying options is the one just opened.
+    const withOptions = pool.filter(el => el.querySelectorAll(OPTION_SELECTOR).length > 0);
+    const ordered = withOptions.length ? withOptions : pool;
+    return ordered[ordered.length - 1] || null;
 }
 
 function getOpenListboxOptions() {
