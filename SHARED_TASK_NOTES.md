@@ -13,6 +13,12 @@ Branch: `autofill-loop` (never commit to `master` — it is published-extension 
 - **There is no live Workday form in the loop's context.** Every change is made by
   reading code, not by observing a failure. This is the single biggest limitation.
   Treat all changes as *hypotheses*, not fixes.
+- **Reference form:** Duke Energy `dukeenergy.wd1.myworkdayjobs.com`, the
+  `/apply/autofillWithResume` step. It is behind a candidate login, so the loop
+  cannot reach it. Captured DOM snapshots live in `tools/captures/` — if a capture
+  exists, read it and prefer evidence from it over reasoning about the code alone.
+  Capture a fresh one by running `tools/inspect-workday-form.js` in DevTools on the
+  page and saving the JSON to `tools/captures/<page-name>.json`.
 - **No test runner, no CI, no `package.json`.** The only automated gate is
   `node --check`. Manual testing lives in `TESTING_CHECKLIST.md`.
 - The extension is **published** on the Chrome Web Store and handles PII
