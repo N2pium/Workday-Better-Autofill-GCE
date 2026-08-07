@@ -158,10 +158,10 @@ async function scanAndFill() {
 
         // Degree Dropdown
         if (edu.degree) {
-            await handleDropdown(['degree', 'qualification'], edu.degree);
+            await handleDropdown(['degree', 'qualification'], edu.degree, matchDegreeOption);
             // Also try selectWorkdayDropdown as fallback — more reliable for Workday's
             // custom selectSelectedOption / selectWidget elements
-            await selectWorkdayDropdown('Degree', edu.degree);
+            await selectWorkdayDropdown('Degree', edu.degree, matchDegreeOption);
         }
 
         if (edu.startDate) await fillDate('first year attended', edu.startDate);
@@ -297,7 +297,7 @@ function findElementByFuzzyLabel(keys) {
 /**
  * Dropdown Handling (Now Async)
  */
-async function handleDropdown(keys, value) {
+async function handleDropdown(keys, value, matcher = null) {
     if (!value) return;
 
     for (const key of keys) {
@@ -326,6 +326,9 @@ async function handleDropdown(keys, value) {
                 const needle = value.toLowerCase();
                 return opts.find(o => o.innerText.trim() === value)
                     || opts.find(o => o.innerText.trim().toLowerCase() === needle)
+                    // Ahead of the substring fallback on purpose: where a matcher
+                    // is supplied, substring is the path that mis-picks.
+                    || (matcher && matcher(opts, value))
                     || opts.find(o => o.innerText.toLowerCase().includes(needle));
             };
 
@@ -1028,7 +1031,7 @@ function handleTerms() {
     }
 }
 
-async function selectWorkdayDropdown(label, desiredValue) {
+async function selectWorkdayDropdown(label, desiredValue, matcher = null) {
     try {
         const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${label.toLowerCase()}")]/following::div[@data-automation-id="selectSelectedOption" or @data-automation-id="selectWidget"][1] | //label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${label.toLowerCase()}")]/parent::*/following-sibling::div//div[@data-automation-id="selectSelectedOption" or @data-automation-id="selectWidget"]`;
 
@@ -1085,7 +1088,10 @@ async function selectWorkdayDropdown(label, desiredValue) {
         // XPath could match an option belonging to a different widget entirely.
         console.warn(`Workday Autoplay: No exact match found, trying partial match for ${label}`);
         const needle = desiredValue.toLowerCase();
-        const option = options.find(opt => opt.innerText.toLowerCase().includes(needle));
+        // Ahead of the substring fallback on purpose: where a matcher is
+        // supplied, substring is the path that mis-picks.
+        const option = (matcher && matcher(options, desiredValue))
+            || options.find(opt => opt.innerText.toLowerCase().includes(needle));
 
         if (option) {
             console.log(`Workday Autoplay: Selecting ${desiredValue} for ${label} (partial match)`);
@@ -1318,6 +1324,93 @@ async function commitOptionSelection(option, label = '') {
     const ok = await waitForCondition(settled, 600);
     if (!ok) console.warn(`Workday Autoplay: option did not commit${label ? ` for ${label}` : ''} even after pointer replay`);
     return ok;
+}
+
+/**
+ * Degree matching.
+ *
+ * The generic exact -> case-insensitive -> substring chain cannot connect the
+ * ways a degree gets written. Every one of these is a real miss:
+ *
+ *   "BS"                  vs "Bachelor of Science"  -> substring is false
+ *   "Bachelors"           vs "Bachelor's Degree"    -> the apostrophe alone breaks it
+ *   "Bachelor of Science" vs "Bachelors"            -> substring is false
+ *
+ * And the substring fallback does not merely miss, it mis-picks: "BA" is a
+ * substring of "Bachelor of Science" (via "BAchelor"), so a BA silently
+ * selects a BS. Reduce both sides to a level (+ field where stated) instead.
+ *
+ * Deliberately NOT applied to dropdowns generally -- Country and State are
+ * matched literally and are working.
+ */
+function normalizeDegreeText(text) {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/[‘’']/g, '')  // bachelor's -> bachelors
+        .replace(/\./g, '')               // B.S. -> bs
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+// Ordered: the first match wins, so the more specific level is listed first.
+const DEGREE_LEVEL_PATTERNS = [
+    ['doctorate', /\b(doctor|doctorate|doctoral|phd|dphil|edd|dsc|md|jd)\b/],
+    ['master', /\b(master|masters|ms|msc|ma|mba|meng|mfa|mph|msw)\b/],
+    ['bachelor', /\b(bachelor|bachelors|bs|bsc|ba|bba|beng|bfa|bsn)\b/],
+    ['associate', /\b(associate|associates|aa|as|aas)\b/],
+    ['highschool', /\b(high school|hs|ged|secondary)\b/]
+];
+
+function degreeLevel(normalized) {
+    for (const [level, re] of DEGREE_LEVEL_PATTERNS) {
+        if (re.test(normalized)) return level;
+    }
+    return null;
+}
+
+// Ordered: business and fine arts are checked before plain arts so that "MBA"
+// and "BFA" are not read as generic arts degrees.
+function degreeField(normalized) {
+    if (/\b(bba|mba)\b|business administration/.test(normalized)) return 'business';
+    if (/\b(bfa|mfa)\b|fine arts/.test(normalized)) return 'finearts';
+    if (/\b(beng|meng)\b|engineering/.test(normalized)) return 'engineering';
+    if (/\b(bs|bsc|ms|msc|bsn)\b|science/.test(normalized)) return 'science';
+    if (/\b(ba|ma)\b|arts/.test(normalized)) return 'arts';
+    return null;
+}
+
+function matchDegreeOption(options, desiredValue) {
+    const wanted = normalizeDegreeText(desiredValue);
+    const wantedLevel = degreeLevel(wanted);
+    if (!wantedLevel) return null;
+
+    const sameLevel = options
+        .map(el => {
+            const norm = normalizeDegreeText(el.innerText);
+            return { el, level: degreeLevel(norm), field: degreeField(norm) };
+        })
+        .filter(o => o.level === wantedLevel);
+
+    if (!sameLevel.length) return null;
+
+    const wantedField = degreeField(wanted);
+    if (wantedField) {
+        const bothMatch = sameLevel.find(o => o.field === wantedField);
+        if (bothMatch) return bothMatch.el;
+    }
+
+    // A generic option ("Bachelor's Degree") states the level and nothing else,
+    // so it is always a safe answer for the right level.
+    const generic = sameLevel.find(o => !o.field);
+    if (generic) return generic.el;
+
+    // Level is known, but the list forces a choice of field the profile does not
+    // settle -- "Bachelors" against both "Bachelor of Arts" and "Bachelor of
+    // Science". Guessing writes a degree the user does not hold onto a job
+    // application, which is worse than the blank they can see and correct.
+    if (sameLevel.length > 1) return null;
+
+    return sameLevel[0].el;
 }
 
 // Every dropdown seen on Duke Energy uses role="option". listitem is carried
