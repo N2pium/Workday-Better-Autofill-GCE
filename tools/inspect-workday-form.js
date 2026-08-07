@@ -107,15 +107,29 @@
   };
 
   const json = JSON.stringify(report, null, 2);
-  console.log(report); // expandable object, eyeball it here
-  console.log(json);   // plain text, select-and-copy fallback
 
-  // `copy` is a DevTools console helper and does not always exist. Never let
-  // its absence throw away the report we just built.
+  // Workday ships a report-only CSP that its own app violates constantly, so
+  // this console is extremely noisy. Stash the result somewhere retrievable
+  // rather than relying on being able to find it in the scrollback.
+  window.__wdReport = report;
+  window.__wdJson = json;
+
   let copied = false;
-  try { copy(json); copied = true; } catch (e) { /* fall back to the logged text */ }
+  try { copy(json); copied = true; } catch (e) { /* copy() is DevTools-only */ }
+
+  // Also offer it as a file download, which survives console noise entirely.
+  window.__wdSave = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    a.download = `workday-capture-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    return 'Saved to your Downloads folder.';
+  };
 
   return `Captured ${fields.length} fields, ${dropdowns.length} dropdowns, `
-    + `${report.counts.fieldsWithNoLabel} unlabelled. `
-    + (copied ? 'Copied to clipboard.' : 'Copy the JSON logged above.');
+    + `${report.counts.fieldsWithNoLabel} unlabelled.\n`
+    + (copied ? 'JSON is on your clipboard — just paste it.\n' : '')
+    + 'Or run  __wdSave()  to download it as a file.\n'
+    + 'Or run  __wdJson   to print it again.';
 })();
