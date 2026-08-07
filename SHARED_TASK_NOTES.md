@@ -46,6 +46,7 @@ None have been exercised against an actual application.
 | `d814004` | `handleSearchablePicker` — poll for `promptOption` instead of fixed 1500ms |
 | `f6a12c7` | `handleDropdown` — poll for options; search-input path also polls |
 | `7ec1d5e` | `handleDateDropdown` — poll for options |
+| _"Stop fuzzy label matching from writing one value into several fields"_ | `fillFieldByFuzzyLabel` rewritten: first matching key wins, exact label beats substring. Added `collectLabelTexts` + `normalizeLabel`. |
 
 **`retryAsync` is currently dead code** — defined but never called. Either use it
 or remove it; do not leave it as decoration.
@@ -64,14 +65,24 @@ Do not re-propose these without new evidence:
 ## Candidate areas (unstarted, roughly highest value first)
 
 1. `retryAsync` is unused — decide its fate.
-2. `fillFieldByFuzzyLabel` writes to **every** matching input via `forEach` with no
-   early exit. A loose keyword (e.g. `'location'`, `'title'`) could fill unintended
-   fields. Worth reading closely — this is a real correctness smell, not speculation.
-3. `handleTerms` / `checkCheckbox` use `input.click()` without checking visibility.
-4. `uploadResume` sets `hasUploadedResume = true` inside a `forEach`, so it flips
+2. `handleTerms` / `checkCheckbox` use `input.click()` without checking visibility.
+3. `uploadResume` sets `hasUploadedResume = true` inside a `forEach`, so it flips
    after the first input even if later ones fail.
-5. Multi-entry sections (2nd+ job, 2nd+ school) — only `[0]` is ever read from
+4. Multi-entry sections (2nd+ job, 2nd+ school) — only `[0]` is ever read from
    `workExperience` and `education`.
+5. `checkCheckbox` shares the same substring-collision class that
+   `fillFieldByFuzzyLabel` was just fixed for, and still uses `matchesAny` +
+   `forEach`. It clicks *every* matching checkbox. Not yet investigated — do not
+   assume the same fix applies, since checking several boxes is sometimes correct.
+
+## Method note (worth repeating)
+
+Before editing matching logic, model the change against a list of realistic
+Workday labels and diff old-vs-new selections. Doing that this iteration caught a
+regression in the *first* proposed fix: preferring exact matches globally made
+`['linkedin','website','url']` fill "Website" and leave "LinkedIn Profile" empty.
+The key-ordered variant fixed that. Reasoning about substring collisions unaided
+is unreliable — test them.
 
 ---
 
@@ -81,3 +92,6 @@ Append one line per firing. Keep it short.
 
 - `2026-08-07` — Loop restructured: moved to `autofill-loop` branch, added this
   notes file, added `node --check` gate, cadence 45m→4h. No code change.
+- `2026-08-07` — Fixed `fillFieldByFuzzyLabel` multi-field writes (candidate #2).
+  Still no DOM capture available; fix was validated against a modelled label set,
+  not a real form. Needs confirming on the Duke Energy pages.

@@ -428,31 +428,66 @@ function handleDateInputTyping(groupLabel, type, value) {
 /**
  * Standard Fields
  */
+// Every label text that could identify this input, in the original priority
+// order: aria-label, then label[for], then the enclosing formField's label.
+// All three are collected (not just the first that exists) so an input with a
+// non-matching aria-label can still be matched by its visible label.
+function collectLabelTexts(input) {
+    const texts = [];
+
+    const ariaLabel = input.getAttribute('aria-label');
+    if (ariaLabel) texts.push(ariaLabel);
+
+    if (input.id) {
+        const label = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+        if (label) texts.push(label.innerText);
+    }
+
+    const container = input.closest('div[data-automation-id="formField"], div[data-automation-id="dateWidget"]');
+    if (container) {
+        const labelEl = container.querySelector('label');
+        if (labelEl) texts.push(labelEl.innerText);
+    }
+
+    return texts;
+}
+
+// Workday decorates labels with required-markers and stray whitespace, so
+// compare on a normalized form rather than raw text.
+function normalizeLabel(text) {
+    return text.toLowerCase().replace(/\*/g, '').replace(/\(required\)/g, '').replace(/\s+/g, ' ').trim();
+}
+
 function fillFieldByFuzzyLabel(keys, value) {
     if (!value) return;
-    const inputs = document.querySelectorAll('input:not([type="hidden"]), textarea');
-    inputs.forEach(input => {
+
+    const candidates = [];
+    document.querySelectorAll('input:not([type="hidden"]), textarea').forEach(input => {
         if (input.value && input.value === value) return;
-        let match = false;
-
-        const ariaLabel = input.getAttribute('aria-label');
-        if (ariaLabel && matchesAny(ariaLabel, keys)) match = true;
-
-        if (!match && input.id) {
-            const label = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
-            if (label && matchesAny(label.innerText, keys)) match = true;
-        }
-
-        if (!match) {
-            const container = input.closest('div[data-automation-id="formField"], div[data-automation-id="dateWidget"]');
-            if (container) {
-                const labelEl = container.querySelector('label');
-                if (labelEl && matchesAny(labelEl.innerText, keys)) match = true;
-            }
-        }
-
-        if (match) setNativeValue(input, value);
+        const texts = collectLabelTexts(input);
+        if (texts.length) candidates.push({ input, texts });
     });
+
+    // `keys` is ordered most-specific-first. Take the first key that matches
+    // anything and stop, so a loose trailing key cannot poach a field a more
+    // specific key already identified — 'role' was writing the job title into
+    // "Role Description" because it substring-matches.
+    //
+    // Within the winning key, an exact label match beats substring matches.
+    // Without this, 'to' (the end-date label) also matched every field whose
+    // text merely contains "to": "Total Compensation", "Story", and so on.
+    //
+    // When nothing matches exactly, all substring hits are still filled, which
+    // preserves the intended behavior for pairs like Email / Confirm Email.
+    for (const key of keys) {
+        const needle = key.toLowerCase();
+        const hits = candidates.filter(c => c.texts.some(t => t.toLowerCase().includes(needle)));
+        if (!hits.length) continue;
+
+        const exact = hits.filter(c => c.texts.some(t => normalizeLabel(t) === normalizeLabel(key)));
+        (exact.length ? exact : hits).forEach(c => setNativeValue(c.input, value));
+        return;
+    }
 }
 
 function matchesAny(text, keys) {
