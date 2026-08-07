@@ -376,28 +376,38 @@ async function fillDate(labelKey, dateObj) {
 }
 
 async function handleDateDropdown(groupLabel, type, value) {
-    const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${groupLabel.toLowerCase()}")]/parent::*//following::*[contains(@aria-label, "${type}") or contains(@title, "${type}")][1]`;
-    let trigger = getElementByXpath(xpath);
+    try {
+        const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${groupLabel.toLowerCase()}")]/parent::*//following::*[contains(@aria-label, "${type}") or contains(@title, "${type}")][1]`;
+        let trigger = getElementByXpath(xpath);
 
-    if (!trigger) {
-        // Fallback logic
-        const xpathCase = `//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${groupLabel.toLowerCase()}")]/following::*[contains(@aria-label, "${type}")][1]`;
-        trigger = getElementByXpath(xpathCase);
-    }
+        if (!trigger) {
+            const xpathCase = `//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${groupLabel.toLowerCase()}")]/following::*[contains(@aria-label, "${type}")][1]`;
+            trigger = getElementByXpath(xpathCase);
+        }
 
-    if (trigger) {
+        if (!trigger) return;
+
         if (trigger.tagName === 'INPUT' && (trigger.type === 'text' || trigger.type === 'number')) return;
         if (trigger.innerText.includes(value) || trigger.value === value) return;
 
+        scrollIntoViewIfNeeded(trigger);
         trigger.click();
-        await new Promise(r => setTimeout(r, 500));
+
+        const hasOptions = await waitForCondition(() => {
+            return document.querySelector('div[role="option"]') !== null;
+        }, 2000);
+
+        if (!hasOptions) return;
 
         const optionXpath = `//div[@role="option" and contains(text(), "${value}")]`;
         const option = getElementByXpath(optionXpath);
         if (option) {
+            scrollIntoViewIfNeeded(option);
             option.click();
-            await new Promise(r => setTimeout(r, 300));
+            await new Promise(r => setTimeout(r, 200));
         }
+    } catch (e) {
+        console.error(`Workday Autoplay: Error in handleDateDropdown for ${groupLabel}/${type}:`, e);
     }
 }
 
