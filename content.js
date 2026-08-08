@@ -701,11 +701,16 @@ async function handleSearchablePicker(keys, value) {
             console.log(`Workday Autoplay: Found matching option for ${value}`, option);
             await commitOptionSelection(option, keys[0]);
         } else if (suggestions.length) {
-            // Pre-existing behavior, now scoped so it can only ever click a real
-            // suggestion. Still a guess -- see the note in SHARED_TASK_NOTES.md
-            // about whether picking a non-matching school is worse than a blank.
-            console.log(`Workday Autoplay: No exact match, clicking first suggestion for ${value}`);
-            await commitOptionSelection(suggestions[0], keys[0]);
+            // User's call: guess rather than leave the field blank. Prefer the
+            // suggestion closest to the stored value over whichever happens to
+            // be listed first, since school lists are dense with near-misses.
+            const closest = closestSuggestion(suggestions, value, textOf);
+            const chosen = closest ? closest.el : suggestions[0];
+            const how = closest
+                ? `closest match "${textOf(chosen)}" (score ${closest.score.toFixed(2)})`
+                : `first suggestion "${textOf(chosen)}" (nothing scored above zero)`;
+            console.log(`Workday Autoplay: No exact match for ${value}, taking ${how}`);
+            await commitOptionSelection(chosen, keys[0]);
         } else {
             console.log(`Workday Autoplay: No options found for ${value}`);
         }
@@ -1536,6 +1541,49 @@ function getOpenPromptOptions() {
     // only that menu's entries count.
     const portalled = suggestions.filter(el => el.closest('[data-popper-placement], [visibility="opened"]'));
     return portalled.length ? portalled : suggestions;
+}
+
+/**
+ * Rank picker suggestions by how close they are to the user's stored value.
+ *
+ * Used when nothing matches exactly or by substring. School lists are full of
+ * near-misses — "Purdue University Northwest", "Purdue University Fort Wayne",
+ * "Purdue University, Calumet" — where taking whichever happened to be listed
+ * first is a coin flip. Dice coefficient over word tokens, so shared words
+ * count regardless of order or punctuation.
+ */
+function suggestionTokens(text) {
+    return new Set(
+        String(text || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, ' ')
+            .trim()
+            .split(/\s+/)
+            .filter(t => t.length > 1)
+    );
+}
+
+function suggestionSimilarity(a, b) {
+    const ta = suggestionTokens(a);
+    const tb = suggestionTokens(b);
+    if (!ta.size || !tb.size) return 0;
+
+    let shared = 0;
+    for (const t of ta) if (tb.has(t)) shared++;
+    return (2 * shared) / (ta.size + tb.size);
+}
+
+function closestSuggestion(suggestions, value, textOf) {
+    let best = null;
+    let bestScore = 0;
+    for (const el of suggestions) {
+        const score = suggestionSimilarity(value, textOf(el));
+        if (score > bestScore) {
+            best = el;
+            bestScore = score;
+        }
+    }
+    return best ? { el: best, score: bestScore } : null;
 }
 
 /**
