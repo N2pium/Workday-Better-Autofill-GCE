@@ -180,6 +180,19 @@ textarea:focus {
   box-shadow: 0 0 0 2px var(--ring);
 }
 
+/* Placeholders must never be mistakable for a value you have already entered.
+   There was no rule here at all, so they rendered at the browser default, which
+   against this dark card sits close enough to real text that an empty field
+   reads as a filled one. That is not hypothetical: Country shows
+   "United States of America", which is the correct answer for most users, so an
+   untouched Country field looked complete while it saved nothing. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+  opacity: 0.7;
+}
+
 /* Cards */
 .card {
   background-color: rgba(255, 255, 255, 0.03);
