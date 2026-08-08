@@ -369,9 +369,8 @@ confirms Country is filled in, so `handleDropdown` is not skipping on `!value`.
 (`popup.html:65` does carry `placeholder="United States of America"`, which is a
 trap worth remembering, but it is not what happened here.)
 
-What the capture cannot tell us is **whether autofill was even re-run after
-Uzbekistan was set by hand**. If it was not, there is no defect at all here.
-That has to be established before anything else.
+**Confirmed by the user: autofill WAS re-run after Uzbekistan was set, and did
+not correct it. This is a real defect.**
 
 Ruled out by reading, so do not re-derive:
 - The early skip `trigger.innerText.includes(value)` — "Uzbekistan" does not
@@ -381,8 +380,21 @@ Ruled out by reading, so do not re-derive:
   `formField-countryPhoneCode` in document order, so the "country" key resolves
   to the right button.
 
-`2a84daf` adds a log on the `!value` path so this class of silent skip is at
-least visible next time. Console-only, no behavior change.
+**Leading hypothesis — the commit result was being thrown away.**
+`handleDropdown` called `commitOptionSelection` and **discarded its return
+value**, then logged `Found option …` and returned. So a run where the click
+never committed produced a console that reads as a clean success while the field
+kept its old value. That is exactly the shape of what happened here. Fixed in
+`9750779`, which now warns on a failed commit.
+
+If the next run shows `Selected … but it did not commit`, the defect is in
+`commitOptionSelection` for this widget — most likely the `aria-selected` /
+`isConnected` check being wrong for a 250-option country list, or the 600ms
+window being too short. **Do not add blanket delays**; instrument first.
+
+`2a84daf` and `9750779` add logging on every previously-silent path
+(`!value`, no trigger, already-set skip, option count, commit result).
+Console-only apart from the failed-commit warning.
 
 **Do not "fix" the country matching logic on this evidence.** Nothing has shown
 it picking wrongly; it has not been shown to run at all.
