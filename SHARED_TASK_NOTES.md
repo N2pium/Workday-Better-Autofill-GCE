@@ -81,7 +81,13 @@ The scoped listbox lookup works. **Do not revisit.**
 
 The same run exposed F6 below, which is what actually kept State failing.
 
-### F6 — several dropdowns open at once; biggest list wins (2026-08-07)
+### F6 — **VERIFIED FIXED** on a real run, 2026-08-07
+
+`Found 61 options for State`, down from `Found 250`. 61 is the correct size for
+a Workday US state list — 50 states + DC + the five territories + the three
+Armed Forces entries (AA/AE/AP) + freely-associated states, give or take the
+`Select One` placeholder. 250 was the Country list. It is now reading the
+listbox that actually belongs to the field. **Do not revisit.**
 
 Fixed in `2017a55`. `Found 250 options for State` — but 250 is the **Country**
 list, not a state list. Both new screenshots show two poppers open at the same
@@ -362,3 +368,7 @@ Append one line per firing. Keep it short.
   reasoning recorded both in the notes and inline at the call site. F2 still
   open and now known to need two fixes, not one. Next blocker is a real run:
   F4, F5, F6 are all fixed-but-unverified.
+- `2026-08-07` — Real run on the fixed branch. **F6 VERIFIED FIXED**
+  (`Found 61 options for State`, was 250). F1 and F6 are now both closed against
+  real console output. F4 and F5 still need confirming from the same run —
+  whether Indiana actually *selected*, not merely that the right list was read.
