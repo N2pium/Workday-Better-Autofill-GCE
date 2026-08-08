@@ -313,11 +313,17 @@ async function handleDropdown(keys, value, matcher = null) {
             const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${key.toLowerCase()}")]/following::*[self::button or @role="combobox"][1]`;
             const trigger = getElementByXpath(xpath);
 
-            if (!trigger) continue;
+            if (!trigger) {
+                console.log(`Workday Autoplay: No dropdown trigger found for ${key}`);
+                continue;
+            }
 
-            if (trigger.innerText.includes(value) || trigger.value === value) continue;
+            if (trigger.innerText.includes(value) || trigger.value === value) {
+                console.log(`Workday Autoplay: ${key} already reads "${trigger.innerText.trim()}", leaving it.`);
+                continue;
+            }
 
-            console.log(`Workday Autoplay: Found dropdown trigger for ${key}`, trigger);
+            console.log(`Workday Autoplay: Found dropdown trigger for ${key} (currently "${trigger.innerText.trim()}")`, trigger);
             scrollIntoViewIfNeeded(trigger);
             trigger.click();
 
@@ -328,6 +334,12 @@ async function handleDropdown(keys, value, matcher = null) {
                 console.warn(`Workday Autoplay: No options appeared for ${key}`);
                 continue;
             }
+
+            // Parity with selectWorkdayDropdown, which has always logged this.
+            // The count is what distinguishes "read the wrong listbox" from
+            // "read the right one and failed to match" — the exact confusion
+            // that made F6 look like an F1 regression.
+            console.log(`Workday Autoplay: Found ${getOpenListboxOptions().length} options for ${key}`);
 
             const pick = () => {
                 const opts = getOpenListboxOptions();
@@ -354,7 +366,13 @@ async function handleDropdown(keys, value, matcher = null) {
 
             if (option) {
                 console.log(`Workday Autoplay: Found option ${value}`, option);
-                await commitOptionSelection(option, key);
+                // Honour the result. This used to be discarded, so the console
+                // read as a success ("Found option …") even when the click never
+                // committed and the field was left on its old value.
+                const ok = await commitOptionSelection(option, key);
+                if (!ok) {
+                    console.warn(`Workday Autoplay: Selected ${value} for ${key} but it did not commit — field left as-is.`);
+                }
                 await new Promise(r => setTimeout(r, 300));
                 return;
             } else {
