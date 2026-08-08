@@ -199,7 +199,26 @@ so `handleSearchablePicker`'s "click the first promptOption" fallback can click
 an already-selected pill. Any fix must scope promptOption lookups to the open
 dropdown portal, same as F1.
 
-### F3 — `formField` container selector never matches (NEW, from DOM)
+### F3 — PARTLY FIXED in `bc6abf7`; one call site deliberately left alone
+
+Four of the five sites widened to `[data-automation-id^="formField"]`:
+`fillGPA`, `handleSearchablePicker`, `autoAnswerRadioExact`, `autoAnswerRadio`.
+
+`handleSearchablePicker`'s site turned out to be a **contributing cause of F2** —
+it always fell through to `label.parentElement`, a wrapper too narrow to hold
+the input. Necessary but not sufficient: the `searchBox` selector is still wrong
+(see F2), so F2 is not yet fixed.
+
+**`collectLabelTexts` (the fifth site) is still an exact match, on purpose.**
+Widening it does not merely repair a dead lookup — it enlarges the candidate set
+`fillFieldByFuzzyLabel` writes into. Workday points a multiselect's `<label for>`
+at the widget container div, not the inner search `<input>`, so those inputs
+carry no label text today and are never written to. Give them their container's
+label and a fuzzy key could `setNativeValue` raw text into the School or Field
+of Study search box. **Do not widen it without a full-form capture in
+`tools/captures/` to model against.**
+
+### F3 — original analysis (superseded, kept for context)
 
 `fillFieldByFuzzyLabel`, `fillGPA`, and `autoAnswerRadioExact` all use:
 
@@ -234,6 +253,20 @@ Passed explicitly to the degree dropdown only — the matcher param defaults to
 
 Modelled over six realistic option lists: 29 new fills, 1 corrected mis-pick,
 0 regressions. Harness worth rebuilding if this is touched again.
+
+**DOM-confirmed** against `tools/Degree-inspectElement.png`, the real Duke list:
+
+    Select One | High School/GED | Associates | Bachelors | Masters | Doctorate
+
+8 previously-failing inputs (`BS`, `Bachelor of Science`, `Bachelor's Degree`,
+`MS`, `Master's Degree`, `MBA`, `PhD`, `High School Diploma`) now resolve.
+The `Select One` placeholder carries `aria-disabled="true"` and is never
+selectable — its level resolves to `null`, so it is filtered out. Still worth a
+real-run confirmation, but this is no longer resting on modelling alone.
+
+That capture also confirms `aria-selected="true"` marks the chosen row (class
+`css-164unwy` vs `css-152hpre`), matching the Country capture — which is why the
+`2017a55` commit check keys on `aria-selected`.
 
 ### F5 — option highlights but never commits (user-reported, 2026-08-07)
 
@@ -323,3 +356,9 @@ Append one line per firing. Keep it short.
   teardown was the wrong signal). F2, F3 still open; F4 still unverified.
   **Lesson: two of three "fixes" this session were aimed at the wrong cause
   until a screenshot arrived. Weight real DOM evidence far above code reading.**
+- `2026-08-07` — Autonomous check. New `tools/Degree-inspectElement.png`
+  **DOM-confirms F4** against the real option list. **F3 partly fixed**
+  (`bc6abf7`, four of five sites); `collectLabelTexts` left exact on purpose,
+  reasoning recorded both in the notes and inline at the call site. F2 still
+  open and now known to need two fixes, not one. Next blocker is a real run:
+  F4, F5, F6 are all fixed-but-unverified.
