@@ -469,39 +469,54 @@ sessions; do not add speculative entries.
 
 L6 is fixed — the prompt now lives in `LOOP_PROMPT.md`.
 
-## Track B candidates — quality of life (highest value first)
+## Track B candidates — quality of life
 
-**B1 — Run report.** After a scan, surface `Filled 14 · Skipped 3 · Failed 2`
-with the failures named, in the popup and/or a dismissable on-page toast.
-Addresses L1 and L2 together, and would have made most of this session's
-diagnosis unnecessary. `scanAndFill` already knows everything needed; it just
-throws it away. Highest value by a wide margin.
+**Audience: college students applying for jobs. No software background, no
+interest in debugging, nobody reads docs.** Ranked by that, not by how
+interesting the change is. See the AUDIENCE TEST in `LOOP_PROMPT.md`.
 
-**B2 — Copy diagnostics button.** A popup button that runs the existing
-inspector and puts the JSON on the clipboard. Addresses L4. The inspector
-already exists and is read-only, so this is plumbing, not new capability.
+**B1 — Placeholder/value disambiguation.** `popup.html` uses realistic
+placeholders (`placeholder="United States of America"` on Country) that read as
+filled-in values. This confused the person who *wrote* the extension; a student
+has no chance. Fix the misleading ones or style placeholders so they are
+obviously not values. Addresses L3. Invisible complexity, zero new UI, pure
+confusion removal — start here.
 
-**B3 — Profile completeness hints.** Mark, in the popup, the fields that are
-empty and will therefore be silently skipped. Addresses L5 and L3 at once —
-an empty Country would visibly read as empty instead of hiding behind a
-placeholder that looks filled.
-
-**B4 — Placeholder/value disambiguation.** Narrower standalone version of B3 if
-B3 is too big: make placeholders visually distinct, or drop the misleading ones.
-Addresses L3.
-
-**B5 — Highlight what changed.** Briefly outline each field autofill wrote, so
-the user can see its work without the console. Addresses L2. Purely visual;
+**B2 — Show what got filled.** Briefly outline each field autofill wrote, on the
+page. Addresses L2. Needs no explanation, adds no step, and answers the question
+every first-time user actually has: *did it work?* Must be purely visual and
 must not alter values.
 
-**B6 — Profile export/import as JSON.** Backup and machine-transfer. No
-observed friction yet — do not start this before B1–B4.
+**B3 — Plain-language result summary.** After a scan, say something like
+"Filled 14 fields. Please check: State, School." Addresses L1 and L2.
+**Wording is the whole risk here** — never counts-and-jargon like
+`Filled 14 · Skipped 3 · Failed 2`, never a field's internal name. Name the
+human-readable label, or say nothing about it. `scanAndFill` already knows all
+of this and throws it away.
 
-### Not Track B, despite looking like it
+**B4 — Profile completeness hints.** Gently mark profile fields that are empty
+and will therefore be skipped. Addresses L5. Must not nag, must not block
+saving, must not imply the user did something wrong.
 
-- **Multi-entry sections (2nd+ job, 2nd+ school).** This changes which values
-  get written, so by the Track B rule it is Track A feature work, not QoL. It
-  stays in the candidate list below.
+**B5 — "Report a problem" button.** Consumer framing of what would otherwise be
+a developer feature: one click gathers the diagnostic info and puts it on the
+clipboard to send on. Addresses L4. **Only worth it framed this way** — a
+button labelled "Copy diagnostics JSON" fails the audience test outright.
+
+**B6 — Back up / restore my info.** Export-import under plain names, never
+"JSON". No observed friction yet. Do not start before B1–B4.
+
+### Rejected or reclassified
+
+- **Copy-diagnostics-as-a-developer-tool.** Fails the audience test: useful only
+  to someone debugging, and an extra on-screen control that a confused user must
+  rule out. Survives only as B5's consumer framing.
+- **Multi-entry sections (2nd+ job, 2nd+ school).** Changes which values get
+  written, so by the Track B rule it is Track A feature work, not QoL. Stays in
+  the candidate list below.
+- **Any settings panel, verbosity toggle, or "advanced mode".** Adding a
+  decision the user has to make is the specific thing this audience cannot
+  afford. Do not propose one.
 
 ## Candidate areas (unstarted, roughly highest value first)
 

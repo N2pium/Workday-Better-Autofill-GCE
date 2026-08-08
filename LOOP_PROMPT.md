@@ -42,7 +42,27 @@ STEP 2 — PICK AT MOST ONE THING, from either track.
       the surface around autofill, not autofill's decisions;
     - be independently revertible in one commit;
     - not alter the stored profile schema, or what is persisted, without
-      explicit user sign-off recorded in the notes.
+      explicit user sign-off recorded in the notes;
+    - pass the AUDIENCE TEST below.
+
+  AUDIENCE TEST — apply to anything a user can see. This tool's users are mainly
+  college students applying for jobs. Assume no software background, no interest
+  in debugging, and no one reads documentation. A Track B change FAILS if it:
+    - adds a step, a setting, a mode, or a decision the user has to make;
+    - puts engineering vocabulary on screen — "dropdown trigger", "listbox",
+      "commit", "selector", "DOM", "JSON", "console", "log" are all disqualifying
+      in user-visible text, however accurate;
+    - would make a first-time user hesitate about what to do next;
+    - is only useful to someone diagnosing a bug.
+  The single question to ask: would a student who has never opened DevTools
+  understand this without being told? If no, it belongs in the console — which
+  normal users never open, and where jargon is fine — or it does not ship.
+
+  Prefer removing a step over adding information. An extra button that helps
+  nobody but the developer is a net loss: it is one more thing on screen that a
+  confused user has to rule out. When a diagnostic capability is genuinely
+  needed, give it a plain-language consumer framing ("Report a problem") rather
+  than a technical one ("Copy diagnostics JSON").
 
   WHICH TRACK: if every open Track A item is blocked awaiting a real run on a
   live Workday form, prefer Track B. That is the usual state here. Do not invent
@@ -88,6 +108,8 @@ master. The user reviews this branch manually.
 HARD CONSTRAINTS, all tracks:
   - The extension is published and handles PII (resume, address, phone, email).
     Regressions reach real users.
+  - Users are mainly college students with no software background. Never surface
+    engineering detail to them. Console output is exempt — they never open it.
   - Never add a network call, analytics, telemetry, or any off-device transmission.
     Profile values may appear in the local console; they may never leave the machine.
   - Never widen a Chrome permission in manifest.json without explicit user sign-off.
