@@ -6,6 +6,9 @@ Read this file FIRST, and update it LAST. Without it, the loop re-derives the sa
 
 Branch: `autofill-loop` (never commit to `master` — it is published-extension source)
 
+The loop prompt itself lives in **`LOOP_PROMPT.md`** (v2, two tracks: correctness
+and quality of life). Edit it there — v1 was lost when a terminal closed.
+
 ---
 
 ## Ground truth / constraints
@@ -449,6 +452,56 @@ label resolution no matter how the matching is ordered. A fix would have to
 disambiguate on something other than the label: the `name` attribute, or the
 enclosing `formField-legalName--firstName` / `formField-legalName--lastName`
 container, both of which *are* distinct in the capture.
+
+## Friction log — observed, not imagined
+
+Track B work must trace to an entry here. Every one of these was hit during real
+sessions; do not add speculative entries.
+
+| # | Friction | Evidence |
+|---|---|---|
+| L1 | Diagnosing any failure requires the user to open DevTools, screenshot the console, and paste it back | happened 5+ times on 2026-08-07/08 |
+| L2 | A silently skipped field looks identical to a correctly filled one | Country read "United States of America" for weeks — that was Workday's own default, not autofill |
+| L3 | `popup.html:65` gives Country `placeholder="United States of America"`, which reads as a value | produced a wrong root-cause hypothesis on 2026-08-08 |
+| L4 | Capturing DOM evidence means pasting `tools/inspect-workday-form.js` into DevTools by hand | every capture so far |
+| L5 | An empty profile field is skipped with no warning anywhere in the UI | the `!value` path had no log until `2a84daf` |
+| L6 | The loop prompt lived only in a terminal transcript and was lost when it closed | start of the 2026-08-07 session |
+
+L6 is fixed — the prompt now lives in `LOOP_PROMPT.md`.
+
+## Track B candidates — quality of life (highest value first)
+
+**B1 — Run report.** After a scan, surface `Filled 14 · Skipped 3 · Failed 2`
+with the failures named, in the popup and/or a dismissable on-page toast.
+Addresses L1 and L2 together, and would have made most of this session's
+diagnosis unnecessary. `scanAndFill` already knows everything needed; it just
+throws it away. Highest value by a wide margin.
+
+**B2 — Copy diagnostics button.** A popup button that runs the existing
+inspector and puts the JSON on the clipboard. Addresses L4. The inspector
+already exists and is read-only, so this is plumbing, not new capability.
+
+**B3 — Profile completeness hints.** Mark, in the popup, the fields that are
+empty and will therefore be silently skipped. Addresses L5 and L3 at once —
+an empty Country would visibly read as empty instead of hiding behind a
+placeholder that looks filled.
+
+**B4 — Placeholder/value disambiguation.** Narrower standalone version of B3 if
+B3 is too big: make placeholders visually distinct, or drop the misleading ones.
+Addresses L3.
+
+**B5 — Highlight what changed.** Briefly outline each field autofill wrote, so
+the user can see its work without the console. Addresses L2. Purely visual;
+must not alter values.
+
+**B6 — Profile export/import as JSON.** Backup and machine-transfer. No
+observed friction yet — do not start this before B1–B4.
+
+### Not Track B, despite looking like it
+
+- **Multi-entry sections (2nd+ job, 2nd+ school).** This changes which values
+  get written, so by the Track B rule it is Track A feature work, not QoL. It
+  stays in the candidate list below.
 
 ## Candidate areas (unstarted, roughly highest value first)
 
