@@ -462,7 +462,7 @@ sessions; do not add speculative entries.
 |---|---|---|
 | L1 | Diagnosing any failure requires the user to open DevTools, screenshot the console, and paste it back | happened 5+ times on 2026-08-07/08 |
 | L2 | A silently skipped field looks identical to a correctly filled one | Country read "United States of America" for weeks — that was Workday's own default, not autofill |
-| L3 | `popup.html:65` gives Country `placeholder="United States of America"`, which reads as a value | produced a wrong root-cause hypothesis on 2026-08-08 |
+| L3 | `popup.html:65` gives Country `placeholder="United States of America"`, which reads as a value | produced a wrong root-cause hypothesis on 2026-08-08 — **fixed, `b22ec81`** |
 | L4 | Capturing DOM evidence means pasting `tools/inspect-workday-form.js` into DevTools by hand | every capture so far |
 | L5 | An empty profile field is skipped with no warning anywhere in the UI | the `!value` path had no log until `2a84daf` |
 | L6 | The loop prompt lived only in a terminal transcript and was lost when it closed | start of the 2026-08-07 session |
@@ -475,12 +475,12 @@ L6 is fixed — the prompt now lives in `LOOP_PROMPT.md`.
 interest in debugging, nobody reads docs.** Ranked by that, not by how
 interesting the change is. See the AUDIENCE TEST in `LOOP_PROMPT.md`.
 
-**B1 — Placeholder/value disambiguation.** `popup.html` uses realistic
-placeholders (`placeholder="United States of America"` on Country) that read as
-filled-in values. This confused the person who *wrote* the extension; a student
-has no chance. Fix the misleading ones or style placeholders so they are
-obviously not values. Addresses L3. Invisible complexity, zero new UI, pure
-confusion removal — start here.
+**B1 — Placeholder/value disambiguation. DONE in `b22ec81`.** There was no
+`::placeholder` rule at all, so hints rendered at browser default and, against
+this dark card, read as real text. Now muted + italic, and every placeholder
+that could plausibly *be* a user's answer is prefixed `e.g.`. Date fields use
+format hints (`MM` / `YYYY`) instead of sample values; end dates read
+`MM or Present`. Addresses L3.
 
 **B2 — Show what got filled.** Briefly outline each field autofill wrote, on the
 page. Addresses L2. Needs no explanation, adds no step, and answers the question
