@@ -358,12 +358,42 @@ highlight-but-no-commit symptom, route it through the same helper.
 all three disclosure auto-declines, and `answerYesNo` on "previously worked for
 Duke Energy".
 
-## F7 — Country reads "Uzbekistan"; name fields then collide (UNTRIAGED)
+## F7 — Country not autofilled at all (TRIAGED — likely an empty profile field)
 
-From `tools/captures/my-information.json`, 2026-08-08 01:47Z. **Cause not yet
-established — do not fix blind. Ask the user whether autofill set this or they
-did.** The whole chain below is downstream of the country value, so if the
-country is wrong nothing under it is worth fixing separately.
+**The user set Uzbekistan by hand**, to test whether autofill would correct it
+to United States of America. It did not. So the defect is not a wrong pick —
+it is that Country is **never written**.
+
+**Cause still unknown.** The empty-profile-field theory is DEAD — the user
+confirms Country is filled in, so `handleDropdown` is not skipping on `!value`.
+(`popup.html:65` does carry `placeholder="United States of America"`, which is a
+trap worth remembering, but it is not what happened here.)
+
+What the capture cannot tell us is **whether autofill was even re-run after
+Uzbekistan was set by hand**. If it was not, there is no defect at all here.
+That has to be established before anything else.
+
+Ruled out by reading, so do not re-derive:
+- The early skip `trigger.innerText.includes(value)` — "Uzbekistan" does not
+  contain "United States of America", nor "US"/"us" (`.includes` is
+  case-sensitive), so it would not short-circuit.
+- Wrong trigger from the XPath — `formField-country` precedes
+  `formField-countryPhoneCode` in document order, so the "country" key resolves
+  to the right button.
+
+`2a84daf` adds a log on the `!value` path so this class of silent skip is at
+least visible next time. Console-only, no behavior change.
+
+**Do not "fix" the country matching logic on this evidence.** Nothing has shown
+it picking wrongly; it has not been shown to run at all.
+
+The name-field collision below is REAL but only reachable from the manual
+Uzbekistan state, so it is not worth fixing yet. Recorded so it is not
+re-derived from scratch if a non-US country ever comes up for real.
+
+**Next evidence needed:** set Country to something wrong, run autofill, then
+capture the console. The decisive lines are whether `Found dropdown trigger for
+country` appears at all, and what follows it.
 
     "ariaLabel": "Country Uzbekistan Required", "currentText": "Uzbekistan"
 
