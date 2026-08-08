@@ -244,7 +244,20 @@ it always fell through to `label.parentElement`, a wrapper too narrow to hold
 the input. Necessary but not sufficient: the `searchBox` selector is still wrong
 (see F2), so F2 is not yet fixed.
 
-**`collectLabelTexts` (the fifth site) is still an exact match, on purpose.**
+**RESOLVED 2026-08-08 — do NOT widen `collectLabelTexts`. Question closed.**
+
+`tools/captures/my-information.json` settles it. Every **visible** field on the
+page already resolves its label via `label[for]` — all 12 of them. The only
+fields that would *gain* a label from a widened container lookup are the four
+with `labelVia: "NONE"`, and **all four are `visible: false`**.
+
+`fillFieldByFuzzyLabel` filters on `input:not([type="hidden"])` but never checks
+visibility, so those four are excluded today only because they have no label
+text. Widening would hand them their container's label and make them fillable —
+writing profile data into hidden inputs for zero gain, since nothing visible
+needs the third strategy. The existing exact match is correct. Leave it.
+
+Original reasoning, now confirmed by evidence rather than inference:
 Widening it does not merely repair a dead lookup — it enlarges the candidate set
 `fillFieldByFuzzyLabel` writes into. Workday points a multiselect's `<label for>`
 at the widget container div, not the inner search `<input>`, so those inputs
@@ -345,6 +358,40 @@ highlight-but-no-commit symptom, route it through the same helper.
 all three disclosure auto-declines, and `answerYesNo` on "previously worked for
 Duke Energy".
 
+## F7 — Country reads "Uzbekistan"; name fields then collide (UNTRIAGED)
+
+From `tools/captures/my-information.json`, 2026-08-08 01:47Z. **Cause not yet
+established — do not fix blind. Ask the user whether autofill set this or they
+did.** The whole chain below is downstream of the country value, so if the
+country is wrong nothing under it is worth fixing separately.
+
+    "ariaLabel": "Country Uzbekistan Required", "currentText": "Uzbekistan"
+
+The profile is a US address (Highland, IN). With Uzbekistan selected, Workday
+re-renders the name section with local-script variants, and the two Western
+Script inputs come back **sharing one id**:
+
+    id "name--legalName--lastName", name "legalName--firstName", label "Given Name - Western Script*"
+    id "name--legalName--lastName", name "legalName--lastName",  label "Given Name - Western Script*"
+
+`collectLabelTexts` resolves the label via `document.querySelector('label[for=…]')`,
+which returns the first match, so **both inputs report the same label**. Then:
+
+- `fillFieldByFuzzyLabel(['first name','given name'], firstName)` — no label
+  contains "first name", so the `given name` key wins and hits three fields:
+  the Uzbek local one and **both** Western Script inputs. None matches exactly,
+  so all three are filled. **The first name is written into the last name field.**
+- `fillFieldByFuzzyLabel(['last name','family name','surname'], lastName)` — no
+  label contains "last name"; `family name` hits only the Uzbek local field. The
+  real `legalName--lastName` never receives the last name at all.
+
+Note this is *not* the substring collision fixed in `6059719` — that fix works
+correctly here. The defect is Workday emitting a duplicate `id`, which defeats
+label resolution no matter how the matching is ordered. A fix would have to
+disambiguate on something other than the label: the `name` attribute, or the
+enclosing `formField-legalName--firstName` / `formField-legalName--lastName`
+container, both of which *are* distinct in the capture.
+
 ## Candidate areas (unstarted, roughly highest value first)
 
 1. `retryAsync` is unused — decide its fate.
@@ -414,3 +461,10 @@ Append one line per firing. Keep it short.
   guess, closest-to-stored-value, implemented in `2cbd112` and modelled. F1, F4
   and F6 are now closed against real runs. **Only F2, F3 and F5 remain
   unverified**, and all three need a run on a login-gated form.
+- `2026-08-08` — First full-form capture landed (`tools/captures/my-information.json`).
+  **`collectLabelTexts` question CLOSED — do not widen**, every visible field
+  already resolves via `label[for]` and the only gainers are four invisible
+  fields. Logged **F7**: Country reads Uzbekistan against a US profile, and the
+  duplicate `id` Workday emits underneath it makes the first name overwrite the
+  last name. Untriaged on purpose — the cause of the country value must be
+  established before anything downstream of it is touched.
