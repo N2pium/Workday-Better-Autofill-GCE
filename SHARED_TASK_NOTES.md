@@ -364,10 +364,25 @@ Duke Energy".
 to United States of America. It did not. So the defect is not a wrong pick —
 it is that Country is **never written**.
 
-**Cause still unknown.** The empty-profile-field theory is DEAD — the user
-confirms Country is filled in, so `handleDropdown` is not skipping on `!value`.
-(`popup.html:65` does carry `placeholder="United States of America"`, which is a
-trap worth remembering, but it is not what happened here.)
+**ROOT CAUSE FOUND, fixed in `c5b0f75`.** Console said:
+
+    Workday Autoplay: No dropdown trigger found for country
+
+The trigger was never located, so the matching and commit logic **were never
+reached and were never at fault**. Two earlier hypotheses were wrong and are
+recorded here only so they are not retried: the empty-profile-value theory (the
+user confirms Country is filled) and the discarded-commit-result theory (real,
+worth fixing on its own, but not what caused this).
+
+`handleDropdown` matched only a `<label>` whose **direct `text()`** contains the
+key. A Workday dropdown is a `<button>`, which takes no `<label>`; its
+accessible name is in `aria-label` — `"Country Uzbekistan Required"`.
+`selectWorkdayDropdown` always had that fallback, which is exactly why Degree
+worked and Country never did. `findDropdownTrigger` now tries label text →
+label string value → button aria-label.
+
+**Lesson worth keeping:** the two dropdown helpers had drifted apart, and the
+weaker one was silently failing. When fixing one, check the other.
 
 **Confirmed by the user: autofill WAS re-run after Uzbekistan was set, and did
 not correct it. This is a real defect.**
@@ -380,17 +395,18 @@ Ruled out by reading, so do not re-derive:
   `formField-countryPhoneCode` in document order, so the "country" key resolves
   to the right button.
 
-**Leading hypothesis — the commit result was being thrown away.**
+**Separate real defect, also fixed — the commit result was being thrown away.**
 `handleDropdown` called `commitOptionSelection` and **discarded its return
 value**, then logged `Found option …` and returned. So a run where the click
 never committed produced a console that reads as a clean success while the field
 kept its old value. That is exactly the shape of what happened here. Fixed in
 `9750779`, which now warns on a failed commit.
 
-If the next run shows `Selected … but it did not commit`, the defect is in
-`commitOptionSelection` for this widget — most likely the `aria-selected` /
-`isConnected` check being wrong for a 250-option country list, or the 600ms
-window being too short. **Do not add blanket delays**; instrument first.
+Not the cause of F7, but a genuine reporting bug in its own right: a failed
+commit was indistinguishable from a success. If a future run shows
+`Selected … but it did not commit`, the defect is in `commitOptionSelection` for
+that widget — most likely the `aria-selected` / `isConnected` check, or the
+600ms window. **Do not add blanket delays**; instrument first.
 
 `2a84daf` and `9750779` add logging on every previously-silent path
 (`!value`, no trigger, already-set skip, option count, commit result).
