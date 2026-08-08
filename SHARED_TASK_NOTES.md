@@ -196,12 +196,14 @@ in a pill, not in `input.value`, so the old idempotency check protected nothing
 — it only looked safe while the input was unfindable. Re-running would have
 added a *second* pill. Now guarded on an existing `selectedItem`.
 
-**Open question, deliberately not decided:** the first-suggestion fallback still
-guesses when nothing matches. It is now scoped so it can only click a real
-suggestion, but picking a school the user did not attend is the same
-wrong-value-on-an-application problem that F4 chose to avoid by leaving a blank.
-Left as-is because it is pre-existing behavior and changing it is the user's
-call. Ask before changing.
+**DECIDED by the user, 2026-08-07:** the picker *should* guess rather than leave
+a blank, and should take the option **closest to the stored value**. Implemented
+in `2cbd112` — Dice coefficient over word tokens (order- and
+punctuation-insensitive), falling back to the first suggestion only when nothing
+shares a token. Note this is the opposite of the F4 degree decision, and
+deliberately so: degree lists are short closed vocabularies where a wrong pick
+is a clear error, while school lists are long and a near-miss is usually the
+right entry under a different name.
 
 ### F2 — original analysis (superseded, kept for context)
 
@@ -269,7 +271,9 @@ Fix is a prefix match (`[data-automation-id^="formField"]`), but check each of
 the three call sites separately — widening the container changes which label a
 field resolves to, so re-run the label-collision model afterwards.
 
-### F4 — degree never matches across spelling variants (user-reported, 2026-08-07)
+### F4 — **VERIFIED FIXED** on a real run, 2026-08-07
+
+User confirmed the degree fills correctly. **Do not revisit.**
 
 Fixed in `913d56f`. The user writes a degree as `BS`, `Bachelor of Science` or
 `Bachelors`; the option list uses whichever of those the tenant prefers. The
@@ -406,3 +410,7 @@ Append one line per firing. Keep it short.
   have exposed. **All six observed failures now have a fix in the branch.**
   Nothing further is worth changing from static reading — every remaining item
   needs either a real run or a user decision.
+- `2026-08-07` — **F4 VERIFIED FIXED** by the user. Picker guessing decided:
+  guess, closest-to-stored-value, implemented in `2cbd112` and modelled. F1, F4
+  and F6 are now closed against real runs. **Only F2, F3 and F5 remain
+  unverified**, and all three need a run on a login-gated form.
