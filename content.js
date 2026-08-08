@@ -628,7 +628,7 @@ async function handleSearchablePicker(keys, value) {
                 // "Could not find searchBox for school".
                 const container = label.closest('div[data-automation-id^="formField"]') || label.parentElement;
                 if (container) {
-                    input = container.querySelector('input[data-automation-id="searchBox"]');
+                    input = findSearchInputIn(container, label);
                     if (input) break;
                 }
             }
@@ -655,6 +655,20 @@ async function handleSearchablePicker(keys, value) {
             return;
         }
 
+        // A multiselect keeps its value in a pill, NOT in the search input --
+        // input.value is empty even when "Purdue University, Calumet" is already
+        // showing. That check above therefore protects nothing here, and it only
+        // looked safe while the input could not be found at all. Now that it can,
+        // re-running would type and select a SECOND pill. Same idempotency guard
+        // handleLanguages already uses.
+        const field = input.closest('div[data-automation-id^="formField"]');
+        const existingPill = field && field.querySelector('[data-automation-id="selectedItem"]');
+        if (existingPill) {
+            const pillText = (existingPill.getAttribute('aria-label') || existingPill.innerText || '').trim();
+            console.log(`Workday Autoplay: ${keys[0]} already has a selection (${pillText}), skipping.`);
+            return;
+        }
+
         console.log(`Workday Autoplay: Handling Searchable Picker for ${keys[0]}`, input);
 
         scrollIntoViewIfNeeded(input);
@@ -664,47 +678,36 @@ async function handleSearchablePicker(keys, value) {
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
 
-        await waitForCondition(() => {
-            const prompts = document.querySelectorAll('[data-automation-id="promptOption"]');
-            return prompts.length > 0;
-        }, 3000);
+        // Every lookup below goes through getOpenPromptOptions so that a pill
+        // that is already on the page can never be mistaken for a suggestion.
+        // The previous unscoped wait resolved instantly against such a pill.
+        await waitForCondition(() => getOpenPromptOptions().length > 0, 3000);
 
-        let option = document.querySelector(`[data-automation-id="promptOption"][data-automation-label*="${value}"]`);
+        const suggestions = getOpenPromptOptions();
+        const needle = value.toLowerCase();
+        const textOf = el => (el.getAttribute('data-automation-label') || el.innerText || '').trim();
 
-        if (!option) {
-            const allPrompts = document.querySelectorAll('[data-automation-id="promptOption"]');
-            for (const prompt of allPrompts) {
-                const label = prompt.getAttribute('data-automation-label') || prompt.innerText || '';
-                if (label.toLowerCase().includes(value.toLowerCase())) {
-                    option = prompt;
-                    break;
-                }
-            }
-        }
+        let option = suggestions.find(el => textOf(el).toLowerCase() === needle)
+            || suggestions.find(el => textOf(el).toLowerCase().includes(needle));
 
         if (!option) {
-            const promptOptionXpath = `//*[@data-automation-id="promptOption" and contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${value.toLowerCase()}")]`;
-            option = getElementByXpath(promptOptionXpath);
-        }
-
-        if (!option) {
-            const optionXpath = `//div[@role="option"]//div[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${value.toLowerCase()}")]`;
-            option = getElementByXpath(optionXpath);
+            // Some Workday variants render suggestions as role="option" rows
+            // rather than promptOption, so fall back to the open listbox — which
+            // is itself already scoped away from selectedItemList.
+            option = getOpenListboxOptions().find(el => el.innerText.toLowerCase().includes(needle));
         }
 
         if (option) {
             console.log(`Workday Autoplay: Found matching option for ${value}`, option);
-            scrollIntoViewIfNeeded(option);
-            option.click();
+            await commitOptionSelection(option, keys[0]);
+        } else if (suggestions.length) {
+            // Pre-existing behavior, now scoped so it can only ever click a real
+            // suggestion. Still a guess -- see the note in SHARED_TASK_NOTES.md
+            // about whether picking a non-matching school is worse than a blank.
+            console.log(`Workday Autoplay: No exact match, clicking first suggestion for ${value}`);
+            await commitOptionSelection(suggestions[0], keys[0]);
         } else {
-            const firstOption = document.querySelector('[data-automation-id="promptOption"], div[role="option"]');
-            if (firstOption) {
-                console.log(`Workday Autoplay: No exact match, clicking first option`);
-                scrollIntoViewIfNeeded(firstOption);
-                firstOption.click();
-            } else {
-                console.log(`Workday Autoplay: No options found for ${value}`);
-            }
+            console.log(`Workday Autoplay: No options found for ${value}`);
         }
 
         await new Promise(r => setTimeout(r, 300));
@@ -1501,6 +1504,63 @@ function findOpenListbox() {
 function getOpenListboxOptions() {
     const listbox = findOpenListbox();
     return listbox ? Array.from(listbox.querySelectorAll(OPTION_SELECTOR)) : [];
+}
+
+/**
+ * Suggestions from an OPEN searchable picker, never already-selected pills.
+ *
+ * data-automation-id="promptOption" is not unique to dropdown suggestions — it
+ * is also the selected pill's own text (tools/School-inspectElement.png):
+ *
+ *   <div role="option" data-automation-id="selectedItem"
+ *        aria-label="Purdue University, Calumet, press delete to clear value.">
+ *     <div data-automation-id="DELETE_charm" role="presentation">
+ *     <p data-automation-id="promptOption"
+ *        data-automation-label="Purdue University, Calumet">Purdue University, Calumet</p>
+ *
+ * An unscoped lookup therefore returns pills, which broke handleSearchablePicker
+ * two ways: its "wait for suggestions" resolved instantly off a pill that was
+ * already on the page, and its "no exact match, click the first option" fallback
+ * could click a pill — next to a DELETE charm — and clear a field that was
+ * already filled correctly.
+ */
+function getOpenPromptOptions() {
+    const suggestions = Array.from(document.querySelectorAll('[data-automation-id="promptOption"]'))
+        .filter(el => !el.closest('[data-automation-id="selectedItemList"], [data-automation-id="selectedItem"]'))
+        .filter(el => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+        });
+
+    // Same portal preference as findOpenListbox: when Workday has popped a menu,
+    // only that menu's entries count.
+    const portalled = suggestions.filter(el => el.closest('[data-popper-placement], [visibility="opened"]'));
+    return portalled.length ? portalled : suggestions;
+}
+
+/**
+ * The text input of a searchable/multiselect field.
+ *
+ * There is no data-automation-id="searchBox" on Duke Energy's form — that is the
+ * whole of F2. The input sits inside the multiselect's own input container,
+ * under data-automation-hiddensearch, and the field's <label for> points
+ * straight at it (<label for="education-20--school"> against a container
+ * carrying data-fkit-id="education-20--school").
+ */
+function findSearchInputIn(container, label) {
+    if (!container) return null;
+
+    const forId = label && label.getAttribute('for');
+    if (forId) {
+        const byFor = document.getElementById(forId);
+        if (byFor && byFor.tagName === 'INPUT') return byFor;
+    }
+
+    // searchBox first so Workday tenants that do emit it keep their old path.
+    return container.querySelector('input[data-automation-id="searchBox"]')
+        || container.querySelector('[data-automation-id="multiselectInputContainer"] input[type="text"]')
+        || container.querySelector('[data-automation-hiddensearch] input')
+        || container.querySelector('input[type="text"]:not([aria-hidden="true"])');
 }
 
 /**
