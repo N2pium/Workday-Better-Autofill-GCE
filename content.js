@@ -448,6 +448,17 @@ function collectLabelTexts(input) {
         if (label) texts.push(label.innerText);
     }
 
+    // NOTE: deliberately still an EXACT match on formField, unlike the other
+    // four call sites which were widened to [data-automation-id^="formField"].
+    //
+    // Widening here does not just repair a dead lookup, it enlarges the
+    // candidate set that fillFieldByFuzzyLabel writes into. Workday points a
+    // multiselect's <label for> at the widget container div rather than at the
+    // inner search <input>, so those inputs carry no label text today and are
+    // never written to. Give them their container's label and a fuzzy key could
+    // setNativeValue raw text straight into a School / Field of Study search
+    // box. Needs a full-form capture in tools/captures/ to model against before
+    // it is changed — see F3 in SHARED_TASK_NOTES.md.
     const container = input.closest('div[data-automation-id="formField"], div[data-automation-id="dateWidget"]');
     if (container) {
         const labelEl = container.querySelector('label');
@@ -545,7 +556,11 @@ function fillGPA(gpaValue) {
             if (label && /cumulative gpa|gpa/i.test(label.innerText)) target = input;
         }
         if (!target) {
-            const container = input.closest('div[data-automation-id="formField"]');
+            // Prefix match: Workday emits formField-gradeAverage, not a bare
+            // "formField", so the exact selector never matched and this third
+            // fallback was dead. Safe to widen here — the label still has to
+            // match /gpa/i, so nothing else can be picked up.
+            const container = input.closest('div[data-automation-id^="formField"]');
             if (container) {
                 const label = container.querySelector('label');
                 if (label && /cumulative gpa|gpa/i.test(label.innerText)) target = input;
@@ -606,7 +621,12 @@ async function handleSearchablePicker(keys, value) {
             const labelXpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${key.toLowerCase()}")]`;
             const label = getElementByXpath(labelXpath);
             if (label) {
-                const container = label.closest('div[data-automation-id="formField"]') || label.parentElement;
+                // Prefix match: the exact selector never matched Workday's
+                // formField-school / formField-degree, so this always fell
+                // through to label.parentElement — a wrapper too narrow to
+                // contain the input, which is part of why F2 reports
+                // "Could not find searchBox for school".
+                const container = label.closest('div[data-automation-id^="formField"]') || label.parentElement;
                 if (container) {
                     input = container.querySelector('input[data-automation-id="searchBox"]');
                     if (input) break;
@@ -1173,7 +1193,11 @@ async function autoAnswerRadioExact(keywords, exactChoice) {
     const matches = labels.filter(label => matchesAny(label.innerText, keywords));
 
     for (const label of matches) {
-        const container = label.closest('div[data-automation-id="formField"], fieldset, div[role="group"]');
+        // Prefix match. closest() returns the NEAREST matching ancestor, so this
+        // makes the question's own formField-* wrapper win over an outer
+        // fieldset — tighter scoping, less chance of picking up a neighbouring
+        // question's radios.
+        const container = label.closest('div[data-automation-id^="formField"], fieldset, div[role="group"]');
 
         if (container) {
             const radios = container.querySelectorAll('input[type="radio"]');
@@ -1624,7 +1648,8 @@ async function answerYesNo(questionText, userChoice) {
 
     for (const label of matchingLabels) {
         // Find the associated form field container
-        const container = label.closest('div[data-automation-id="formField"], fieldset, div[role="group"], div[role="radiogroup"]');
+        // Prefix match — same tighter-scoping rationale as autoAnswerRadioExact.
+        const container = label.closest('div[data-automation-id^="formField"], fieldset, div[role="group"], div[role="radiogroup"]');
 
         if (container) {
             // Find all radio buttons in this container
