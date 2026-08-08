@@ -298,7 +298,15 @@ function findElementByFuzzyLabel(keys) {
  * Dropdown Handling (Now Async)
  */
 async function handleDropdown(keys, value, matcher = null) {
-    if (!value) return;
+    // Say so out loud. An empty profile field silently skipped the whole
+    // dropdown, which is indistinguishable in the console from a dropdown that
+    // was attempted and failed. That cost real debugging time on Country, whose
+    // popup input carries "United States of America" as a PLACEHOLDER — it
+    // looks filled while saving "".
+    if (!value) {
+        console.log(`Workday Autoplay: No profile value for ${keys[0]}, leaving the field as-is.`);
+        return;
+    }
 
     for (const key of keys) {
         try {
