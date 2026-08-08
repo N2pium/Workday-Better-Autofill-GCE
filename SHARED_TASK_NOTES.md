@@ -176,7 +176,34 @@ last match — verify visibility.
 Affects `selectWorkdayDropdown`, `handleDropdown`, `handleDateDropdown`, and
 `handleLanguages`, all of which use the same unscoped query.
 
-### F2 — searchable picker never finds its input (2 occurrences)
+### F2 — FIXED in `13bfedc`, both halves. Awaiting a real run.
+
+Was worse than first recorded — the input lookup was only half of it.
+
+**Half 1, the input.** No `searchBox` exists. `findSearchInputIn` resolves
+`label[for]` first (Workday points it straight at the input), then falls back
+through `searchBox` → `multiselectInputContainer` → `hiddensearch` → any text
+input. Required the F3 container fix in `bc6abf7` to land first.
+
+**Half 2, the pills.** `promptOption` is *also* the selected pill's text, next
+to a `DELETE_charm`. Every lookup was unscoped, so the "wait for suggestions"
+resolved instantly off a pill already on the page, and "click the first option"
+**could click a pill and clear a correct value**. All lookups now go through
+`getOpenPromptOptions()`.
+
+**Also closed a gap the fix would have opened.** A multiselect keeps its value
+in a pill, not in `input.value`, so the old idempotency check protected nothing
+— it only looked safe while the input was unfindable. Re-running would have
+added a *second* pill. Now guarded on an existing `selectedItem`.
+
+**Open question, deliberately not decided:** the first-suggestion fallback still
+guesses when nothing matches. It is now scoped so it can only click a real
+suggestion, but picking a school the user did not attend is the same
+wrong-value-on-an-application problem that F4 chose to avoid by leaving a blank.
+Left as-is because it is pre-existing behavior and changing it is the user's
+call. Ask before changing.
+
+### F2 — original analysis (superseded, kept for context)
 
 ```
 Could not find searchBox for school
@@ -372,3 +399,10 @@ Append one line per firing. Keep it short.
   (`Found 61 options for State`, was 250). F1 and F6 are now both closed against
   real console output. F4 and F5 still need confirming from the same run —
   whether Indiana actually *selected*, not merely that the right list was read.
+- `2026-08-07` — Autonomous check. **F2 fixed** (`13bfedc`) from
+  `tools/School-inspectElement.png`: no `searchBox` exists, and `promptOption`
+  doubles as the selected pill's text so the old fallback could clear a correct
+  value. Also pre-empted a duplicate-pill regression the fix would otherwise
+  have exposed. **All six observed failures now have a fix in the branch.**
+  Nothing further is worth changing from static reading — every remaining item
+  needs either a real run or a user decision.
