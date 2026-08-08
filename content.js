@@ -297,6 +297,45 @@ function findElementByFuzzyLabel(keys) {
 /**
  * Dropdown Handling (Now Async)
  */
+const XPATH_LOWER = "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'";
+
+/**
+ * Locate the button/combobox for a dropdown labelled `key`.
+ *
+ * Confirmed failure: "No dropdown trigger found for country" on the Duke Energy
+ * My Information page, where the field plainly exists (formField-country in
+ * tools/captures/my-information.json). Matching only on a <label>'s direct
+ * text() is too narrow — a Workday dropdown is a <button>, which takes no
+ * <label>, and its accessible name lives in aria-label:
+ *
+ *   aria-label="Country Uzbekistan Required"
+ *
+ * selectWorkdayDropdown has always carried the aria-label fallback, which is
+ * why Degree works while Country did not. Same ladder here.
+ */
+function findDropdownTrigger(key) {
+    const lower = key.toLowerCase();
+    const after = `/following::*[self::button or @role="combobox"][1]`;
+
+    // 1. The label's own text node — original behavior, kept first.
+    const byText = getElementByXpath(
+        `//label[contains(translate(text(), ${XPATH_LOWER}), "${lower}")]${after}`
+    );
+    if (byText) return byText;
+
+    // 2. The label's full string value. Workday nests label text inside a span
+    //    often enough that text() returns an empty node-set.
+    const byString = getElementByXpath(
+        `//label[contains(translate(., ${XPATH_LOWER}), "${lower}")]${after}`
+    );
+    if (byString) return byString;
+
+    // 3. The button's own accessible name.
+    return getElementByXpath(
+        `//button[@aria-label and contains(translate(@aria-label, ${XPATH_LOWER}), "${lower}")]`
+    );
+}
+
 async function handleDropdown(keys, value, matcher = null) {
     // Say so out loud. An empty profile field silently skipped the whole
     // dropdown, which is indistinguishable in the console from a dropdown that
@@ -310,8 +349,7 @@ async function handleDropdown(keys, value, matcher = null) {
 
     for (const key of keys) {
         try {
-            const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${key.toLowerCase()}")]/following::*[self::button or @role="combobox"][1]`;
-            const trigger = getElementByXpath(xpath);
+            const trigger = findDropdownTrigger(key);
 
             if (!trigger) {
                 console.log(`Workday Autoplay: No dropdown trigger found for ${key}`);
