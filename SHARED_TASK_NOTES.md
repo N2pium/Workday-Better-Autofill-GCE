@@ -505,12 +505,18 @@ The legend's text is nested one level deeper in a `rich-label` div, so
 
 Keywords added, both observed: `legally eligible`, `eligible to work`.
 
-**"Are you at least 18 years or older?" is deliberately left unanswered.** Age
-is not work authorization. Wiring it to the "Legally Authorized" toggle means a
-user who unchecks that would answer **No** to being 18 or older — a false
-statement on a job application. It needs its own profile field, which is a
-schema change and therefore the user's call. Do not "fix" this by adding the
-keyword; that is the wrong fix and was rejected on purpose.
+**The 18+ question now has its own profile field** (`79e9c99`, user-approved
+schema change). An attestation card at the top of Job Preferences,
+`jobPreferences.isAtLeast18`, defaulting to **false**.
+
+- Unticked means **unanswered, not "No"** — the question is left for the user
+  and the console says so. Answering "No" to being 18 or older because a box was
+  never ticked would be far worse than a blank.
+- **`'18 years of age'` was removed from `authKeywords`** and now lives only in
+  `ageKeywords`. In both lists, the wording "Are you at least 18 years of age?"
+  was claimed by two groups and whichever ran first won — so unchecking work
+  authorization could have answered No to an age question. **Do not put it back**;
+  there is a comment at the call site saying so.
 
 Modelled over all eight question texts from three tenants: each routes to
 exactly one keyword group, no collisions.

@@ -311,6 +311,9 @@ These were confirmed working before v1.3 and were all touched indirectly.
       is empty
 - [ ] Date fields show `MM` / `YYYY`, end dates show `MM or Present`
 - [ ] Saved values render as normal upright text, plainly different from hints
+- [ ] The "I am 18 years of age or older" card sits at the top of Job
+      Preferences, and its left accent turns **green** when ticked
+- [ ] That tick survives Save Profile and reopening the panel
 
 ---
 
@@ -329,9 +332,12 @@ Intern posting do.
 - [ ] "Are you legally authorized / legally eligible to work…?" is answered
 - [ ] "Will you now or in the future require sponsorship…?" is answered
 - [ ] Both match the toggles you set, including when set to **No**
-- [ ] `Are you at least 18 years or older?` is **left on Select One** — that is
-      intended, not a miss. Age is not work authorization, so it is not wired to
-      the authorization toggle
+- [ ] With **"I am 18 years of age or older" ticked**, that question is answered Yes
+- [ ] With it **unticked**, the question is left on Select One and the console
+      says the age question was left for the user. It must **never** be answered
+      "No" just because the box is off
+- [ ] Unchecking "Legally Authorized to Work" does **not** change the age answer —
+      they are separate fields and must stay separate
 - [ ] Free-text questions with no matching toggle ("Do you have any relatives
       who work at…", "What is your desired start date?") are left alone
 - [ ] Nothing is answered twice or flipped back
