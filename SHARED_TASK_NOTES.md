@@ -453,6 +453,29 @@ disambiguate on something other than the label: the `name` attribute, or the
 enclosing `formField-legalName--firstName` / `formField-legalName--lastName`
 container, both of which *are* distinct in the capture.
 
+## Release state — v1.3, not yet shipped
+
+Manifest bumped to `1.3`. `package.ps1` uses an explicit include list, so the
+screenshots, `tools/captures/`, `LOOP_PROMPT.md` and this file are already
+excluded from the upload zip — nothing to change there.
+
+**The one remaining blocker is verification, and only the user can clear it.**
+~890 lines of `content.js` changed against `master`. Verified on a real form:
+F1, F6. Unverified: F2, F3, F5, F7.
+
+**F4's verification is STALE.** It was confirmed at `913d56f`, but `c5b0f75`
+later rewrote how every dropdown trigger is found, Degree's included. It needs
+re-confirming against the shipping code.
+
+Run Tests 11–15 in `TESTING_CHECKLIST.md` before uploading. **Test 14 matters
+most** — it covers paths that already worked and were touched anyway (dates,
+disclosure radios, names, languages, resume). A regression there is worse than a
+fix that failed to land, because nobody is looking for it.
+
+Do not ship B2–B6 in this release. New UI alongside 890 changed lines means a
+breakage cannot be attributed. B1 is already in and is CSS plus placeholder text,
+which cannot affect autofill.
+
 ## Friction log — observed, not imagined
 
 Track B work must trace to an entry here. Every one of these was hit during real
