@@ -472,9 +472,13 @@ most** — it covers paths that already worked and were touched anyway (dates,
 disclosure radios, names, languages, resume). A regression there is worse than a
 fix that failed to land, because nobody is looking for it.
 
-**F8, F9 and F10 are NOT for v1.3.** They are newly found, never worked, come
-from a second tenant, and none is a regression. Shipping the verified fixes is
-not blocked on them. Gender is already supported — see F9.
+**F8 is now IN the branch (`9d24fc2`) and therefore in v1.3's scope.** It was
+built after the release plan was written, at the user's prompting, once they
+supplied `<legend>` captures. It is unverified. Either test it (see Test 16) or
+revert that commit before shipping — it is a single self-contained commit.
+
+**F9 and F10 are NOT for v1.3.** Newly found, never worked, no regression.
+Gender is already supported — see F9.
 
 Do not ship B2–B6 in this release. New UI alongside 890 changed lines means a
 breakage cannot be attributed. B1 is already in and is CSS plus placeholder text,
@@ -487,7 +491,35 @@ New evidence, and the first from a **second Workday tenant**. Screenshots:
 `HowDidYouHearAboutUs.png`. None of these is a regression — all three classes
 have never worked.
 
-### F8 — `<legend>` questions are invisible to the extension
+### F8 — FIXED in `9d24fc2`, unverified. `<legend>` questions were invisible
+
+`findQuestionBlocks` now collects question text from **`label` and `legend`**,
+deduped by container, and `answerYesNo` falls through to `answerDropdownYesNo`
+when a block has no matching radios. Yes/No is matched **exactly** — "No" is a
+substring of "None of the above" and "Not applicable" — and the aria-disabled
+"Select One" placeholder is excluded, since it carries `aria-selected="true"`
+while nothing has been chosen.
+
+The legend's text is nested one level deeper in a `rich-label` div, so
+`innerText` is used rather than a text node. Same trap as `c5b0f75`.
+
+Keywords added, both observed: `legally eligible`, `eligible to work`.
+
+**"Are you at least 18 years or older?" is deliberately left unanswered.** Age
+is not work authorization. Wiring it to the "Legally Authorized" toggle means a
+user who unchecks that would answer **No** to being 18 or older — a false
+statement on a job application. It needs its own profile field, which is a
+schema change and therefore the user's call. Do not "fix" this by adding the
+keyword; that is the wrong fix and was rejected on purpose.
+
+Modelled over all eight question texts from three tenants: each routes to
+exactly one keyword group, no collisions.
+
+**Known limitation, not yet hit:** `answerYesNo` returns after the first
+matching block, so if one page ever asks two questions of the same class only
+the first is answered. No observed case — do not restructure speculatively.
+
+### F8 — original analysis (superseded, kept for context)
 
 **`content.js` contains zero references to `legend`.** Every question lookup in
 the file starts from `<label>`. Workday's "Application Questions" pages do not

@@ -314,6 +314,30 @@ These were confirmed working before v1.3 and were all touched indirectly.
 
 ---
 
+## 📋 Test 16: Application Questions page (F8 — new, unverified)
+
+Only reachable on tenants that use a questionnaire page ("Application Questions
+1 of 2"). Duke Energy does **not** have one — BCBSLA and the IT Computer Science
+Intern posting do.
+
+### Setup:
+- In the popup set "Legally Authorized to Work in Country" and
+  "I Require Sponsorship" to known values, then Save Profile
+- Reach the Application Questions page and autofill
+
+### Expected Results:
+- [ ] "Are you legally authorized / legally eligible to work…?" is answered
+- [ ] "Will you now or in the future require sponsorship…?" is answered
+- [ ] Both match the toggles you set, including when set to **No**
+- [ ] `Are you at least 18 years or older?` is **left on Select One** — that is
+      intended, not a miss. Age is not work authorization, so it is not wired to
+      the authorization toggle
+- [ ] Free-text questions with no matching toggle ("Do you have any relatives
+      who work at…", "What is your desired start date?") are left alone
+- [ ] Nothing is answered twice or flipped back
+
+---
+
 ## ✅ Success Criteria
 
 All features working correctly when:
