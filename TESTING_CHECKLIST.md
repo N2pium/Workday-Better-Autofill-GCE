@@ -225,6 +225,95 @@ Workday Autoplay: Scan completed.
 
 ---
 
+## 🚦 v1.3 Release Tests — run these before uploading to the Store
+
+v1.3 changes ~890 lines of `content.js`. Tests 11–13 cover the fixes; **Test 14
+is the one that matters most**, because it covers paths that already worked and
+were touched anyway. A regression there is worse than a fix that did not land.
+
+---
+
+## 📋 Test 11: Dropdowns pick from the right list (F1, F6, F7)
+
+### Setup:
+- Fill in **Country** and **State** in the popup, then Save Profile
+- Manually set Country on the form to something wrong (e.g. Uzbekistan)
+- Click "AUTOFILL ACTIVE PAGE"
+
+### Expected Results:
+- [ ] `Found dropdown trigger for country (currently "Uzbekistan")` — **not**
+      `No dropdown trigger found`
+- [ ] Country changes to your stored value
+- [ ] `Found 61 options for State` (50 states + DC + territories + Armed Forces).
+      **250 means it is reading the Country list** — that is the F6 regression
+- [ ] State is selected, not merely highlighted
+- [ ] "How Did You Hear About Us?" selects your source
+- [ ] No `Selected ... but it did not commit` warnings
+
+---
+
+## 📋 Test 12: Degree matches across spellings (F4)
+
+### Setup:
+Run once per stored value: `BS`, `Bachelor of Science`, `Bachelors`.
+
+### Expected Results:
+- [ ] All three select **Bachelors** on Duke's list
+      (Select One / High School–GED / Associates / Bachelors / Masters / Doctorate)
+- [ ] The disabled "Select One" placeholder is never chosen
+- [ ] With a list offering **both** Bachelor of Arts and Bachelor of Science:
+      `BS` picks Science, `BA` picks Arts, and plain `Bachelors` leaves it
+      **blank** rather than guessing — a blank here is correct behavior
+
+---
+
+## 📋 Test 13: School and Field of Study (F2, F3)
+
+### Setup:
+- Clear School and Field of Study on the form, then autofill
+
+### Expected Results:
+- [ ] `Handling Searchable Picker for school` — **not** `Could not find searchBox`
+- [ ] School and Field of Study both get filled
+- [ ] **Exactly one** pill per field. Two pills means the commit check regressed
+- [ ] Run autofill a **second time** on the same page: it must log
+      `already has a selection (...), skipping` and **not** add a duplicate
+- [ ] With a deliberately misspelled school, it picks the closest real option
+      and logs the score, rather than the first one alphabetically
+
+---
+
+## 📋 Test 14: Nothing that already worked has broken
+
+These were confirmed working before v1.3 and were all touched indirectly.
+
+### Expected Results:
+- [ ] Address Line 1, City, Postal Code still fill
+- [ ] **First name and last name land in the correct fields** — not the same
+      value in both
+- [ ] Month/year date dropdowns still fill (they changed how they commit)
+- [ ] All three disclosure auto-declines still work (radio container scope
+      was tightened)
+- [ ] "Previously worked for..." still answers correctly
+- [ ] Language row still skips when one already exists
+- [ ] Resume still skips when one is already uploaded
+- [ ] Greenhouse autofill still works — `greenhouse.js` was untouched, so this
+      is a smoke test, not a deep one
+
+---
+
+## 📋 Test 15: Popup reads honestly (v1.3 QoL)
+
+### Expected Results:
+- [ ] Every empty field shows its hint in *italic grey* — clearly a hint, not
+      an answer you have already given
+- [ ] Country shows `e.g. United States of America` and it is obvious the field
+      is empty
+- [ ] Date fields show `MM` / `YYYY`, end dates show `MM or Present`
+- [ ] Saved values render as normal upright text, plainly different from hints
+
+---
+
 ## ✅ Success Criteria
 
 All features working correctly when:
@@ -239,6 +328,15 @@ All features working correctly when:
 - ✅ Disability → Declined when toggle on
 - ✅ Multi-page forms → Auto-filled without manual intervention
 - ✅ No console errors during entire process
+
+### v1.3 additions
+
+- ✅ Country and State → Selected, and corrected when already set to something wrong
+- ✅ State dropdown → ~61 options, never 250
+- ✅ Degree → Matches whichever spelling you stored
+- ✅ School / Field of Study → Filled, exactly one pill, no duplicate on re-run
+- ✅ First and last name → In their own fields
+- ✅ Popup → Empty fields visibly empty
 
 ---
 
