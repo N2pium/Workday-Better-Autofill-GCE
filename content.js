@@ -761,9 +761,14 @@ async function handleSearchablePicker(keys, value) {
             option = getOpenListboxOptions().find(el => el.innerText.toLowerCase().includes(needle));
         }
 
+        // We returned early above if this field already had a pill, so ANY pill
+        // appearing now is proof our own pick landed — and it is the only proof
+        // available for a <p> suggestion in a menu that may stay open.
+        const pillAppeared = () => !!(field && field.querySelector('[data-automation-id="selectedItem"]'));
+
         if (option) {
             console.log(`Workday Autoplay: Found matching option for ${value}`, option);
-            await commitOptionSelection(option, keys[0]);
+            await commitOptionSelection(option, keys[0], pillAppeared);
         } else if (suggestions.length) {
             // User's call: guess rather than leave the field blank. Prefer the
             // suggestion closest to the stored value over whichever happens to
@@ -774,7 +779,7 @@ async function handleSearchablePicker(keys, value) {
                 ? `closest match "${textOf(chosen)}" (score ${closest.score.toFixed(2)})`
                 : `first suggestion "${textOf(chosen)}" (nothing scored above zero)`;
             console.log(`Workday Autoplay: No exact match for ${value}, taking ${how}`);
-            await commitOptionSelection(chosen, keys[0]);
+            await commitOptionSelection(chosen, keys[0], pillAppeared);
         } else {
             console.log(`Workday Autoplay: No options found for ${value}`);
         }
@@ -1382,7 +1387,7 @@ function scrollIntoViewIfNeeded(el) {
  * nothing extra is dispatched, which keeps multiselect widgets from toggling a
  * freshly-set value straight back off.
  */
-async function commitOptionSelection(option, label = '') {
+async function commitOptionSelection(option, label = '', alsoCommitted = null) {
     if (!option) return false;
     scrollIntoViewIfNeeded(option);
 
@@ -1399,7 +1404,15 @@ async function commitOptionSelection(option, label = '') {
     // teardown check reads that success as a failure and escalates for nothing.
     // Either the row reports itself selected, or the menu closed and took the
     // node with it.
-    const committed = () => option.getAttribute('aria-selected') === 'true' || !option.isConnected;
+    // `alsoCommitted` lets a caller supply proof of its own. A searchable
+    // picker's suggestion is a <p>, which carries no aria-selected, so success
+    // would otherwise rest entirely on the menu tearing down — and Workday menus
+    // demonstrably do not always tear down (Country's stayed open). Without this,
+    // a successful pick on a multiselect reads as a failure, the pointer replay
+    // below fires, and the field gets a SECOND pill.
+    const committed = () => option.getAttribute('aria-selected') === 'true'
+        || !option.isConnected
+        || (alsoCommitted ? alsoCommitted() : false);
 
     target.click();
     if (await waitForCondition(committed, 600)) return true;
