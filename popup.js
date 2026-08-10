@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (resumeFile) {
             if (resumeFile.size > 3 * 1024 * 1024) { // 3MB limit
                 statusCtx.textContent = 'Error: Resume too large (Max 3MB)';
-                statusCtx.style.color = '#ef4444';
+                statusCtx.style.color = 'var(--danger)';
                 return;
             }
 
@@ -256,10 +256,10 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.storage.local.set(data, () => {
             if (chrome.runtime.lastError) {
                 statusCtx.textContent = 'Error saving (Quota exceeded?)';
-                statusCtx.style.color = '#ef4444';
+                statusCtx.style.color = 'var(--danger)';
             } else {
                 statusCtx.textContent = 'Profile saved!';
-                statusCtx.style.color = '#10b981';
+                statusCtx.style.color = 'var(--success)';
                 if (resumeFile) document.getElementById('resumeStatus').textContent = `Stored: ${resumeFile.name}`;
             }
             setTimeout(() => { statusCtx.textContent = ''; }, 3000);
@@ -280,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (confirm("Are you sure you want to wipe all your data? This cannot be undone.")) {
                 chrome.storage.local.clear(() => {
                     statusCtx.textContent = 'All data deleted.';
-                    statusCtx.style.color = '#ef4444';
+                    statusCtx.style.color = 'var(--danger)';
 
                     // Reset forms
                     document.getElementById('profileForm').reset();
@@ -319,11 +319,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     statusCtx.textContent = looksSupported
                         ? 'Error: Refresh the page and try again.'
                         : 'Not a supported job page (Workday / Greenhouse).';
-                    statusCtx.style.color = '#ef4444';
+                    statusCtx.style.color = 'var(--danger)';
                 } else {
                     console.log("Message sent", response);
                     statusCtx.textContent = "Autofill running...";
-                    statusCtx.style.color = '#10b981';
+                    statusCtx.style.color = 'var(--success)';
                 }
             });
         });
@@ -347,7 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusCtx.textContent = granted
                     ? 'Greenhouse support enabled.'
                     : 'Permission declined — Greenhouse stays off.';
-                statusCtx.style.color = granted ? '#10b981' : '#f59e0b';
+                statusCtx.style.color = granted ? 'var(--success)' : 'var(--primary)';
                 setTimeout(() => { statusCtx.textContent = ''; }, 4000);
             });
         } else {
@@ -355,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ghToggle.checked = !removed;
                 if (removed) {
                     statusCtx.textContent = 'Greenhouse support disabled.';
-                    statusCtx.style.color = '#94a3b8';
+                    statusCtx.style.color = 'var(--text-muted)';
                     setTimeout(() => { statusCtx.textContent = ''; }, 3000);
                 }
             });
@@ -366,7 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.runtime.onMessage.addListener((msg) => {
         if (msg.action === 'fill_complete') {
             statusCtx.textContent = 'Autofill complete ✓';
-            statusCtx.style.color = '#10b981';
+            statusCtx.style.color = 'var(--success)';
             setTimeout(() => { statusCtx.textContent = ''; }, 5000);
         }
     });
@@ -389,7 +389,7 @@ document.addEventListener('DOMContentLoaded', () => {
             a.click();
             URL.revokeObjectURL(url);
             statusCtx.textContent = 'Profile exported.';
-            statusCtx.style.color = '#10b981';
+            statusCtx.style.color = 'var(--success)';
             setTimeout(() => { statusCtx.textContent = ''; }, 3000);
         });
     });
@@ -411,7 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 chrome.storage.local.set(data, () => {
                     if (chrome.runtime.lastError) {
                         statusCtx.textContent = 'Error importing (file too large?)';
-                        statusCtx.style.color = '#ef4444';
+                        statusCtx.style.color = 'var(--danger)';
                     } else {
                         // Reload panel so the form reflects imported data
                         location.reload();
@@ -419,7 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             } catch (err) {
                 statusCtx.textContent = 'Error: Not a valid profile file.';
-                statusCtx.style.color = '#ef4444';
+                statusCtx.style.color = 'var(--danger)';
                 setTimeout(() => { statusCtx.textContent = ''; }, 4000);
             }
         };

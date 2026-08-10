@@ -10,6 +10,33 @@
   --ring: rgba(212, 165, 116, 0.3);
   --success: #6b9e7a;
   --danger: #e67873;
+
+  /* Text that sits ON the amber. Near-black beats white here: white on #d4a574
+     is a weak 2.2:1, this is 9:1, and it reads deliberate rather than default. */
+  --on-primary: #1a1612;
+
+  /* One step lighter than --card-bg, for surfaces that sit on top of a card. */
+  --surface-raised: #35312d;
+
+  /* Monospace carries the section headers and ordinals. It gives the panel an
+     archival, form-like character without a webfont — PRIVACY_POLICY.md
+     promises zero third-party network calls, so remote faces are not available. */
+  --mono: ui-monospace, SFMono-Regular, 'SF Mono', 'Cascadia Mono', 'Segoe UI Mono',
+    'Roboto Mono', Menlo, Consolas, monospace;
+
+  /* The panel is user-resizable, so type and rhythm flex with it. */
+  --step--2: clamp(0.625rem, 0.60rem + 0.12vw, 0.6875rem);
+  --step--1: clamp(0.75rem, 0.72rem + 0.15vw, 0.8125rem);
+  --step-0: clamp(0.8125rem, 0.78rem + 0.18vw, 0.875rem);
+  --step-1: clamp(0.9375rem, 0.89rem + 0.24vw, 1.0625rem);
+  --step-2: clamp(1.0625rem, 0.99rem + 0.36vw, 1.25rem);
+
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-s: 0.75rem;
+  --space-m: 1rem;
+  --space-l: 1.5rem;
+  --space-xl: 2rem;
 }
 
 body {
@@ -25,7 +52,15 @@ body {
   width: 100%;
   min-width: 300px;
   height: 100vh;
-  font-size: 14px;
+  font-size: var(--step-0);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--primary);
+  color: var(--on-primary);
 }
 
 .container {
@@ -34,8 +69,10 @@ body {
   height: 100%;
 }
 
+/* ---- Header ------------------------------------------------------------ */
+
 header {
-  padding: 20px 20px 10px;
+  padding: var(--space-m) var(--space-m) var(--space-s);
   background-color: var(--bg);
   border-bottom: 1px solid var(--border);
   position: sticky;
@@ -44,108 +81,125 @@ header {
 }
 
 h1 {
-  margin: 10px 0 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text);
+  margin: var(--space-s) 0 0;
+  font-family: var(--mono);
+  font-size: var(--step--2);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
 }
 
 .autofill-btn {
   width: 100%;
-  padding: 14px;
+  padding: 13px;
   background: var(--primary);
-  color: white;
+  color: var(--on-primary);
   border: none;
-  border-radius: 8px;
-  font-weight: 700;
-  font-size: 14px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: var(--step--1);
   cursor: pointer;
-  letter-spacing: 0.5px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 0 20px rgba(212, 165, 116, 0.3);
-  transition: transform 0.1s, box-shadow 0.3s ease, opacity 0.2s;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: background-color 0.18s ease, transform 0.08s ease;
 }
 
-.autofill-btn:hover {
-  opacity: 0.95;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 0 30px rgba(212, 165, 116, 0.5);
+/* No glow. The button is the brightest thing in the panel already; a halo on
+   top of that is decoration standing in for hierarchy. */
+@media (hover: hover) {
+  .autofill-btn:hover {
+    background: #e2b98d;
+  }
 }
 
 .autofill-btn:active {
-  transform: scale(0.98);
+  transform: translateY(1px);
 }
+
+/* ---- Sections: the numbered dossier ------------------------------------ */
 
 form {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: var(--space-m);
+  counter-reset: section;
 }
 
 section {
-  margin-bottom: 24px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 16px;
+  margin-bottom: var(--space-l);
 }
 
-section:last-of-type {
-  border-bottom: none;
-}
-
+/* Whitespace separates sections; the rule belongs to the header, where it
+   anchors the label instead of floating between unrelated fields. */
 h2 {
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0 0 var(--space-s);
+  padding-bottom: var(--space-2xs);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: var(--step--2);
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.14em;
   color: var(--text-muted);
-  margin: 0 0 12px 0;
   cursor: pointer;
   user-select: none;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  position: relative;
-  padding-left: 8px;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
+/* The signature: an amber ordinal per section. Amber appears in exactly three
+   places in the whole panel — here, the primary button, and focus. */
 h2::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 3px;
-  background: var(--primary);
-  border-radius: 50%;
+  content: counter(section, decimal-leading-zero);
+  counter-increment: section;
+  color: var(--primary);
+  font-weight: 600;
+  letter-spacing: 0.06em;
 }
 
 h2::after {
-  content: '▾';
-  font-size: 12px;
-  transition: transform 0.15s;
+  content: '';
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.2s ease;
 }
 
-h2:hover {
-  color: var(--text);
+@media (hover: hover) {
+  h2:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+}
+
+section.collapsed h2 {
+  margin-bottom: 0;
 }
 
 section.collapsed h2::after {
-  transform: rotate(-90deg);
+  transform: translateY(1px) rotate(-45deg);
 }
 
 section.collapsed > *:not(h2) {
   display: none;
 }
 
-section.collapsed {
-  padding-bottom: 8px;
-}
+/* ---- Fields ------------------------------------------------------------ */
 
 .input-group {
-  margin-bottom: 12px;
+  margin-bottom: var(--space-s);
 }
 
 .row {
   display: flex;
-  gap: 10px;
+  gap: var(--space-xs);
 }
 
 .half {
@@ -154,30 +208,67 @@ section.collapsed {
 
 label {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2xs);
   font-weight: 500;
-  color: #cbd5e1;
-  font-size: 12px;
+  /* Was #cbd5e1 — a cold slate blue in an entirely warm palette. */
+  color: var(--text-muted);
+  font-size: var(--step--1);
+  letter-spacing: 0.01em;
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
-  padding: 10px;
+  padding: 9px 10px;
   background-color: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 4px;
   color: var(--text);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--step-0);
   box-sizing: border-box;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+@media (hover: hover) {
+
+  input:hover,
+  textarea:hover,
+  select:hover {
+    border-color: #4a443f;
+  }
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--ring);
+  background-color: var(--surface-raised);
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+/* Native select arrow is a light-mode artifact on every platform. Replaced with
+   a chevron drawn in the palette's own muted clay. */
+select {
+  appearance: none;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.75 6 6.25 11 1.75' fill='none' stroke='%23a29790' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  background-size: 10px;
+  cursor: pointer;
+}
+
+select option {
+  background-color: var(--card-bg);
+  color: var(--text);
 }
 
 /* Placeholders must never be mistakable for a value you have already entered.
@@ -193,74 +284,186 @@ textarea::placeholder {
   opacity: 0.7;
 }
 
-/* Cards */
-.card {
-  background-color: rgba(255, 255, 255, 0.03);
+/* The unstyled file button was the loudest unfinished edge in the panel. */
+input[type="file"] {
+  padding: 7px;
+  cursor: pointer;
+  font-size: var(--step--1);
+  color: var(--text-muted);
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 10px;
+  padding: 5px 11px;
+  background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 12px;
+  border-radius: 3px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--step--2);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+@media (hover: hover) {
+  input[type="file"]::file-selector-button:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+}
+
+/* ---- Cards -------------------------------------------------------------- */
+
+.card {
+  background-color: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: var(--space-s);
+  margin-bottom: var(--space-xs);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
-  font-size: 12px;
-  font-weight: 600;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-xs);
+  font-family: var(--mono);
+  font-size: var(--step--2);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
   color: var(--text-muted);
+}
+
+/* Entries are numbered the same way sections are, so the ordinal reads as one
+   system top to bottom. It also solves a real problem: two education cards were
+   both headed "Education Entry" and were impossible to tell apart while
+   scrolling. */
+#education-container {
+  counter-reset: edu;
+}
+
+#work-container {
+  counter-reset: work;
+}
+
+.edu-card .card-header > span::before {
+  counter-increment: edu;
+  content: counter(edu, decimal-leading-zero);
+  margin-right: var(--space-xs);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.work-card .card-header > span::before {
+  counter-increment: work;
+  content: counter(work, decimal-leading-zero);
+  margin-right: var(--space-xs);
+  color: var(--primary);
+  font-weight: 600;
 }
 
 .remove-btn {
   background: transparent;
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  border-radius: 4px;
-  padding: 4px 8px;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  border-radius: 3px;
+  padding: 3px 7px;
   cursor: pointer;
-  font-size: 11px;
+  font-family: var(--mono);
+  font-size: var(--step--2);
+  letter-spacing: 0.06em;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
-.remove-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
+/* Destructive intent should surface on approach, not sit red permanently —
+   a always-red button in a list of four reads as an error state. */
+@media (hover: hover) {
+  .remove-btn:hover {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
 }
 
 .add-btn {
   width: 100%;
-  padding: 10px;
+  padding: 9px;
   background: transparent;
   border: 1px dashed var(--border);
   color: var(--text-muted);
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.2s;
+  font-family: var(--mono);
+  font-size: var(--step--2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-.add-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary);
+@media (hover: hover) {
+  .add-btn:hover {
+    border-color: var(--primary);
+    border-style: solid;
+    color: var(--primary);
+  }
 }
+
+/* ---- Checkboxes --------------------------------------------------------- */
 
 .checkbox-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-xs);
 }
 
 .checkbox-group input {
   width: auto;
+  flex: 0 0 auto;
+}
+
+input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.checkbox-group label {
+  margin-bottom: 0;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 400;
 }
 
 .helper {
-  font-size: 11px;
+  font-size: var(--step--2);
   color: var(--text-muted);
-  margin-top: -8px;
-  margin-bottom: 8px;
+  line-height: 1.5;
+  margin: calc(var(--space-2xs) * -1) 0 var(--space-xs);
 }
 
-/* Age attestation.
-   Given more weight than the plain checkboxes beside it because it is a
+.resume-status:not(:empty) {
+  color: var(--primary);
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+  margin-top: var(--space-2xs);
+}
+
+/* Separates the master toggle from the individual preferences above it. Was an
+   inline #f3f4f6 — a near-white line on a near-black panel. */
+.divider-above {
+  margin-top: var(--space-s);
+  padding-top: var(--space-s);
+  border-top: 1px solid var(--border);
+}
+
+/* ---- Age attestation ---------------------------------------------------- */
+
+/* Given more weight than the plain checkboxes beside it because it is a
    statement the user makes about themselves on a legal document, not a
    preference — and because leaving it unticked SKIPS the question rather than
    answering it "No". The accent turns green once confirmed, so its state reads
@@ -269,26 +472,23 @@ textarea::placeholder {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 12px;
-  margin-bottom: 14px;
-  background-color: rgba(255, 255, 255, 0.03);
+  padding: var(--space-s);
+  margin-bottom: var(--space-s);
+  background-color: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--primary);
-  border-radius: 8px;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  border-left: 2px solid var(--primary);
+  border-radius: 0 6px 6px 0;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
 }
 
-.attestation:hover {
-  border-color: var(--primary);
+@media (hover: hover) {
+  .attestation:hover {
+    border-color: var(--primary);
+  }
 }
 
 .attestation input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
   margin: 1px 0 0;
-  accent-color: var(--primary);
-  cursor: pointer;
 }
 
 .attestation label {
@@ -300,21 +500,22 @@ textarea::placeholder {
 }
 
 .attestation-title {
-  font-size: 13px;
+  font-size: var(--step-0);
   font-weight: 600;
   color: var(--text);
-  line-height: 1.3;
+  line-height: 1.35;
+  letter-spacing: 0;
 }
 
 .attestation-note {
-  font-size: 11px;
+  font-size: var(--step--2);
   color: var(--text-muted);
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .attestation:has(input:checked) {
   border-left-color: var(--success);
-  background-color: rgba(107, 158, 122, 0.08);
+  background-color: rgba(107, 158, 122, 0.07);
 }
 
 .attestation:focus-within {
@@ -322,48 +523,120 @@ textarea::placeholder {
   box-shadow: 0 0 0 2px var(--ring);
 }
 
+/* ---- Footer ------------------------------------------------------------- */
+
 .sticky-footer {
   position: sticky;
   bottom: 0;
   background-color: var(--bg);
-  padding: 10px 0;
+  padding: var(--space-s) 0 var(--space-xs);
   border-top: 1px solid var(--border);
 }
 
 #saveBtn {
   width: 100%;
-  padding: 12px;
+  padding: 11px;
   background-color: var(--primary);
-  color: white;
+  color: var(--on-primary);
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
+  font-family: var(--mono);
   font-weight: 600;
+  font-size: var(--step--1);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   cursor: pointer;
+  transition: background-color 0.18s ease, transform 0.08s ease;
 }
 
-#saveBtn:hover {
-  background-color: var(--primary-hover);
+@media (hover: hover) {
+  #saveBtn:hover {
+    background-color: #e2b98d;
+  }
+}
+
+#saveBtn:active {
+  transform: translateY(1px);
+}
+
+/* Quiet until approached — deleting everything should not be the most eye-
+   catching control on screen. */
+.danger-btn {
+  width: 100%;
+  padding: 9px;
+  margin-bottom: var(--space-xs);
+  background-color: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: var(--step--2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+@media (hover: hover) {
+  .danger-btn:hover {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
 }
 
 .status {
   text-align: center;
-  font-size: 12px;
-  height: 20px;
-  line-height: 20px;
+  font-family: var(--mono);
+  font-size: var(--step--2);
+  letter-spacing: 0.06em;
+  min-height: 18px;
+  line-height: 18px;
   color: var(--success);
-  margin-top: 4px;
+  margin-top: var(--space-2xs);
 }
 
-/* Scrollbar */
+/* ---- Focus -------------------------------------------------------------- */
+
+/* Keyboard users get a visible ring; mouse users do not get one on click. */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+h2:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ---- Scrollbar ---------------------------------------------------------- */
+
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 4px;
+  border: 3px solid var(--bg);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a443f;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
