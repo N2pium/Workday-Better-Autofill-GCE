@@ -1729,13 +1729,18 @@ async function handleJobPreferences() {
     await answerYesNo(formerKeywords, prefs.formerEmployee ? 'Yes' : 'No');
 
     // 2. Authorized to Work
-    // Keywords: "legally authorized", "authorized to work", "legal right to work", "18 years"
+    // Keywords: "legally authorized", "authorized to work", "legal right to work"
+    //
+    // "18 years of age" USED to live in this list. It has moved to ageKeywords
+    // below, which has its own profile field. Leaving it here would let the
+    // authorization toggle answer an age question — on the wording "Are you at
+    // least 18 years of age?" both groups would have claimed it, and whichever
+    // ran first would win. Do not put it back.
     const authKeywords = [
         'legally authorized',
         'authorized to work',
         'legal right to work',
         'lawfully work',
-        '18 years of age',
         // Observed wording that matched none of the above: "Are you legally
         // eligible to work in the country to which you are applying?" --
         // eligible, not authorized.
@@ -1743,13 +1748,25 @@ async function handleJobPreferences() {
         'eligible to work'
     ];
 
-    // NOT added here on purpose: "Are you at least 18 years or older?"
-    // ("18 years of age" is not a substring of it, so it does not match today).
-    // Age is not work authorization. Wiring it to this toggle means a user who
-    // unchecks "Legally Authorized to Work" would answer NO to being 18 or
-    // older -- a false statement on a job application. It needs its own profile
-    // field, which is a schema change and the user's call. Left unanswered
-    // rather than answered wrongly. See F8 in SHARED_TASK_NOTES.md.
+    // Age has its OWN profile field, deliberately not folded into
+    // authorizedToWork above: a user who unchecks work authorization must not
+    // thereby answer "No" to being 18 or older, which would be a false
+    // statement on a job application.
+    //
+    // Unticked means UNANSWERED, not "No". Nobody's age gets asserted by a
+    // default, so when the box is off the question is left for the user.
+    const ageKeywords = [
+        '18 years or older',
+        '18 years of age',
+        'at least 18',
+        'over the age of 18',
+        'older than 18'
+    ];
+    if (prefs.isAtLeast18) {
+        await answerYesNo(ageKeywords, 'Yes');
+    } else {
+        console.log('Workday Autoplay: "18 or older" not confirmed in the profile, leaving that question for the user.');
+    }
     await answerYesNo(authKeywords, prefs.authorizedToWork ? 'Yes' : 'No');
 
     // 3. Sponsorship
