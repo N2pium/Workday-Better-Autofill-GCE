@@ -1331,16 +1331,6 @@ function getElementByXpath(path) {
     }
 }
 
-async function waitForElement(selector, timeout = 5000, interval = 100) {
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeout) {
-        const el = document.querySelector(selector);
-        if (el && el.offsetParent !== null) return el;
-        await new Promise(r => setTimeout(r, interval));
-    }
-    return null;
-}
-
 async function waitForCondition(checkFn, timeout = 5000, interval = 100) {
     const startTime = Date.now();
     while (Date.now() - startTime < timeout) {
@@ -1348,18 +1338,6 @@ async function waitForCondition(checkFn, timeout = 5000, interval = 100) {
         await new Promise(r => setTimeout(r, interval));
     }
     return false;
-}
-
-async function retryAsync(fn, maxRetries = 3, delayMs = 500) {
-    for (let i = 0; i < maxRetries; i++) {
-        try {
-            return await fn();
-        } catch (e) {
-            if (i === maxRetries - 1) throw e;
-            console.warn(`Retry ${i + 1}/${maxRetries} after error:`, e.message);
-            await new Promise(r => setTimeout(r, delayMs * (i + 1)));
-        }
-    }
 }
 
 function isElementVisible(el) {
