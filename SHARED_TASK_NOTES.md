@@ -472,9 +472,91 @@ most** — it covers paths that already worked and were touched anyway (dates,
 disclosure radios, names, languages, resume). A regression there is worse than a
 fix that failed to land, because nobody is looking for it.
 
+**F8, F9 and F10 are NOT for v1.3.** They are newly found, never worked, come
+from a second tenant, and none is a regression. Shipping the verified fixes is
+not blocked on them. Gender is already supported — see F9.
+
 Do not ship B2–B6 in this release. New UI alongside 890 changed lines means a
 breakage cannot be attributed. B1 is already in and is CSS plus placeholder text,
 which cannot affect autofill.
+
+## OBSERVED FAILURES — BCBSLA tenant, 2026-08-09
+
+New evidence, and the first from a **second Workday tenant**. Screenshots:
+`tools/LegallyAuthorized.png`, `RequireSponsorship.png`, `Ethnicity.png`,
+`HowDidYouHearAboutUs.png`. None of these is a regression — all three classes
+have never worked.
+
+### F8 — `<legend>` questions are invisible to the extension
+
+**`content.js` contains zero references to `legend`.** Every question lookup in
+the file starts from `<label>`. Workday's "Application Questions" pages do not
+use labels — the question text lives in a `<legend>` inside a `<fieldset>`:
+
+```html
+<div data-automation-id="formField-7de30e72cc43011e68ec2a6aee01125e"
+     data-fkit-id="primaryQuestionnaire--7de30e72cc43011e68ec2a6aee01125e">
+  <fieldset>
+    <legend>…question text…</legend>
+    <button aria-haspopup="listbox" aria-label=" No Required"
+            name="7de30e72cc43011e68ec2a6aee01125e">No</button>
+```
+
+There is **no other hook**. The `formField-*` id is a GUID, not a semantic name,
+and the button's `aria-label` is just the current value plus "Required"
+(`" No Required"`) — it does not contain the question at all. The `<legend>` is
+the only place the question text exists, so `findDropdownTrigger` cannot reach
+these and neither can `answerYesNo` or the radio helpers.
+
+Confirmed unanswered on BCBSLA: "Are you legally authorized to work in the
+United States?", "Will you now or in the future require employer sponsorship…?",
+"Do you have any relatives who work at BCBSLA?" — all left on "Select One"
+despite the matching Job Preferences toggles being set.
+
+Fix direction: add `<legend>` as a question-text source everywhere `<label>` is
+used, anchored via `fieldset` → the `button[aria-haspopup="listbox"]` inside it.
+Highest value of the three: these are required questions on nearly every
+application, and the same `primaryQuestionnaire--*` shape recurs across tenants.
+
+### F9 — demographics label variants do not match
+
+Both of these have a working `formField-*` hook and fail only on label wording:
+
+| Form label | Code looks for | Result |
+|---|---|---|
+| `Spanish/Hispanic/Latino` | `'Hispanic or Latino'` | no substring match — fails |
+| `Are you a Veteran?` | `'Veteran Status'` | no substring match — fails |
+
+`formField-hispanicOrLatino` and `formField-veteranStatus` are both present and
+stable (`tools/Ethnicity.png`), and are a far better anchor than label prose.
+Note the veteran question here offers Yes/No, not "I decline to self-identify",
+so the *desired value* needs rethinking too, not just the lookup.
+
+Gender and Ethnicity on the same page **do** fill correctly — their labels
+("Please Specify Your Gender", "Please Specify Your Ethnicity") contain the
+searched substrings. This is purely a wording-coverage gap.
+
+### F10 — hierarchical "How Did You Hear About Us?" picker unsupported
+
+BCBSLA does not use a flat dropdown here. It is a **drill-down multiselect**:
+pick a category ("Job Board"), then a leaf ("Job Board - Linkedin").
+
+```html
+<div role="option" data-automation-id="menuItem" aria-label="Job Board - Linkedin not checked"
+     style="height:32px;left:0px;position:absolute;top:96px;width:100%;">
+  <div data-automation-id="promptLeafNode" data-uxi-widget-type="multiselectlistitem"
+       data-automation-checked="Not Checked">
+    <div data-automation-id="promptOption" data-automation-label="Job Board - Linkedin">
+```
+
+Three things make this harder than it looks: the leaf value is
+`"Job Board - Linkedin"` rather than `"LinkedIn"`, the rows are **absolutely
+positioned** (a virtualized list, so not all leaves are in the DOM at once), and
+reaching a leaf requires clicking into its category first. Substring matching on
+`"linkedin"` would work *once inside the category* — the navigation is the
+missing piece, not the matching.
+
+Lowest priority of the three: one field, one tenant so far, and the most work.
 
 ## Friction log — observed, not imagined
 
