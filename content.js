@@ -1735,8 +1735,21 @@ async function handleJobPreferences() {
         'authorized to work',
         'legal right to work',
         'lawfully work',
-        '18 years of age'
+        '18 years of age',
+        // Observed wording that matched none of the above: "Are you legally
+        // eligible to work in the country to which you are applying?" --
+        // eligible, not authorized.
+        'legally eligible',
+        'eligible to work'
     ];
+
+    // NOT added here on purpose: "Are you at least 18 years or older?"
+    // ("18 years of age" is not a substring of it, so it does not match today).
+    // Age is not work authorization. Wiring it to this toggle means a user who
+    // unchecks "Legally Authorized to Work" would answer NO to being 18 or
+    // older -- a false statement on a job application. It needs its own profile
+    // field, which is a schema change and the user's call. Left unanswered
+    // rather than answered wrongly. See F8 in SHARED_TASK_NOTES.md.
     await answerYesNo(authKeywords, prefs.authorizedToWork ? 'Yes' : 'No');
 
     // 3. Sponsorship
@@ -1802,19 +1815,87 @@ async function handleJobPreferences() {
  * @param {string|string[]} questionText - The text to search for in question labels (can be array of keywords)
  * @param {string} userChoice - Either "Yes" or "No"
  */
+/**
+ * Question blocks matching `keywords`, from BOTH <label> and <legend>.
+ *
+ * Workday's "Application Questions" pages carry no <label> at all — the question
+ * text lives in a <legend> inside a <fieldset>, and the text itself is nested
+ * one level deeper again:
+ *
+ *   <div data-automation-id="formField-178a253424c71001ed2ae2d83ef60001">
+ *     <fieldset>
+ *       <legend><div id="rich-label178">…question…</div></legend>
+ *       <button aria-haspopup="listbox" aria-label=" Yes Required">Yes</button>
+ *
+ * Nothing else on the block is usable: the formField id is a GUID and the
+ * button's aria-label is only the current VALUE plus "Required". The legend is
+ * the sole place the question exists, and `innerText` is used rather than a text
+ * node so the rich-label nesting is read through.
+ */
+function findQuestionBlocks(keywords) {
+    const blocks = [];
+    const seen = new Set();
+
+    for (const el of document.querySelectorAll('label, legend')) {
+        const text = (el.innerText || '').trim();
+        if (!text || !matchesAny(text, keywords)) continue;
+
+        const container = el.closest('fieldset, div[data-automation-id^="formField"], div[role="group"], div[role="radiogroup"]');
+        if (!container || seen.has(container)) continue;
+
+        seen.add(container);
+        blocks.push({ text, container });
+    }
+    return blocks;
+}
+
+/**
+ * Answer a Yes/No question rendered as a dropdown rather than radio buttons.
+ *
+ * Match on the option text EXACTLY. "No" is a substring of far too much
+ * ("None of the above", "Not applicable") for `includes` to be safe on a
+ * two-choice question.
+ */
+async function answerDropdownYesNo(trigger, userChoice, questionText) {
+    const want = userChoice.toLowerCase();
+    const current = (trigger.innerText || '').trim();
+
+    if (current.toLowerCase() === want) {
+        console.log(`Workday Autoplay: "${questionText.slice(0, 60)}" already answered ${userChoice}`);
+        return true;
+    }
+
+    scrollIntoViewIfNeeded(trigger);
+    trigger.click();
+
+    if (!await waitForCondition(() => getOpenListboxOptions().length > 0, 3000)) {
+        console.warn(`Workday Autoplay: no options opened for "${questionText.slice(0, 60)}"`);
+        return false;
+    }
+
+    // The "Select One" placeholder is aria-disabled AND carries
+    // aria-selected="true" even though nothing has been chosen, so exclude it
+    // rather than let it look like an answer.
+    const option = getOpenListboxOptions()
+        .filter(o => o.getAttribute('aria-disabled') !== 'true')
+        .find(o => o.innerText.trim().toLowerCase() === want);
+
+    if (!option) {
+        console.warn(`Workday Autoplay: no "${userChoice}" option for "${questionText.slice(0, 60)}"`);
+        return false;
+    }
+
+    console.log(`Workday Autoplay: answering "${questionText.slice(0, 60)}" with ${userChoice}`);
+    return await commitOptionSelection(option, questionText.slice(0, 40));
+}
+
 async function answerYesNo(questionText, userChoice) {
     const keywords = Array.isArray(questionText) ? questionText : [questionText];
 
-    // Find all labels that match any of the keywords
-    const labels = Array.from(document.querySelectorAll('label'));
-    const matchingLabels = labels.filter(label => matchesAny(label.innerText, keywords));
+    for (const block of findQuestionBlocks(keywords)) {
+        const container = block.container;
 
-    for (const label of matchingLabels) {
-        // Find the associated form field container
-        // Prefix match — same tighter-scoping rationale as autoAnswerRadioExact.
-        const container = label.closest('div[data-automation-id^="formField"], fieldset, div[role="group"], div[role="radiogroup"]');
-
-        if (container) {
+        {
             // Find all radio buttons in this container
             const radios = container.querySelectorAll('input[type="radio"]');
 
@@ -1844,7 +1925,7 @@ async function answerYesNo(questionText, userChoice) {
                 }
 
                 if (isMatch && !radio.checked) {
-                    console.log(`Workday Autoplay: answerYesNo - Answering "${label.innerText.substring(0, 50)}..." with "${userChoice}"`);
+                    console.log(`Workday Autoplay: answerYesNo - Answering "${block.text.substring(0, 50)}..." with "${userChoice}"`);
                     radio.click();
                     radio.dispatchEvent(new Event('change', { bubbles: true }));
                     radio.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1852,6 +1933,14 @@ async function answerYesNo(questionText, userChoice) {
                     return true;
                 }
             }
+        }
+
+        // No radios matched. On the questionnaire pages the control is a
+        // dropdown, not a radio group, which is the second half of why these
+        // questions were never answered.
+        const trigger = container.querySelector('button[aria-haspopup="listbox"]');
+        if (trigger && await answerDropdownYesNo(trigger, userChoice, block.text)) {
+            return true;
         }
     }
 
