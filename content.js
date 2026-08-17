@@ -1004,6 +1004,11 @@ async function setLanguageProficiency(languageData) {
  * PHASE 4: DISCLOSURES & CUSTOM DROPDOWNS (Async)
  */
 
+// DEAD. Reassigned near the bottom of this file before anything can call it,
+// so this body never runs — see "ONE-CLICK DISCLOSURES OVERRIDE". Left in place
+// only because the reassignment reads as an edit to it. Do not resurrect these
+// three lines: all three ignore the user's own toggles, and the age one in
+// particular would answer a legal question on their behalf.
 async function fillDisclosures() {
     console.log("Workday Autoplay: Filling Disclosures...");
 
@@ -1981,8 +1986,17 @@ const originalFillDisclosures = fillDisclosures; // Keep reference if needed, bu
 fillDisclosures = async function () {
     console.log("Workday Autoplay: Filling Disclosures (Enhanced)...");
 
-    // Standard fills from before (Gender, Hispanic) - handled if found
-    await selectWorkdayDropdown('18 years of age or older', 'Yes'); // Always Yes?
+    // Gated on the attestation, exactly like the ageKeywords path in
+    // handleJobPreferences. This call used to run unconditionally — carrying a
+    // "// Always Yes?" comment from whoever wrote it — which silently defeated
+    // the whole point of the checkbox: handleJobPreferences would correctly
+    // leave the question alone, and then this line answered it Yes anyway.
+    // Nobody's age gets asserted for them. An unticked box means unanswered.
+    if (userProfile.jobPreferences && userProfile.jobPreferences.isAtLeast18) {
+        await selectWorkdayDropdown('18 years of age or older', 'Yes');
+    } else {
+        console.log('Workday Autoplay: age question left for the user (18+ attestation not ticked).');
+    }
 
     // Check for Quick Decline Preference (declineDisclosures)
     const declineDisclosures = userProfile.jobPreferences && userProfile.jobPreferences.autoDisclosures;

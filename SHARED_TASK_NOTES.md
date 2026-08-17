@@ -528,6 +528,25 @@ schema change). An attestation card at the top of Job Preferences,
 Modelled over all eight question texts from three tenants: each routes to
 exactly one keyword group, no collisions.
 
+**F11 — the attestation was defeated by a second code path. FIXED.**
+`scanAndFill` calls `handleJobPreferences()` and then `fillDisclosures()`
+(`content.js:193-194`). The checkbox gated the first. The second answered the
+age question `'Yes'` unconditionally through `selectWorkdayDropdown`, carrying a
+`// Always Yes?` comment from whoever wrote it. So an unticked box produced
+exactly the behaviour the attestation existed to prevent.
+
+Now gated on `isAtLeast18` at both call sites. Two things worth keeping:
+
+- **`fillDisclosures` is defined twice.** The definition around line 1012 is
+  dead — the file reassigns the name near the bottom under "ONE-CLICK
+  DISCLOSURES OVERRIDE" before anything can call it. Reading only the first
+  definition tells you nothing about what actually runs. It is now marked DEAD
+  in place.
+- **Test 16 would have caught this.** It was written on 2026-08-09 and never
+  run. This is the second time in this project a fix was believed done from
+  reading code; the standing lesson about real evidence applies to *our own*
+  changes, not only to the extension's original bugs.
+
 **Known limitation, not yet hit:** `answerYesNo` returns after the first
 matching block, so if one page ever asks two questions of the same class only
 the first is answered. No observed case — do not restructure speculatively.

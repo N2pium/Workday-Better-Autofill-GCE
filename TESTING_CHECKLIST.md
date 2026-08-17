@@ -336,6 +336,11 @@ Intern posting do.
 - [ ] With it **unticked**, the question is left on Select One and the console
       says the age question was left for the user. It must **never** be answered
       "No" just because the box is off
+- [ ] **Check this on a disclosures page too, not only a questionnaire page.**
+      Two separate code paths answer this question — `handleJobPreferences` via
+      `ageKeywords`, and `fillDisclosures` via `selectWorkdayDropdown`. The
+      second one ignored the checkbox entirely until `24f6700`, so an unticked
+      box still produced a Yes. Both are now gated; both need seeing
 - [ ] Unchecking "Legally Authorized to Work" does **not** change the age answer —
       they are separate fields and must stay separate
 - [ ] Free-text questions with no matching toggle ("Do you have any relatives
