@@ -36,23 +36,23 @@ font_h1_wide = ImageFont.truetype(F + 'seguisb.ttf', 36)
 font_sub = ImageFont.truetype(F + 'segoeui.ttf', 19)
 
 
-def backdrop():
+def backdrop(path, w, h, dim=118, blur=7, vignette=150):
     """Cover-fit, darken and soften, then vignette. Atmosphere, not a subject."""
-    im = Image.open(BG).convert('RGB')
-    s = max(W / im.width, H / im.height)
+    im = Image.open(path).convert('RGB')
+    s = max(w / im.width, h / im.height)
     im = im.resize((round(im.width * s), round(im.height * s)), Image.LANCZOS)
-    im = im.crop(((im.width - W) // 2, (im.height - H) // 2,
-                  (im.width - W) // 2 + W, (im.height - H) // 2 + H))
-    im = im.filter(ImageFilter.GaussianBlur(7))
-    im = ImageChops.multiply(im, Image.new('RGB', (W, H), (118, 118, 118)))
-    im = ImageChops.add(im, Image.new('RGB', (W, H), (14, 11, 9)))
+    im = im.crop(((im.width - w) // 2, (im.height - h) // 2,
+                  (im.width - w) // 2 + w, (im.height - h) // 2 + h))
+    im = im.filter(ImageFilter.GaussianBlur(blur))
+    im = ImageChops.multiply(im, Image.new('RGB', (w, h), (dim,) * 3))
+    im = ImageChops.add(im, Image.new('RGB', (w, h), (14, 11, 9)))
 
     # Radial vignette so the centre stays the darkest, quietest area.
-    vig = Image.new('L', (W, H), 0)
+    vig = Image.new('L', (w, h), 0)
     d = ImageDraw.Draw(vig)
-    d.ellipse((-W * 0.35, -H * 0.55, W * 1.35, H * 1.55), fill=150)
-    vig = vig.filter(ImageFilter.GaussianBlur(180))
-    return Image.composite(im, Image.new('RGB', (W, H), BG_BASE), vig)
+    d.ellipse((-w * 0.35, -h * 0.55, w * 1.35, h * 1.55), fill=vignette)
+    vig = vig.filter(ImageFilter.GaussianBlur(round(min(w, h) * 0.22)))
+    return Image.composite(im, Image.new('RGB', (w, h), BG_BASE), vig)
 
 
 def rounded(im, r=13):
@@ -140,7 +140,7 @@ def fit_w(im, w):
     return im.resize((w, round(im.height * w / im.width)), Image.LANCZOS)
 
 
-base = backdrop()
+base = backdrop(BG, W, H)
 os.makedirs(OUT, exist_ok=True)
 
 def panel_shot(name, out, crop_top, eyebrow, headline, sub):
@@ -186,6 +186,42 @@ panel_shot('Screenshot 2026-08-17 135004.png', 'v13-03-blank-fields.png', 25,
            'On a job page a skipped field looks exactly like a filled one. '
            'The panel names the ones it will pass over, so nothing goes '
            'missing quietly.')
+
+# --- Small promo tile, 440x280 ----------------------------------------------
+# A marketing tile, not a screenshot, so generated art is fair here — but the
+# mark and the wording are still drawn locally. A model asked to render
+# "Better Autofill" produces something that only looks like letters.
+TW, TH = 440, 280
+f_tile_eyebrow = ImageFont.truetype(F + 'consolab.ttf', 11)
+f_tile_name = ImageFont.truetype(F + 'seguisb.ttf', 30)
+f_tile_sub = ImageFont.truetype(F + 'segoeui.ttf', 13)
+
+t = backdrop(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          'tile-backdrop.png'), TW, TH, dim=146, blur=3, vignette=178)
+d = ImageDraw.Draw(t)
+
+# icons/icon128.png is the only source with a real alpha channel — design/
+# Icon.png has a checkerboard painted into it and no transparency at all.
+icon = Image.open(os.path.join(SRC, 'icons', 'icon128.png')).convert('RGBA')
+ICON = 112
+icon = icon.resize((ICON, ICON), Image.LANCZOS)
+ix, iy = 34, (TH - ICON) // 2
+
+# A warm bloom behind the mark so the blue tile separates from the warm ground.
+glow = Image.new('RGBA', (TW, TH), (0, 0, 0, 0))
+ImageDraw.Draw(glow).ellipse((ix - 34, iy - 34, ix + ICON + 34, iy + ICON + 34),
+                             fill=AMBER + (46,))
+t = Image.alpha_composite(t.convert('RGBA'), glow.filter(ImageFilter.GaussianBlur(28)))
+d = ImageDraw.Draw(t)
+t.paste(icon, (ix, iy), icon)
+
+tx = ix + ICON + 30
+ty = 99  # optical centre against the mark, not the arithmetic one
+tracked(d, (tx, ty), 'WORKDAY', f_tile_eyebrow, AMBER, track=3.2)
+d.text((tx, ty + 22), 'Better Autofill', font=f_tile_name, fill=TEXT)
+d.text((tx, ty + 62), 'Your profile, filled in one click.', font=f_tile_sub, fill=MUTED)
+
+t.convert('RGB').save(os.path.join(OUT, 'v13-promo-tile-440x280.png'))
 
 for f in sorted(os.listdir(OUT)):
     if f.startswith('v13'):
