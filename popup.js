@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Remove Handler
         card.querySelector('.remove-btn').addEventListener('click', () => {
             card.remove();
+            refreshBlankHints();
         });
 
         eduContainer.appendChild(clone);
@@ -63,14 +64,144 @@ document.addEventListener('DOMContentLoaded', () => {
         // Remove Handler
         card.querySelector('.remove-btn').addEventListener('click', () => {
             card.remove();
+            refreshBlankHints();
         });
 
         workContainer.appendChild(clone);
     }
 
     // Event Listeners for Add Buttons
-    addEduBtn.addEventListener('click', () => addEducationCard());
-    addWorkBtn.addEventListener('click', () => addWorkCard());
+    addEduBtn.addEventListener('click', () => { addEducationCard(); refreshBlankHints(); });
+    addWorkBtn.addEventListener('click', () => { addWorkCard(); refreshBlankHints(); });
+
+    // ---- Blank-field hints --------------------------------------------------
+    //
+    // An empty profile field is skipped in silence: nothing on the job page and
+    // nothing in this panel says it happened, so a skipped field and a filled
+    // one look the same (friction L5). That is not hypothetical — Country read
+    // as correct for weeks because Workday's own default said "United States of
+    // America" while the profile field behind it was empty.
+    //
+    // The rules this has to respect: state the fact, name nothing the user
+    // cannot see, and never imply an error. So there is no warning colour, no
+    // "incomplete" count, no blocking of save — just the field names, in the
+    // same words the labels use, and a line saying blank is a valid choice.
+
+    // Only fields autofill actually reads. Listing anything else would be noise.
+    const TRACKED_IDS = [
+        'firstName', 'lastName', 'phone', 'email', 'linkedinUrl',
+        'street', 'city', 'state', 'zip', 'country',
+        'skills', 'languageInput',
+        'gender', 'hispanicLatino', 'race',
+        'sourceReferral'
+    ];
+
+    // Card fields are matched by class because the cards are cloned templates.
+    const TRACKED_CARD_FIELDS = [
+        '.edu-school', '.edu-degree', '.edu-field', '.edu-gpa',
+        '.edu-start-month', '.edu-start-year', '.edu-end-month', '.edu-end-year',
+        '.work-company', '.work-title', '.work-location', '.work-desc',
+        '.work-start-month', '.work-start-year', '.work-end-month', '.work-end-year'
+    ];
+
+    const blankSummary = document.getElementById('blankSummary');
+
+    // Skills is the one tracked field with no <label> of its own — its section
+    // heading does the naming. Without this it would appear as "skills".
+    const LABEL_OVERRIDES = { skills: 'Skills' };
+
+    // The visible label, so the summary names what the user can actually see.
+    function fieldLabel(control) {
+        const group = control.closest('.input-group');
+        const label = group && group.querySelector('label');
+        let name = LABEL_OVERRIDES[control.id] || (label ? label.textContent.trim() : control.id);
+
+        // Cards are unlabelled beyond "Education" / "Experience", so a second
+        // card's School is indistinguishable from the first's without an index.
+        const card = control.closest('.card');
+        if (card && card.parentElement.children.length > 1) {
+            const n = Array.prototype.indexOf.call(card.parentElement.children, card) + 1;
+            name += ` (${card.classList.contains('edu-card') ? 'school' : 'job'} ${n})`;
+        }
+        return name;
+    }
+
+    function isBlank(control) {
+        return !control.value || !control.value.trim();
+    }
+
+    function refreshBlankHints() {
+        const blanks = [];
+        let considered = 0;
+
+        const consider = (control) => {
+            if (!control) return;
+            considered++;
+            const group = control.closest('.input-group');
+            const blank = isBlank(control);
+            if (group) group.classList.toggle('is-blank', blank);
+            if (blank) blanks.push(fieldLabel(control));
+        };
+
+        TRACKED_IDS.forEach(id => consider(document.getElementById(id)));
+
+        document.querySelectorAll('.card').forEach(card => {
+            // An end date left blank on a current role is correct, not missing.
+            const current = card.querySelector('.work-current');
+            TRACKED_CARD_FIELDS.forEach(sel => {
+                const control = card.querySelector(sel);
+                if (!control) return;
+                if (current && current.checked && sel.startsWith('.work-end-')) {
+                    const group = control.closest('.input-group');
+                    if (group) group.classList.remove('is-blank');
+                    return;
+                }
+                consider(control);
+            });
+        });
+
+        // Sections that exist but hold nothing at all.
+        considered += 3;
+        if (!eduContainer.children.length) blanks.push('Education');
+        if (!workContainer.children.length) blanks.push('Work Experience');
+
+        // resumeStatus carries the stored filename; a freshly picked file is not
+        // saved yet but will be, so either one counts as present.
+        const resumeStored = document.getElementById('resumeStatus').textContent.trim();
+        const resumePicked = document.getElementById('resume').files.length > 0;
+        if (!resumeStored && !resumePicked) blanks.push('Resume');
+
+        blankSummary.textContent = '';
+
+        // An untouched profile is not a profile with gaps in it. On a fresh
+        // install, or straight after Delete all data, every field is blank and
+        // the user knows — listing all of them would be the nagging this is
+        // explicitly meant to avoid.
+        blankSummary.hidden = blanks.length === 0 || blanks.length === considered;
+        if (blankSummary.hidden) return;
+
+        // Long lists stop being readable and start reading as a scolding.
+        const shown = blanks.slice(0, 6);
+        const rest = blanks.length - shown.length;
+        const list = shown.join(', ') + (rest ? `, and ${rest} more` : '');
+
+        const lead = document.createElement('p');
+        lead.className = 'blank-summary-lead';
+        // Several labels are questions ("Hispanic or Latino?"), so a full stop
+        // is only added when the sentence does not already end in punctuation.
+        const sentence = `Autofill will leave these blank: ${list}`;
+        lead.textContent = /[?.!]$/.test(sentence) ? sentence : `${sentence}.`;
+
+        const note = document.createElement('p');
+        note.className = 'blank-summary-note';
+        note.textContent = 'That is fine if you meant to skip them — nothing here is required.';
+
+        blankSummary.append(lead, note);
+    }
+
+    // Delegated, so cards added after load are covered without extra wiring.
+    form.addEventListener('input', refreshBlankHints);
+    form.addEventListener('change', refreshBlankHints);
 
 
     // Load saved data
@@ -148,6 +279,9 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('hispanicLatino').value = result.demographics.hispanicLatino || '';
             document.getElementById('race').value = result.demographics.race || '';
         }
+
+        // Must run last: everything above decides what counts as blank.
+        refreshBlankHints();
     });
 
     // Save data
@@ -261,6 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusCtx.textContent = 'Profile saved!';
                 statusCtx.style.color = 'var(--success)';
                 if (resumeFile) document.getElementById('resumeStatus').textContent = `Stored: ${resumeFile.name}`;
+                refreshBlankHints();
             }
             setTimeout(() => { statusCtx.textContent = ''; }, 3000);
         });
@@ -294,6 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById('requiresSponsorship').checked = false;
                     document.getElementById('sourceReferral').value = '';
                     document.getElementById('autoDisclosures').checked = false;
+                    refreshBlankHints();
 
                     setTimeout(() => { statusCtx.textContent = ''; }, 3000);
                 });

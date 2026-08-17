@@ -16,6 +16,11 @@
     </header>
 
     <form id="profileForm">
+      <!-- Names the fields autofill will pass over, because a skipped field and
+           a filled one look identical on the job page. Written by popup.js and
+           hidden entirely when nothing is blank. -->
+      <div id="blankSummary" class="blank-summary" hidden></div>
+
       <!-- Personal Information -->
       <section>
         <h2>Personal Information</h2>

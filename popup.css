@@ -595,6 +595,42 @@ input[type="checkbox"] {
   margin-top: var(--space-2xs);
 }
 
+/* ---- Blank-field hints -------------------------------------------------- */
+
+/* Deliberately not a warning. Blank is a legitimate choice here, and this
+   audience reads any red-or-amber banner as something they broke. Muted card,
+   body-weight text, no icon, no count. */
+.blank-summary {
+  margin-bottom: var(--space-l);
+  padding: var(--space-s) var(--space-m);
+  background-color: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.blank-summary-lead {
+  margin: 0;
+  font-size: var(--step--1);
+  line-height: 1.5;
+}
+
+.blank-summary-note {
+  margin: var(--space-2xs) 0 0;
+  font-size: var(--step--2);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Dashed, not coloured: it marks a field as not-yet-filled in the same quiet
+   register as the italic placeholders, and adds no fourth accent to a palette
+   that spends its colour carefully. The focused field is excluded so the accent
+   ring never has to fight a dashed edge. */
+.input-group.is-blank input:not(:focus),
+.input-group.is-blank textarea:not(:focus),
+.input-group.is-blank select:not(:focus) {
+  border-style: dashed;
+}
+
 /* ---- Focus -------------------------------------------------------------- */
 
 /* Keyboard users get a visible ring; mouse users do not get one on click. */
