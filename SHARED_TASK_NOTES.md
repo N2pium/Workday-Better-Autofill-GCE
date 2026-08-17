@@ -480,9 +480,16 @@ revert that commit before shipping — it is a single self-contained commit.
 **F9 and F10 are NOT for v1.3.** Newly found, never worked, no regression.
 Gender is already supported — see F9.
 
-Do not ship B2–B6 in this release. New UI alongside 890 changed lines means a
-breakage cannot be attributed. B1 is already in and is CSS plus placeholder text,
-which cannot affect autofill.
+Do not ship B2, B3 or B5 in this release. New UI alongside 890 changed lines
+means a breakage cannot be attributed. **B1 and B4 are both in**, and both are
+exempt for the same reason: they are popup-only. B1 is CSS plus placeholder
+text; B4 reads `.value` and writes classes and text. Neither can affect what
+gets written to a form. B6 turned out to be shipped already.
+
+The rule this sets for the rest of Track B: **a QoL item may ship inside a
+release whose autofill is unverified only if it cannot touch autofill.** B2 and
+B3 instrument `setNativeValue` and `commitOptionSelection`, so they fail that
+test and wait for v1.4.
 
 ## OBSERVED FAILURES — BCBSLA tenant, 2026-08-09
 
@@ -607,7 +614,7 @@ sessions; do not add speculative entries.
 | L2 | A silently skipped field looks identical to a correctly filled one | Country read "United States of America" for weeks — that was Workday's own default, not autofill |
 | L3 | `popup.html:65` gives Country `placeholder="United States of America"`, which reads as a value | produced a wrong root-cause hypothesis on 2026-08-08 — **fixed, `b22ec81`** |
 | L4 | Capturing DOM evidence means pasting `tools/inspect-workday-form.js` into DevTools by hand | every capture so far |
-| L5 | An empty profile field is skipped with no warning anywhere in the UI | the `!value` path had no log until `2a84daf` |
+| L5 | An empty profile field is skipped with no warning anywhere in the UI | the `!value` path had no log until `2a84daf` — **fixed in the panel, `1f72a78`** (B4). Still silent on the job page; that is B2/B3 |
 | L6 | The loop prompt lived only in a terminal transcript and was lost when it closed | start of the 2026-08-07 session |
 
 L6 is fixed — the prompt now lives in `LOOP_PROMPT.md`.
@@ -637,17 +644,44 @@ must not alter values.
 human-readable label, or say nothing about it. `scanAndFill` already knows all
 of this and throws it away.
 
-**B4 — Profile completeness hints.** Gently mark profile fields that are empty
-and will therefore be skipped. Addresses L5. Must not nag, must not block
-saving, must not imply the user did something wrong.
+**B4 — Profile completeness hints. DONE in `1f72a78`.** A muted card at the top
+of the panel names the blank fields — *"Autofill will leave these blank: State
+(Full Name), GPA, Work Experience."* — plus a line saying that is a valid
+choice. Blank fields get a **dashed** border, the same quiet register as B1's
+italic placeholders, rather than a fourth accent colour. Addresses L5.
+
+Four decisions worth not re-litigating:
+
+- **Names come from the visible `<label>`**, never the element id. Same rule as
+  B3. `#skills` is the one tracked field with no label of its own, so it has an
+  explicit override; anything else added later without a label will surface as
+  a raw id, which is the bug to watch for.
+- **An untouched profile shows nothing at all.** When every tracked field is
+  blank — fresh install, or straight after Delete all data — the card is hidden.
+  Listing 19 blanks at someone who has typed nothing is the exact nagging the
+  Track B rule forbids.
+- **A blank end date on a current role is not a blank.** `work-current` being
+  ticked excludes that card's end month/year.
+- **The list stops at six** and collapses the rest to `and N more`.
+
+Popup-only. It reads `.value` and writes classes and text; it touches no storage
+schema, no message, and nothing in `content.js`. That is why it was safe to put
+in v1.3 while B2/B3/B5 wait — see the release-state section.
+
+Verified under jsdom against nine profile states (fresh, partial, complete,
+current vs past role, overflow, question-shaped labels, live typing). The
+harness is scratch, not committed — there is still no test runner here.
 
 **B5 — "Report a problem" button.** Consumer framing of what would otherwise be
 a developer feature: one click gathers the diagnostic info and puts it on the
 clipboard to send on. Addresses L4. **Only worth it framed this way** — a
 button labelled "Copy diagnostics JSON" fails the audience test outright.
 
-**B6 — Back up / restore my info.** Export-import under plain names, never
-"JSON". No observed friction yet. Do not start before B1–B4.
+**B6 — Back up / restore my info. ALREADY SHIPPED — this entry was stale.**
+Export and Import exist under a "Backup" section (`popup.js:382`, `popup.html`),
+named "Export" / "Import" with the helper *"Save your profile to a file, or
+restore it on another computer"*. The word JSON appears nowhere in the UI, as
+the entry asked. Nothing to do.
 
 ### Rejected or reclassified
 
@@ -737,3 +771,15 @@ Append one line per firing. Keep it short.
   duplicate `id` Workday emits underneath it makes the first name overwrite the
   last name. Untriaged on purpose — the cause of the country value must be
   established before anything downstream of it is touched.
+- `2026-08-17` — Track B review ahead of the Store upload. **B4 done**
+  (`1f72a78`), popup-only, so it ships inside v1.3 without muddying the
+  attribution of an autofill regression; that exemption is now written down as a
+  rule in the release-state section. **B6 was already shipped** — the entry was
+  stale, corrected. B2/B3 deferred to v1.4 with the cheap route recorded:
+  `setNativeValue` (14 call sites) and `commitOptionSelection` (8) are the two
+  choke points every write passes through, so instrumenting those two covers
+  everything except checkboxes and radios without touching matching logic. The
+  `fill_complete` message already exists and carries no payload. **The release
+  blocker is unchanged and is not code: Tests 11–17 have not been run.**
+  Note the 08-09 session (F8, the 18+ attestation, the panel redesign) never got
+  a log entry — read the commits for it.

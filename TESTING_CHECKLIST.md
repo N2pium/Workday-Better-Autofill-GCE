@@ -344,6 +344,34 @@ Intern posting do.
 
 ---
 
+## 📋 Test 17: Blank fields are named, not nagged (B4 — new)
+
+Panel only. Nothing here touches a job page, so it can be checked without a
+Workday login.
+
+### Expected Results:
+- [ ] On a **fresh install**, or straight after "Delete all data", there is
+      **no** blank-field note at all — an untouched profile is not a profile
+      with gaps in it
+- [ ] With a partly filled profile, a muted card at the top of the panel reads
+      `Autofill will leave these blank: …` and names fields **using the labels
+      printed beside them** — never an internal name like `linkedinUrl`
+- [ ] The second line says blank is a valid choice. Nothing is red, nothing is
+      an error, and **Save Profile still works with any number of blanks**
+- [ ] Every blank field's box is **dashed**; filled ones stay solid. Focusing a
+      blank field shows the normal solid accent ring, not a dashed one
+- [ ] Typing into a blank field removes it from the list immediately, without
+      saving first
+- [ ] With more than six blanks, the list stops at six and ends `and N more.`
+- [ ] Ticking **"I currently work here"** removes that job's End Month / End
+      Year from the list — a blank end date on a current role is correct
+- [ ] Adding an Education or Work card makes its empty fields appear in the
+      list; removing the card takes them back out
+- [ ] With two or more cards, names are disambiguated — `School (school 2)`
+- [ ] Choosing a resume file removes "Resume" from the list straight away
+
+---
+
 ## ✅ Success Criteria
 
 All features working correctly when:
@@ -366,7 +394,7 @@ All features working correctly when:
 - ✅ Degree → Matches whichever spelling you stored
 - ✅ School / Field of Study → Filled, exactly one pill, no duplicate on re-run
 - ✅ First and last name → In their own fields
-- ✅ Popup → Empty fields visibly empty
+- ✅ Popup → Empty fields visibly empty, and named where autofill will skip them
 
 ---
 
