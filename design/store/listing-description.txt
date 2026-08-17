@@ -1,3 +1,25 @@
+NEW IN 1.3
+
+• Country, State and Degree dropdowns now select reliably. These were the
+  fields that failed most often, and they shared one cause: the extension was
+  reading options from the wrong dropdown.
+• School and Field of Study fill correctly, with no duplicate entry if you run
+  autofill twice on the same page.
+• "Application Questions" pages are answered — the work authorization and
+  sponsorship questions that some employers put on their own step were being
+  left blank.
+• "I am 18 years of age or older" is now its own setting in Job Preferences. It
+  starts unticked, and while it is unticked that question is left for you rather
+  than answered on your behalf.
+• The panel now tells you which fields it will leave blank, so a skipped field
+  is no longer indistinguishable from a filled one.
+• Redesigned side panel.
+
+Updating keeps your saved profile exactly as it is, and asks for no new
+permissions.
+
+- - -
+
 Fill out Workday and Greenhouse job applications in one click, using a profile you enter once and that never leaves your computer.
 
 Applying to jobs means typing the same information over and over: your name, your address, your last three employers, your degree, your graduation date. Workday: Better Autofill enters all of it for you, so you can spend your time on the parts of an application that actually matter.
