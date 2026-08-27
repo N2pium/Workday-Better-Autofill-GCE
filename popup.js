@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Only fields autofill actually reads. Listing anything else would be noise.
     const TRACKED_IDS = [
-        'firstName', 'lastName', 'phone', 'email', 'linkedinUrl',
+        'firstName', 'lastName', 'phone', 'email', 'linkedinUrl', 'websiteUrl',
         'street', 'city', 'state', 'zip', 'country',
         'skills', 'languageInput',
         'gender', 'hispanicLatino', 'race',
@@ -213,6 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('phone').value = result.personalInfo.phone || '';
             document.getElementById('email').value = result.personalInfo.email || '';
             document.getElementById('linkedinUrl').value = result.personalInfo.linkedinUrl || '';
+            document.getElementById('websiteUrl').value = result.personalInfo.websiteUrl || '';
         }
 
         // Address
@@ -332,6 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 phone: document.getElementById('phone').value,
                 email: document.getElementById('email').value,
                 linkedinUrl: document.getElementById('linkedinUrl').value,
+                websiteUrl: document.getElementById('websiteUrl').value,
             },
             address: {
                 street: document.getElementById('street').value,

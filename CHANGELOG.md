@@ -1,5 +1,47 @@
 # Changelog
 
+## Unreleased
+
+Four bugs reported from a real application, all with a reproduction in
+`tools/tests/` (see SHARED_TASK_NOTES.md, F12–F15).
+
+### Fixed
+
+- **Work experience From and To dates land in the right boxes.** The end date was
+  being written into the **From** field, and the start date was never written at
+  all. Only visible with "I currently work here" unchecked, because that is the
+  only time Workday shows the To field. The extension was locating a date field
+  by walking forward from the first text on the page containing "to" — which on
+  a Workday page is the "Back to Job Posting" link, and the first date box after
+  it is From. Dates are now found by their own label and written inside that
+  field's own container.
+- **A month and year no longer overwrite each other.** Where a form uses a single
+  `MM/YYYY` box, the month was written first and then replaced by the year.
+- **"I currently work here" is ticked before the dates are filled**, not after, so
+  an end date is never written into a field that is about to be hidden.
+- **"Are you legally authorized to work…" is no longer answered No on its own.**
+  When a form asks about authorization and sponsorship in one sentence — "legally
+  authorized to work in the United States without requiring sponsorship" — the
+  sponsorship rule was overwriting the authorization answer with its default No.
+  A question that asks both is now answered once, and it answers Yes only if you
+  are authorized *and* do not need sponsorship.
+- **Yes/No questions no longer pick "Not applicable" for a No.**
+- **"I currently work here" now matches your profile.** It could get ticked on
+  the form when it was unticked in the panel — and once ticked, nothing ever
+  cleared it, so the end date stayed unreachable and the entry claimed a job you
+  had left. The extension now sets that box to match your profile in both
+  directions, and the terms-and-conditions step can no longer tick a box just
+  because a "terms" label happens to sit next to it.
+- The same authorization/sponsorship ordering bug is fixed for Greenhouse.
+
+### New
+
+- **Website / Portfolio URL is its own profile field.** It used to share the
+  LinkedIn field, so a form asking for a website was given your LinkedIn URL and
+  your actual site was never filled in. Both are now sent, and on Workday's
+  Websites section a second row is added for the second link. If you leave the
+  website blank, a lone "Website" field still gets your LinkedIn URL, as before.
+
 ## 1.3 — 2026-08-17
 
 The dropdown release. Country, State, Degree, School and Field of Study are the

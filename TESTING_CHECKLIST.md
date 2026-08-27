@@ -392,6 +392,38 @@ All features working correctly when:
 - ✅ Multi-page forms → Auto-filled without manual intervention
 - ✅ No console errors during entire process
 
+### Unreleased additions (F12–F15)
+
+- ✅ Work experience **From** holds the start date and **To** holds the end date,
+      with "I currently work here" UNCHECKED — this is the case that was broken
+- ✅ With "I currently work here" CHECKED, From is still correct and no end date
+      is written anywhere
+- ✅ A single `MM/YYYY` box holds both month and year, not just the year
+- ✅ Education "First/Last Year Attended" still fill, and never receive a work date
+- ✅ "Are you legally authorized to work in the United States **without**
+      sponsorship?" → **Yes** (with Authorized ticked, Sponsorship unticked)
+- ✅ Same question with **Sponsorship ticked** → **No**
+- ✅ Separate authorization and sponsorship questions → Yes and No respectively
+      (this already worked — confirm no regression)
+- ✅ A Yes/No question offering "Not applicable" → picks **No**, not "Not applicable"
+- ✅ Website / Portfolio URL fills a "Website" field; LinkedIn URL fills a
+      "LinkedIn" field; neither gets the other's value
+- ✅ Workday Websites section → two rows, one per link; one link → one row
+- ✅ Website left blank in the panel → a lone "Website" field still gets LinkedIn
+- ✅ "I currently work here" UNCHECKED in the panel → unchecked on Workday, even
+      if the form arrives with it already ticked (F16 — not yet seen on a real run)
+- ✅ "I currently work here" CHECKED in the panel → checked on Workday
+- ✅ Terms & Conditions step still ticks the real terms box — console names which
+      box it ticked: `Checking Terms & Conditions — "..."`
+- ✅ No other checkbox on any page is ticked. Console logs every tick by name.
+
+Automated pre-check (does not replace the above — jsdom does no layout):
+
+```
+npm i -g jsdom
+NODE_PATH="$(npm root -g)" node tools/tests/run.js
+```
+
 ### v1.3 additions
 
 - ✅ Country and State → Selected, and corrected when already set to something wrong

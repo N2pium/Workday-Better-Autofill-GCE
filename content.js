@@ -36,6 +36,11 @@
 
 let userProfile = {};
 let isScanning = false; // Guard flag to prevent infinite loops
+
+// Question containers already answered during the current scan. One rule per
+// question: whichever rule answers a block first owns it, and no later rule may
+// overwrite that answer. Reset at the top of every scan.
+let answeredQuestions = new WeakSet();
 let lastScannedUrl = ''; // Track URL to detect navigation
 let hasUploadedResume = false; // Track resume upload status
 
@@ -74,6 +79,9 @@ async function scanAndFill() {
     // Mark this URL as scanned
     lastScannedUrl = window.location.href;
 
+    // Fresh page, fresh set of answered questions.
+    answeredQuestions = new WeakSet();
+
     if (!userProfile) {
         isScanning = false;
         return;
@@ -88,12 +96,22 @@ async function scanAndFill() {
         await selectWorkdayDropdown('Phone Device Type', 'Mobile');
         await selectWorkdayDropdown('Device Type', 'Mobile');
         fillFieldByFuzzyLabel(['email'], userProfile.personalInfo.email);
-        fillFieldByFuzzyLabel(['linkedin', 'website', 'url'], userProfile.personalInfo.linkedinUrl);
 
-        // Websites (Dynamic Section) - Phase 3
-        if (userProfile.personalInfo.linkedinUrl) {
-            await handleWebsitesSection(userProfile.personalInfo.linkedinUrl);
-        }
+        // LinkedIn and the personal website are two different profile fields and
+        // have to stay two different fields on the form. 'website' used to be a
+        // key on the LinkedIn fill, so a portfolio/website box was given the
+        // LinkedIn URL and the real website was never asked for at all.
+        //
+        // The fallback is deliberate: with no website stored, a lone "Website"
+        // field still gets the LinkedIn URL, which is the shipped behaviour.
+        const linkedinUrl = userProfile.personalInfo.linkedinUrl;
+        const websiteUrl = userProfile.personalInfo.websiteUrl;
+        fillFieldByFuzzyLabel(['linkedin'], linkedinUrl);
+        fillFieldByFuzzyLabel(['personal website', 'portfolio', 'website'], websiteUrl || linkedinUrl);
+
+        // Websites (Dynamic Section) - Phase 3. Takes both links now, and adds a
+        // row per link rather than overwriting the one row it finds.
+        await handleWebsitesSection([linkedinUrl, websiteUrl]);
     }
 
     if (userProfile.address) {
@@ -123,23 +141,31 @@ async function scanAndFill() {
         fillFieldByFuzzyLabel(['location'], work.location);
         fillFieldByFuzzyLabel(['role description', 'description', 'summary'], work.description || work['role description']);
 
-        // Date Logic (Async now)
-        if (work.startDate) {
-            await fillDate('from', work.startDate);
-            await fillDate('start date', work.startDate);
-            const dateStr = formatDateString(work.startDate);
-            fillFieldByFuzzyLabel(['from', 'start date'], dateStr);
-        }
-        if (work.endDate) {
-            await fillDate('to', work.endDate);
-            await fillDate('end date', work.endDate);
-            const dateStr = formatDateString(work.endDate);
-            fillFieldByFuzzyLabel(['to', 'end date'], dateStr);
+        // Before the dates, not after. Ticking "I currently work here" is what
+        // makes Workday hide the To widget, so filling To first and then hiding
+        // it leaves behind a value the user can neither see nor correct.
+        //
+        // Set in BOTH directions. This used to run only when isCurrentRole was
+        // true, and nothing in the extension ever cleared a checkbox, so a box
+        // ticked by anything else stayed ticked against a profile that said
+        // otherwise. Making the form match the profile is the whole job.
+        //
+        // 'present' is gone from the keys on purpose: it is a substring of
+        // "represent" and "presented", which is wording Workday consent text
+        // uses constantly, and it never matched "I currently work here" anyway.
+        if (setCheckbox(['i currently work here', 'current job'], !!work.isCurrentRole)) {
+            await new Promise(r => setTimeout(r, 200));
         }
 
-        if (work.isCurrentRole) {
-            checkCheckbox(['i currently work here', 'current job', 'present']);
-        }
+        // Date Logic. fillDate takes the whole key list and stops at the first
+        // one that resolves, so the two calls per date are gone — and with them
+        // the trailing fillFieldByFuzzyLabel passes, whose 'to' key matched any
+        // label merely containing "to" and wrote "MM/YYYY" into it.
+        if (work.startDate) await fillDate(['from', 'start date'], work.startDate);
+
+        // Skipped for a current role: the To widget is not rendered, and the old
+        // unscoped lookup then wrote the end date into the From widget instead.
+        if (work.endDate && !work.isCurrentRole) await fillDate(['to', 'end date'], work.endDate);
     }
 
     // 3. Education
@@ -288,7 +314,12 @@ function findElementByFuzzyLabel(keys) {
     let found = null;
     keys.forEach(key => {
         if (found) return;
-        const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${key.toLowerCase()}")]/following::input[1] | //input[contains(@aria-label, "${key}")] | //textarea[contains(@aria-label, "${key}")]`;
+        const lower = key.toLowerCase();
+        // label's own text node, then its full string value (same F7/F12 ladder
+        // as findDropdownTrigger/findDateContainer — a label whose text sits
+        // inside a nested <span> returns an empty text() node-set), then
+        // aria-label as before.
+        const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${lower}")]/following::input[1] | //label[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${lower}")]/following::input[1] | //input[contains(@aria-label, "${key}")] | //textarea[contains(@aria-label, "${key}")]`;
         found = getElementByXpath(xpath);
     });
     return found;
@@ -424,74 +455,210 @@ async function handleDropdown(keys, value, matcher = null) {
 
 /**
  * Date Helpers (Async)
+ *
+ * SCOPED, and that is the entire point of this rewrite.
+ *
+ * The previous implementation resolved a date field with an XPath `following::`
+ * walk that began at the first element on the page whose text merely CONTAINED
+ * the label key. For the end date that key is "to", which matches something
+ * near the top of virtually any document — "Back to Job Posting", "Story",
+ * "Total" — and the walk then took the first Month/Year input AFTER it, which
+ * is the From widget. So the end date was written into the start date and the
+ * To fields were left empty.
+ *
+ * That is exactly what the user reported on 2026-08-24, and it only surfaced
+ * with "I currently work here" unchecked, because that is the only state in
+ * which Workday renders the To widget at all.
+ *
+ * Everything below resolves a CONTAINER first and queries inside it. No
+ * `following::`, and only <label>/<legend> elements may name a field —
+ * arbitrary page text is not a label.
  */
-async function fillDate(labelKey, dateObj) {
-    if (!dateObj) return;
-    const { month, year } = dateObj;
 
-    const monthMap = { "01": "January", "02": "February", "03": "March", "04": "April", "05": "May", "06": "June", "07": "July", "08": "August", "09": "September", "10": "October", "11": "November", "12": "December" };
-    const monthName = monthMap[month] || month;
+// Each half of a Workday date is its own spin-button input. The
+// data-automation-id is the reliable hook; aria-label and an exact placeholder
+// are fallbacks for tenants that render a plain pair of text boxes.
+// Placeholder matching is exact on purpose: [placeholder*="MM" i] would also
+// match "Summary".
+const DATE_SECTION_SELECTORS = {
+    Month: 'input[data-automation-id="dateSectionMonth-input"], input[aria-label*="Month" i], input[placeholder="MM"], input[placeholder="mm"]',
+    Year: 'input[data-automation-id="dateSectionYear-input"], input[aria-label*="Year" i], input[placeholder="YYYY"], input[placeholder="yyyy"]'
+};
 
-    if (month) {
-        await handleDateDropdown(labelKey, 'Month', monthName);
-        handleDateInputTyping(labelKey, 'MM', month);
-        handleDateInputTyping(labelKey, 'Month', month);
-    }
-    if (year) {
-        await handleDateDropdown(labelKey, 'Year', year);
-        handleDateInputTyping(labelKey, 'YYYY', year);
-        handleDateInputTyping(labelKey, 'Year', year);
-    }
+const MONTH_NAMES = {
+    "01": "January", "02": "February", "03": "March", "04": "April",
+    "05": "May", "06": "June", "07": "July", "08": "August",
+    "09": "September", "10": "October", "11": "November", "12": "December"
+};
+
+function escapeRegExp(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function handleDateDropdown(groupLabel, type, value) {
-    try {
-        const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${groupLabel.toLowerCase()}")]/parent::*//following::*[contains(@aria-label, "${type}") or contains(@title, "${type}")][1]`;
-        let trigger = getElementByXpath(xpath);
-
-        if (!trigger) {
-            const xpathCase = `//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${groupLabel.toLowerCase()}")]/following::*[contains(@aria-label, "${type}")][1]`;
-            trigger = getElementByXpath(xpathCase);
-        }
-
-        if (!trigger) return;
-
-        if (trigger.tagName === 'INPUT' && (trigger.type === 'text' || trigger.type === 'number')) return;
-        if (trigger.innerText.includes(value) || trigger.value === value) return;
-
-        scrollIntoViewIfNeeded(trigger);
-        trigger.click();
-
-        // Scoped to the open dropdown — see findOpenListbox.
-        const hasOptions = await waitForCondition(() => getOpenListboxOptions().length > 0, 2000);
-
-        if (!hasOptions) return;
-
-        const needle = String(value).toLowerCase();
-        const opts = getOpenListboxOptions();
-        const option = opts.find(o => o.innerText.trim() === String(value))
-            || opts.find(o => o.innerText.toLowerCase().includes(needle));
-        if (option) {
-            await commitOptionSelection(option, `${groupLabel}/${type}`);
-            await new Promise(r => setTimeout(r, 200));
-        }
-    } catch (e) {
-        console.error(`Workday Autoplay: Error in handleDateDropdown for ${groupLabel}/${type}:`, e);
-    }
+/**
+ * How well a label names the field we are looking for.
+ *   2 = exact, 1 = whole-word, 0 = no match.
+ *
+ * A plain `includes` is what let "to" claim "Total Compensation"; an exact match
+ * alone is too strict for the "To (Year)" / "From Date" wordings tenants use.
+ */
+function labelMatchScore(labelText, key) {
+    const text = normalizeLabel(labelText || '');
+    const needle = normalizeLabel(key || '');
+    if (!text || !needle) return 0;
+    if (text === needle) return 2;
+    return new RegExp(`(^|[^a-z0-9])${escapeRegExp(needle)}([^a-z0-9]|$)`).test(text) ? 1 : 0;
 }
 
-function handleDateInputTyping(groupLabel, type, value) {
-    const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${groupLabel.toLowerCase()}")]/following::input[(contains(@aria-label, "${type}") or contains(@placeholder, "${type}"))][1]`;
-    let input = getElementByXpath(xpath);
-    if (!input) {
-        const xpath2 = `//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${groupLabel.toLowerCase()}")]/following::input[(contains(@aria-label, "${type}") or contains(@placeholder, "${type}"))][1]`;
-        input = getElementByXpath(xpath2);
+// The container that owns a label's control. Walks up only far enough to find
+// one — past three levels the "container" is the whole form and the scoping this
+// function exists to provide has been thrown away.
+function controlContainerFor(label) {
+    const CONTROL = 'input, button[aria-haspopup="listbox"], [role="combobox"], select';
+    let el = label.closest('div[data-automation-id^="formField"], div[data-automation-id="dateWidget"], fieldset, div[role="group"]')
+        || label.parentElement;
+    let hops = 0;
+    while (el && hops < 3 && !el.querySelector(CONTROL)) {
+        el = el.parentElement;
+        hops++;
     }
+    return el && el.querySelector(CONTROL) ? el : null;
+}
+
+function findDateContainer(key) {
+    let best = null;
+    let bestScore = 0;
+
+    for (const label of document.querySelectorAll('label, legend')) {
+        const score = labelMatchScore(label.innerText, key);
+        if (!score || score <= bestScore) continue;
+
+        const container = controlContainerFor(label);
+        // Hidden means not applicable — the To widget while "I currently work
+        // here" is ticked, or a collapsed section.
+        if (!container || container.offsetParent === null) continue;
+
+        best = container;
+        bestScore = score;
+        if (score === 2) break;
+    }
+    return best;
+}
+
+function findDateSectionTrigger(container, type) {
+    const triggers = Array.from(container.querySelectorAll('button[aria-haspopup="listbox"], [role="combobox"], select'));
+    if (!triggers.length) return null;
+
+    const named = triggers.find(el => new RegExp(type, 'i').test(
+        `${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''} ${el.getAttribute('name') || ''}`
+    ));
+    if (named) return named;
+
+    // An unlabelled pair: Workday renders Month then Year. Trusted only when
+    // there are exactly two controls, because past that it is a guess.
+    if (triggers.length === 2) return triggers[type === 'Month' ? 0 : 1];
+    return null;
+}
+
+async function fillDateSection(container, type, value, key) {
+    const text = type === 'Month' ? String(value).padStart(2, '0') : String(value);
+
+    // 1. Text / spin-button input — the common Workday rendering.
+    const input = container.querySelector(DATE_SECTION_SELECTORS[type]);
     if (input) {
-        if (input.value === value) return;
-        input.click();
-        setNativeValue(input, value);
+        if (input.value !== text) {
+            input.click();
+            setNativeValue(input, text);
+        }
+        return true;
     }
+
+    const trigger = findDateSectionTrigger(container, type);
+    if (!trigger) return false;
+
+    const wanted = type === 'Month' ? (MONTH_NAMES[text] || text) : text;
+
+    // 2. Native <select>.
+    if (trigger.tagName === 'SELECT') {
+        const option = Array.from(trigger.options).find(o => {
+            const t = o.text.trim().toLowerCase();
+            return t === wanted.toLowerCase() || t === text.toLowerCase();
+        });
+        if (!option) return false;
+        setNativeValue(trigger, option.value);
+        return true;
+    }
+
+    // 3. Workday listbox.
+    if ((trigger.innerText || '').trim() === wanted) return true;
+
+    scrollIntoViewIfNeeded(trigger);
+    trigger.click();
+    if (!await waitForCondition(() => getOpenListboxOptions().length > 0, 2000)) {
+        console.warn(`Workday Autoplay: no ${type} options opened for ${key}`);
+        return false;
+    }
+
+    const needle = wanted.toLowerCase();
+    const opts = getOpenListboxOptions();
+    const option = opts.find(o => o.innerText.trim() === wanted)
+        || opts.find(o => o.innerText.trim().toLowerCase() === needle)
+        || opts.find(o => o.innerText.trim() === text)
+        || opts.find(o => o.innerText.toLowerCase().includes(needle));
+
+    if (!option) {
+        console.warn(`Workday Autoplay: no ${type} option "${wanted}" for ${key}`);
+        return false;
+    }
+
+    const ok = await commitOptionSelection(option, `${key}/${type}`);
+    await new Promise(r => setTimeout(r, 200));
+    return ok;
+}
+
+// Some tenants render one MM/YYYY box instead of two sections. Scoped to the
+// container, unlike the old fuzzy-label pass this replaces, which wrote
+// "05/2023" into every field whose label merely contained "to".
+function fillSingleDateInput(container, dateObj) {
+    const text = formatDateString(dateObj);
+    if (!text) return false;
+
+    const input = Array.from(container.querySelectorAll('input:not([type="hidden"])'))
+        .find(i => i.offsetParent !== null && i.type !== 'checkbox' && i.type !== 'radio');
+    if (!input) return false;
+
+    setNativeValue(input, text);
+    return true;
+}
+
+/**
+ * Fill the date field named by any of `labelKeys` with { month, year }.
+ * Returns whether anything was written.
+ */
+async function fillDate(labelKeys, dateObj) {
+    if (!dateObj) return false;
+    const { month, year } = dateObj;
+    if (!month && !year) return false;
+
+    const keys = Array.isArray(labelKeys) ? labelKeys : [labelKeys];
+
+    for (const key of keys) {
+        const container = findDateContainer(key);
+        if (!container) continue;
+
+        console.log(`Workday Autoplay: date field "${key}" resolved to`, container);
+
+        let filled = false;
+        if (month) filled = (await fillDateSection(container, 'Month', month, key)) || filled;
+        if (year) filled = (await fillDateSection(container, 'Year', year, key)) || filled;
+        if (!filled) filled = fillSingleDateInput(container, dateObj);
+
+        if (filled) return true;
+        console.warn(`Workday Autoplay: found the "${key}" date field but could not write to it.`);
+    }
+
+    console.log(`Workday Autoplay: no date field found for ${keys.join(' / ')}`);
+    return false;
 }
 
 /**
@@ -576,32 +743,56 @@ function matchesAny(text, keys) {
     return keys.some(key => t.includes(key.toLowerCase()));
 }
 
-function checkCheckbox(keys) {
-    const inputs = document.querySelectorAll('input[type="checkbox"]');
-    inputs.forEach(input => {
-        let match = false;
-        const traverseMatch = (el) => {
-            if (!el) return false;
-            if (el.innerText && matchesAny(el.innerText, keys)) return true;
-            if (el.getAttribute('aria-label') && matchesAny(el.getAttribute('aria-label'), keys)) return true;
-            return false;
-        };
+/**
+ * The names that belong to a checkbox ITSELF.
+ *
+ * Deliberately not "the text of whatever container it sits in". The old
+ * checkCheckbox fell back to `input.closest('div, label')` and matched that
+ * element's whole innerText, so a checkbox could be ticked because of wording
+ * that belongs to a SIBLING field sharing the same div. Same family of mistake
+ * as the date lookup: match the control's own name, never nearby text.
+ */
+function checkboxLabelTexts(input) {
+    const texts = collectLabelTexts(input);
 
-        if (traverseMatch(input)) match = true;
-        if (!match && input.id) {
-            const label = document.querySelector(`label[for="${input.id}"]`);
-            if (label && matchesAny(label.innerText, keys)) match = true;
-        }
-        if (!match) {
-            const container = input.closest('div, label');
-            if (container && traverseMatch(container)) match = true;
-        }
+    // A checkbox is often wrapped in its own <label>. That label IS the
+    // checkbox's name, unlike an enclosing <div>, so it is safe to read.
+    const wrapping = input.closest('label');
+    if (wrapping && wrapping.innerText) texts.push(wrapping.innerText);
 
-        if (match && !input.checked) {
-            input.click();
-            input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+    return texts.filter(Boolean);
+}
+
+/**
+ * Force a checkbox to `desired`, matching on the box's own name.
+ *
+ * Ticking AND unticking, which is the point. The old checkCheckbox could only
+ * ever tick: nothing in the extension ever cleared a box. So once "I currently
+ * work here" was ticked — by Workday's own default, by a stale page, by an
+ * earlier run against a different profile, or by one of the loose matchers that
+ * used to exist here — it stayed ticked, the To date became unreachable, and the
+ * entry claimed a job the user had already left. Reported 2026-08-24.
+ */
+function setCheckbox(keys, desired) {
+    let changed = false;
+
+    document.querySelectorAll('input[type="checkbox"]').forEach(input => {
+        const texts = checkboxLabelTexts(input);
+        if (!texts.some(t => matchesAny(t, keys))) return;
+        if (input.checked === desired) return;
+
+        console.log(`Workday Autoplay: ${desired ? 'ticking' : 'clearing'} checkbox "${texts[0].trim().slice(0, 60)}"`, input);
+        input.click();
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        changed = true;
     });
+
+    return changed;
+}
+
+// Kept as the tick-only spelling for callers that only ever mean "tick".
+function checkCheckbox(keys) {
+    return setCheckbox(keys, true);
 }
 
 /**
@@ -638,38 +829,63 @@ function fillGPA(gpaValue) {
 }
 
 // 2. Dynamic Websites Section (Async)
-async function handleWebsitesSection(url) {
-    const urlInput = findElementByFuzzyLabel(['url', 'website address']);
-    if (urlInput && urlInput.offsetParent !== null) {
-        setNativeValue(urlInput, url);
-        return;
-    }
+//
+// Every visible URL box in the Websites section, in document order. The old
+// single-element lookup could only ever fill one row, which was fine while the
+// profile held one link; it holds two now (LinkedIn and a personal website).
+function findWebsiteUrlInputs() {
+    const inputs = [];
+    document.querySelectorAll('input[type="text"], input[type="url"], input:not([type])').forEach(input => {
+        if (input.offsetParent === null) return; // collapsed row, hidden section
+        if (collectLabelTexts(input).some(t => /\burl\b|web ?site/i.test(t))) inputs.push(input);
+    });
+    return inputs;
+}
 
-    let addBtn = document.querySelector('button[aria-label*="Add Website"], button[aria-label*="Add Link"]');
-    if (!addBtn) {
-        const sections = document.querySelectorAll('div, section');
-        for (let section of sections) {
-            const header = section.querySelector('h2, h3, h4');
-            if (header && /websites|links/i.test(header.innerText)) {
-                addBtn = section.querySelector('button[data-automation-id="Add"], button[title="Add"]');
-                if (addBtn) break;
-            }
+function findAddWebsiteButton() {
+    const direct = document.querySelector('button[aria-label*="Add Website"], button[aria-label*="Add Link"]');
+    if (direct) return direct;
+
+    for (const section of document.querySelectorAll('div, section')) {
+        const header = section.querySelector('h2, h3, h4');
+        if (header && /websites|links/i.test(header.innerText)) {
+            const btn = section.querySelector('button[data-automation-id="Add"], button[title="Add"]');
+            if (btn) return btn;
         }
     }
+    return null;
+}
 
-    if (addBtn) {
-        console.log("Workday Autoplay: Clicking Add Website button", addBtn);
-        addBtn.click();
+async function handleWebsitesSection(urls) {
+    // De-duplicated: the same link stored in both profile fields must not open
+    // a second row for itself.
+    const wanted = [...new Set((Array.isArray(urls) ? urls : [urls]).filter(Boolean))];
+    if (!wanted.length) return;
 
-        // Wait for Input loop
-        for (let i = 0; i < 20; i++) {
-            await new Promise(r => setTimeout(r, 100));
-            const newInput = findElementByFuzzyLabel(['url', 'website address']);
-            if (newInput) {
-                setNativeValue(newInput, url);
-                return;
+    for (const url of wanted) {
+        const inputs = findWebsiteUrlInputs();
+
+        // Already on the form — the user typed it, or the label pass above filled
+        // it a moment ago. Leave it, and do not add a duplicate row.
+        if (inputs.some(i => i.value.trim() === url)) continue;
+
+        let target = inputs.find(i => !i.value.trim());
+
+        if (!target) {
+            const addBtn = findAddWebsiteButton();
+            if (!addBtn) {
+                console.log(`Workday Autoplay: no empty website row and no Add button — skipping ${url}`);
+                break;
             }
+            console.log("Workday Autoplay: Clicking Add Website button", addBtn);
+            const before = inputs.length;
+            addBtn.click();
+            await waitForCondition(() => findWebsiteUrlInputs().length > before, 2000);
+            target = findWebsiteUrlInputs().find(i => !i.value.trim());
         }
+
+        if (target) setNativeValue(target, url);
+        else console.warn(`Workday Autoplay: could not find a website URL input for ${url}`);
     }
 }
 
@@ -682,8 +898,17 @@ async function handleSearchablePicker(keys, value) {
         let input = null;
 
         for (const key of keys) {
-            const labelXpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${key.toLowerCase()}")]`;
-            const label = getElementByXpath(labelXpath);
+            // text() first (original behavior), then the label's full string
+            // value. Same ladder as findDropdownTrigger (F7) and findDateContainer
+            // (F12): Workday nests label text inside a <span> often enough that
+            // text() returns an empty node-set, which is a silent miss here —
+            // "Could not find searchBox for field of study" — on any tenant/field
+            // where that nesting happens. text() stays first so a field with two
+            // matching labels (e.g. "Major" appearing standalone elsewhere) keeps
+            // resolving to the same one as before.
+            const lower = key.toLowerCase();
+            const label = getElementByXpath(`//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${lower}")]`)
+                || getElementByXpath(`//label[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${lower}")]`);
             if (label) {
                 // Prefix match: the exact selector never matched Workday's
                 // formField-school / formField-degree, so this always fell
@@ -1119,18 +1344,51 @@ async function fillDisclosureDate() {
     });
 }
 
-function handleTerms() {
-    const checkboxXpath = `//input[@type="checkbox"]/following::label[contains(text(), "I agree") or contains(text(), "terms") or contains(text(), "read")]/preceding-sibling::input[@type="checkbox"] | //label[contains(text(), "I agree") or contains(text(), "terms") or contains(text(), "read")]//input[@type="checkbox"]`;
-    let checkbox = getElementByXpath(checkboxXpath);
-    if (!checkbox) {
-        checkbox = document.querySelector('input[type="checkbox"][aria-label*="agree"], input[type="checkbox"][aria-label*="terms"]');
-    }
+// Wording that identifies a terms / acknowledgement checkbox by its OWN name.
+const TERMS_PATTERNS = /i agree|i accept|i consent|i acknowledge|i have read|i certify|terms (and conditions|of use|of service)|privacy (policy|notice|statement)/i;
 
-    if (checkbox && !checkbox.checked) {
-        console.log("Workday Autoplay: Checking Terms & Conditions");
-        checkbox.click();
-        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+// Boxes that must never be ticked from the terms path however the surrounding
+// markup reads. "I currently work here" is a factual claim about the user's
+// employment, not an acknowledgement, and getting it wrong silently changes
+// what the application says about them.
+const NEVER_TERMS = /currently work here|current job|current employer|18 years|veteran|disab|sponsor|authoriz/i;
+
+function handleTerms() {
+    // Match on the checkbox's own name.
+    //
+    // The old lookup was an XPath that selected a checkbox because some LATER
+    // SIBLING label matched "I agree" / "terms" / "read" —
+    //
+    //   //input[@type="checkbox"]/following::label[contains(text(), "read")]
+    //     /preceding-sibling::input[@type="checkbox"]
+    //
+    // so the box it ticked need never have had anything to do with terms; it
+    // only had to sit before one. It also took the FIRST match in document
+    // order, which on a page with several checkboxes is the earliest box, not
+    // the relevant one. And "read" is a substring of "already", so the label
+    // did not have to be about terms either.
+    //
+    // This runs unconditionally on every scan, on every page, and could only
+    // ever tick — never clear. That combination is how a checkbox nobody asked
+    // for ends up set. Reported 2026-08-24.
+    const target = Array.from(document.querySelectorAll('input[type="checkbox"]')).find(box => {
+        const texts = checkboxLabelTexts(box);
+        if (!texts.length) return false;
+        if (texts.some(t => NEVER_TERMS.test(t))) return false;
+        return texts.some(t => TERMS_PATTERNS.test(t));
+    });
+
+    if (!target) {
+        console.log('Workday Autoplay: no terms checkbox identified on this page, ticking nothing.');
+        return false;
     }
+    if (target.checked) return true;
+
+    const name = checkboxLabelTexts(target)[0].trim().slice(0, 80);
+    console.log(`Workday Autoplay: Checking Terms & Conditions — "${name}"`, target);
+    target.click();
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
 }
 
 async function selectWorkdayDropdown(label, desiredValue, matcher = null) {
@@ -1733,28 +1991,8 @@ async function handleJobPreferences() {
     ];
     await answerYesNo(formerKeywords, prefs.formerEmployee ? 'Yes' : 'No');
 
-    // 2. Authorized to Work
-    // Keywords: "legally authorized", "authorized to work", "legal right to work"
-    //
-    // "18 years of age" USED to live in this list. It has moved to ageKeywords
-    // below, which has its own profile field. Leaving it here would let the
-    // authorization toggle answer an age question — on the wording "Are you at
-    // least 18 years of age?" both groups would have claimed it, and whichever
-    // ran first would win. Do not put it back.
-    const authKeywords = [
-        'legally authorized',
-        'authorized to work',
-        'legal right to work',
-        'lawfully work',
-        // Observed wording that matched none of the above: "Are you legally
-        // eligible to work in the country to which you are applying?" --
-        // eligible, not authorized.
-        'legally eligible',
-        'eligible to work'
-    ];
-
     // Age has its OWN profile field, deliberately not folded into
-    // authorizedToWork above: a user who unchecks work authorization must not
+    // authorizedToWork below: a user who unchecks work authorization must not
     // thereby answer "No" to being 18 or older, which would be a false
     // statement on a job application.
     //
@@ -1772,7 +2010,37 @@ async function handleJobPreferences() {
     } else {
         console.log('Workday Autoplay: "18 or older" not confirmed in the profile, leaving that question for the user.');
     }
-    await answerYesNo(authKeywords, prefs.authorizedToWork ? 'Yes' : 'No');
+
+    // 2. Authorization and sponsorship — classified together, on purpose.
+    //
+    // These two rules used to run one after the other, each calling
+    // answerYesNo with its own keyword list. Workday routinely asks both things
+    // in ONE sentence:
+    //
+    //   "Are you legally authorized to work in the United States without
+    //    requiring sponsorship for an employment visa?"
+    //
+    // Both keyword lists claim that block. The sponsorship rule ran second, and
+    // its default answer is No, so it overwrote the correct Yes — the "legally
+    // authorized to work" dropdown mysteriously reading No that the user
+    // reported on 2026-08-24. Nothing in the console said so, because from each
+    // rule's own point of view it had answered its question correctly.
+    //
+    // So every candidate block is classified ONCE, up front, and exactly one
+    // rule answers it. Same shape as the age/authorization split above: when two
+    // rules can claim a question, decide which one owns it rather than letting
+    // DOM order decide.
+    const authKeywords = [
+        'legally authorized',
+        'authorized to work',
+        'legal right to work',
+        'lawfully work',
+        // Observed wording that matched none of the above: "Are you legally
+        // eligible to work in the country to which you are applying?" --
+        // eligible, not authorized.
+        'legally eligible',
+        'eligible to work'
+    ];
 
     // 3. Sponsorship
     // Keywords: "sponsorship", "require sponsorship", "support for immigration", "visa"
@@ -1784,7 +2052,33 @@ async function handleJobPreferences() {
         'require sponsorship',
         'need sponsorship'
     ];
-    await answerYesNo(sponsorKeywords, prefs.requiresSponsorship ? 'Yes' : 'No');
+
+    const authBlocks = [];
+    const sponsorBlocks = [];
+    for (const block of findQuestionBlocks([...authKeywords, ...sponsorKeywords])) {
+        const isAuth = matchesAny(block.text, authKeywords);
+        const isSponsor = matchesAny(block.text, sponsorKeywords);
+        if (isAuth) authBlocks.push({ block, isSponsor });
+        else if (isSponsor) sponsorBlocks.push(block);
+    }
+
+    for (const { block, isSponsor } of authBlocks) {
+        // A compound "authorized to work WITHOUT sponsorship" question is Yes
+        // only when both halves hold. A user who is authorized but still needs
+        // sponsorship must answer No to it, and answering Yes would be a false
+        // statement on a job application.
+        const yes = isSponsor
+            ? (prefs.authorizedToWork !== false && !prefs.requiresSponsorship)
+            : prefs.authorizedToWork !== false;
+        if (isSponsor) {
+            console.log(`Workday Autoplay: "${block.text.slice(0, 60)}" asks about authorization AND sponsorship — answering ${yes ? 'Yes' : 'No'}.`);
+        }
+        await answerQuestionBlock(block, yes ? 'Yes' : 'No');
+    }
+
+    for (const block of sponsorBlocks) {
+        await answerQuestionBlock(block, prefs.requiresSponsorship ? 'Yes' : 'No');
+    }
 
     // 4. Referral Source (REQUIREMENT 2: Source Dropdown)
     // "How did you hear about us?" dropdown
@@ -1911,59 +2205,63 @@ async function answerDropdownYesNo(trigger, userChoice, questionText) {
     return await commitOptionSelection(option, questionText.slice(0, 40));
 }
 
+/**
+ * Answer one already-located question block with Yes or No.
+ *
+ * Guarded by `answeredQuestions`: once a rule has answered a block, no later
+ * rule may overwrite it. Two keyword groups claiming the same question, with
+ * the second one winning, is how "Are you legally authorized to work in the
+ * United States?" ended up reading No — see handleJobPreferences.
+ */
+async function answerQuestionBlock(block, userChoice) {
+    const container = block.container;
+    if (answeredQuestions.has(container)) {
+        console.log(`Workday Autoplay: "${block.text.slice(0, 60)}" was already answered this scan, leaving it.`);
+        return false;
+    }
+
+    const wanted = userChoice.toLowerCase();
+    // Whole-word, not substring. `includes('no')` also matches "Not applicable",
+    // "None of the above" and "No Preference" — on a question whose only honest
+    // answers are Yes and No, that is a wrong answer, not a near miss.
+    const choiceRe = new RegExp(`^${wanted}\\b`, 'i');
+
+    for (const radio of container.querySelectorAll('input[type="radio"]')) {
+        const radioLabel = radio.id ? document.querySelector(`label[for="${CSS.escape(radio.id)}"]`) : null;
+        const radioText = normalizeLabel(
+            (radioLabel && radioLabel.innerText) || radio.getAttribute('aria-label') || radio.getAttribute('value') || ''
+        );
+        if (!radioText) continue;
+        if (radioText !== wanted && !choiceRe.test(radioText)) continue;
+
+        answeredQuestions.add(container);
+        if (radio.checked) return true;
+
+        console.log(`Workday Autoplay: answering "${block.text.slice(0, 60)}" with "${userChoice}"`);
+        radio.click();
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
+        radio.dispatchEvent(new Event('input', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 300));
+        return true;
+    }
+
+    // No radios matched. On the questionnaire pages the control is a
+    // dropdown, not a radio group, which is the second half of why these
+    // questions were never answered.
+    const trigger = container.querySelector('button[aria-haspopup="listbox"]');
+    if (trigger && await answerDropdownYesNo(trigger, userChoice, block.text)) {
+        answeredQuestions.add(container);
+        return true;
+    }
+
+    return false;
+}
+
 async function answerYesNo(questionText, userChoice) {
     const keywords = Array.isArray(questionText) ? questionText : [questionText];
 
     for (const block of findQuestionBlocks(keywords)) {
-        const container = block.container;
-
-        {
-            // Find all radio buttons in this container
-            const radios = container.querySelectorAll('input[type="radio"]');
-
-            for (const radio of radios) {
-                // Get the label text for this specific radio button
-                const radioId = radio.id;
-                const radioLabel = document.querySelector(`label[for="${CSS.escape(radioId)}"]`);
-
-                let radioText = "";
-                if (radioLabel) {
-                    radioText = radioLabel.innerText;
-                } else if (radio.getAttribute('aria-label')) {
-                    radioText = radio.getAttribute('aria-label');
-                } else if (radio.getAttribute('value')) {
-                    radioText = radio.getAttribute('value');
-                }
-
-                // Check if this radio matches the user's choice (Yes or No)
-                const normalizedChoice = userChoice.toLowerCase();
-                const normalizedRadioText = radioText.toLowerCase();
-
-                let isMatch = false;
-                if (normalizedChoice === 'yes' && normalizedRadioText.includes('yes')) {
-                    isMatch = true;
-                } else if (normalizedChoice === 'no' && normalizedRadioText.includes('no')) {
-                    isMatch = true;
-                }
-
-                if (isMatch && !radio.checked) {
-                    console.log(`Workday Autoplay: answerYesNo - Answering "${block.text.substring(0, 50)}..." with "${userChoice}"`);
-                    radio.click();
-                    radio.dispatchEvent(new Event('change', { bubbles: true }));
-                    radio.dispatchEvent(new Event('input', { bubbles: true }));
-                    await new Promise(r => setTimeout(r, 300));
-                    return true;
-                }
-            }
-        }
-
-        // No radios matched. On the questionnaire pages the control is a
-        // dropdown, not a radio group, which is the second half of why these
-        // questions were never answered.
-        const trigger = container.querySelector('button[aria-haspopup="listbox"]');
-        if (trigger && await answerDropdownYesNo(trigger, userChoice, block.text)) {
-            return true;
-        }
+        if (await answerQuestionBlock(block, userChoice)) return true;
     }
 
     return false;

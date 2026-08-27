@@ -738,6 +738,263 @@ is unreliable — test them.
 
 ---
 
+---
+
+## OBSERVED FAILURES — user report, 2026-08-24 (F12–F14)
+
+Four items, reported directly by the user. Unlike every earlier F-number, these
+have a **reproduction**: `tools/tests/` boots the real `content.js` into jsdom
+and runs the old and new code side by side over modelled Workday DOM. Run it
+with `NODE_PATH="$(npm root -g)" node tools/tests/run.js` (needs `npm i -g jsdom`).
+
+That closes the loop's single biggest limitation for this class of bug. It does
+**not** replace a real run — jsdom does no layout, so anything depending on
+visibility, scrolling or React's own handlers is still unverified.
+
+### F12 — end date written into the From field; start date never written
+
+**FIXED**, and **reproduced first**: `tools/tests/test-real.js`, VARIANT C.
+
+```
+                From          To
+  want          "03/2021"     "06/2023"
+  old code      "06"          "06/2023"    + "2023" spilled into Education "To (Year)"
+  new code      "03/2021"     "06/2023"
+```
+
+`From="06"` is the user's report exactly: the **end** month lands in the From
+box, and the start date never arrives at all. Only visible with "I currently
+work here" UNCHECKED, because that is the only state in which Workday renders
+the To widget.
+
+Cause, in two layers:
+
+1. `handleDateInputTyping` / `handleDateDropdown` resolved a field with an XPath
+   `following::` walk. The primary lookup keyed off `//label[contains(text(), …)]`,
+   and Workday nests label text inside a `<span>` — so `text()` returns an empty
+   node-set and the label lookup finds nothing. `findDropdownTrigger` already
+   documents this exact trap; the date helpers never got the same treatment.
+2. The fallback was `//*[contains(text(), "to")]/following::input[…][1]` — ANY
+   element, not just labels. The first element on the page whose text contains
+   "to" is `<a>Back to Job Posting</a>`, and the first MM-placeholder input after
+   it is the **From** box.
+
+VARIANT B additionally shows the old code spilling `06/2023` into the Education
+"To (Year)" field, via the trailing `fillFieldByFuzzyLabel(['to','end date'], …)`
+pass, when Workday emits a duplicate `id` on the two date inputs — the same
+duplicate-`id` behaviour recorded under F7 for the name fields.
+
+There is also a third, unconditional defect the old code carried: with a single
+masked `MM/YYYY` box (which is what the real form uses — see
+`Screenshot Example #1.png`), month and year were written into the SAME input
+one after the other, so the year overwrote the month. Only the trailing fuzzy
+pass rescued it, and that pass is precisely what had to be removed.
+
+Fix: `fillDate` now resolves a **container** and queries inside it.
+- Only `<label>` / `<legend>` may name a field. Arbitrary page text cannot.
+- `labelMatchScore` prefers an exact normalized match, then a whole-word match.
+  Plain `includes` is what let "to" claim "Total Compensation".
+- `normalizeLabel` runs on the label's `innerText`, so nested `<span>` text is
+  read through — no `text()` node-set problem.
+- Hidden containers are skipped, so a ticked "currently work here" cannot be
+  written into.
+- `fillSingleDateInput` writes `MM/YYYY` as ONE value into a masked box.
+- The trailing `fillFieldByFuzzyLabel` date passes are gone.
+
+### F13 — "I currently work here" ordering
+
+**FIXED** alongside F12. `checkCheckbox` ran AFTER the dates, so on a current
+role the To field was filled and then hidden, leaving a value the user can
+neither see nor correct. It now runs first, and the end date is skipped entirely
+for a current role.
+
+### F14 — "Legally authorized to work" answered No on its own
+
+**FIXED**, reproduced in `tools/tests/test-auth.js`.
+
+```
+profile: authorized=true, requiresSponsorship=false
+
+  "Are you legally authorized to work in the US without requiring sponsorship
+   for an employment visa now or in the future?"
+      old: No     <-- the reported bug
+      new: Yes
+```
+
+Cause: `handleJobPreferences` ran the authorization rule and the sponsorship
+rule one after the other, each with its own keyword list. Workday routinely asks
+both things in ONE sentence, so BOTH lists claim that block. Sponsorship ran
+second and its default answer is No, so it overwrote the correct Yes. Nothing in
+the console said so — from each rule's own point of view it answered correctly.
+
+Same shape as the age/authorization split fixed in F11. The lesson has now cost
+two bugs: **when two rules can claim one question, decide which owns it; do not
+let DOM order decide.**
+
+Fix:
+- Both keyword groups are collected in ONE `findQuestionBlocks` call and each
+  block is classified once. A block matching auth keywords is an authorization
+  question even if it also mentions sponsorship; only blocks matching sponsorship
+  and NOT authorization go to the sponsorship rule.
+- A compound "authorized … WITHOUT sponsorship" question is Yes only when
+  `authorizedToWork && !requiresSponsorship`. Answering Yes while sponsorship is
+  still needed would be a false statement on a job application. Verified:
+  with `requiresSponsorship: true` the old code said Yes, the new code says No.
+- `answeredQuestions` (a `WeakSet`, reset per scan) means no later rule can
+  overwrite an answer a earlier rule already committed.
+- Yes/No matching on radios is now whole-word, not `includes`. The old test
+  picked **"Not applicable"** for a No — `'not applicable'.includes('no')` is
+  true. Reproduced and fixed; see the fourth case in `test-auth.js`.
+
+`greenhouse.js` carried the identical ordering bug in `ghDesiredValueForLabel`
+(`has('sponsor','visa','immigration')` was tested before `has('authoriz', …)`)
+and is fixed the same way.
+
+The previously-working two-separate-questions page (the BCBSLA wording in
+`tools/RequireSponsorship.png`) answers Yes/No exactly as before — no regression.
+
+### F15 — website and LinkedIn were the same field
+
+**FIXED.** There was one profile field, `linkedinUrl`, and it was written into
+anything labelled linkedin, website OR url. A portfolio/website box therefore
+received the LinkedIn URL and the real website was never asked for.
+
+- New `personalInfo.websiteUrl`, with its own input in the panel.
+- `linkedin` and `website` are now separate `fillFieldByFuzzyLabel` calls.
+- The fallback is deliberate and preserves shipped behaviour: with no website
+  stored, a lone "Website" field still gets the LinkedIn URL.
+- `handleWebsitesSection` takes a LIST, fills empty rows first, clicks Add only
+  when it needs another row, and de-duplicates so one link stored twice does not
+  open two rows.
+- `greenhouse.js` `ghFillPersonalInfo` gets the same split.
+
+### F16 — "I currently work here" ticked on the form against a profile that says otherwise
+
+**FIXED**, reproduced in `tools/tests/test-checkbox.js`. User-reported 2026-08-24,
+after confirming F12–F15 fixed on a real form. Reported as intermittent
+("sometimes"), which is consistent with all three causes below being
+page-shape-dependent.
+
+**The compounding fact, and the one that made it stick:** nothing in the
+extension ever CLEARED a checkbox. `checkCheckbox` could only tick. So it did
+not matter much which of the three causes fired on a given page — once the box
+was set, every later scan left it set, and the profile's "not a current role"
+was never asserted onto the form.
+
+Three independent ways the old code could tick it, all reproduced:
+
+1. **`handleTerms` selected a checkbox by a LATER SIBLING's label.**
+
+   ```
+   //input[@type="checkbox"]/following::label[contains(text(), "read")]
+     /preceding-sibling::input[@type="checkbox"]
+   ```
+
+   The box it ticks need never have had anything to do with terms — it only has
+   to sit before a label that matches. With the work checkbox and a terms
+   checkbox in one parent, `preceding-sibling` matches the work box, and
+   `FIRST_ORDERED_NODE_TYPE` prefers it because it comes first.
+   `handleTerms` runs unconditionally on every scan, on every page.
+
+2. **`contains(text(), "read")` is a substring test.** "I have alREADy applied
+   to this role" matches. So does anything else containing "read".
+
+3. **`'present'` was a key on the work-experience match**, and `matchesAny` is a
+   substring test: "I **represent** that the information **present**ed is
+   accurate" matches. It never matched "I currently work here" anyway.
+   Additionally `checkCheckbox` fell back to `input.closest('div, label')` and
+   matched that container's whole `innerText`, so a checkbox could be ticked for
+   wording belonging to a SIBLING field in the same div.
+
+Reproduction output (old vs new):
+
+```
+  terms label shares a parent with the work checkbox   old: true   new: false
+  "already" contains the substring "read"              old: true   new: false
+  old key list ticked "I represent ... presented":     true
+
+  profile isCurrentRole=false, box arrives ticked
+    old   checked=true   From="2023"     To="06/2023"
+    new   checked=false  From="03/2021"  To="06/2023"
+```
+
+Fix:
+- New `checkboxLabelTexts` — a checkbox's OWN names: `collectLabelTexts` plus a
+  wrapping `<label>`. The `closest('div, label')` container-text fallback is
+  gone. Same principle as the F12 date fix: **match the control's own name,
+  never nearby text.**
+- New `setCheckbox(keys, desired)` ticks AND clears, so the form is made to
+  match the profile in both directions. `checkCheckbox` is kept as the
+  tick-only spelling.
+- The work-experience call now runs unconditionally with `!!work.isCurrentRole`,
+  not only when true. `'present'` removed from the keys.
+- `handleTerms` matches on the checkbox's own name against explicit
+  `TERMS_PATTERNS`, with a `NEVER_TERMS` denylist that refuses to touch factual
+  claims — currently-work-here, 18+, veteran, disability, sponsorship,
+  authorization. Those are statements about the user, not acknowledgements, and
+  a wrong one silently changes what the application says about them.
+- Both paths now log the name of the box they tick, so the next report of this
+  shape can be diagnosed from the console instead of re-derived.
+
+Regression checked: the genuine terms checkbox is still ticked, and
+`isCurrentRole: true` still ticks the box and writes no end date.
+
+### Still open from this report
+
+**Nothing in the four items — and F12–F15 are now VERIFIED FIXED on a real
+form** (user, 2026-08-24: "it works now"). F16 was reported in the same breath
+and is fixed but NOT yet verified on a real run.
+
+Note what the reproduction does NOT cover:
+jsdom does no layout, so `offsetParent`/`getBoundingClientRect` are shimmed. The
+"hidden container is skipped" rule in `findDateContainer` is therefore modelled,
+not observed. **A real run on the My Experience page is still the gate** —
+specifically, confirm From/To land correctly with "I currently work here" both
+ticked and unticked.
+
+A DOM capture of the My Experience page (`tools/inspect-workday-form.js` →
+`tools/captures/my-experience.json`) would let the date suite model the real
+markup instead of three educated variants. It is the highest-value missing
+artifact in the repo.
+
+## OBSERVED FAILURE — user report, 2026-08-26 (F17)
+
+### F17 — "field of study" sometimes doesn't autofill
+
+User report: intermittent, on Field of Study specifically (not reported for
+School, which shares the same `handleSearchablePicker` call).
+
+**No console log for this one — fixed from code reading, same pattern as two
+already-confirmed bugs in this file, so treat as a strong hypothesis, not a
+verified fix.** `handleSearchablePicker`'s label lookup used only
+
+    //label[contains(translate(text(), ...), "field of study")]
+
+`text()` matches only a label's own direct text nodes. `findDropdownTrigger`
+(F7) and `findDateContainer` (F12) already document, with confirmed evidence,
+that Workday nests label text inside a `<span>` often enough to make `text()`
+return an empty node-set — and both were fixed with a string-value (`.`)
+fallback. `handleSearchablePicker` and `findElementByFuzzyLabel` (its third
+fallback) never got that same fix. If a tenant/field wraps "Field of Study" or
+"Major" this way, every lookup path in `handleSearchablePicker` misses and it
+silently returns (`Could not find searchBox for field of study` in console) —
+consistent with "sometimes," since whether a label's text is wrapped can differ
+per field even on the same tenant (School's label rendering direct text while
+Field of Study's does not, or vice versa).
+
+Fixed by adding the same text() → string-value ladder to both functions.
+**Needs the same real-run confirmation as everything else in this file** — the
+decisive check is whether "Could not find searchBox for field of study" still
+appears in console on a form where it used to.
+
+### Noticed, NOT changed — needs a decision
+
+`greenhouse.js` answers `has('18 years', 'age or older')` with an unconditional
+`Yes`, ignoring `prefs.isAtLeast18`. That contradicts the rule F11 established
+for `content.js` ("unticked means UNANSWERED, not No; nobody's age gets asserted
+by a default"). It is a third code path for the same question and was outside
+what the user asked for, so it is left alone and recorded here instead.
+
 ## Iteration log
 
 Append one line per firing. Keep it short.
@@ -802,3 +1059,35 @@ Append one line per firing. Keep it short.
   blocker is unchanged and is not code: Tests 11–17 have not been run.**
   Note the 08-09 session (F8, the 18+ attestation, the panel redesign) never got
   a log entry — read the commits for it.
+- `2026-08-24` — **Four user-reported failures, all fixed: F12–F15.** First
+  session in this loop with an actual REPRODUCTION rather than a hypothesis:
+  `tools/tests/` boots the real `content.js` into jsdom and diffs old vs new
+  behaviour. F12 (end date written into the From box) reproduced on the third
+  modelled variant — nested `<span>` label text defeats XPath `text()`, and the
+  `//*[contains(text(),"to")]` fallback then latches onto "Back to Job Posting".
+  F14 (authorization answered No) reproduced first try. **Both F12 and F14 are
+  the same mistake in different clothes as F11: two rules claiming one target,
+  with DOM order deciding the winner.** Treat that pattern as a smell.
+  Left alone on purpose: `greenhouse.js` still answers the 18+ question with an
+  unconditional Yes, which contradicts F11 — recorded under "Noticed, NOT
+  changed" because it was outside the reported scope. Real-run gate unchanged:
+  My Experience page, "I currently work here" both ticked and unticked.
+- `2026-08-24` — **F12–F15 VERIFIED FIXED on a real form** by the user. Same
+  report surfaced **F16**: "I currently work here" ticked against a profile that
+  says otherwise. Three independent causes, all reproduced in
+  `tools/tests/test-checkbox.js` — but the one that made it persist is that
+  **nothing in the extension ever cleared a checkbox**, only ever set one. Fixed
+  by `setCheckbox(keys, desired)`, which drives the box to match the profile in
+  both directions. The three causes are all the SAME shape as F12 and F14:
+  matching on text near a control rather than the control's own name
+  (`preceding-sibling` of a matching label; `contains(text(),"read")` hitting
+  "already"; `'present'` hitting "represent"). **That is now four bugs from one
+  root habit — treat "matched by nearby text" as a defect on sight.**
+- `2026-08-26` — **F17 fixed from code reading, no console log yet.** User
+  reported "field of study" intermittently not autofilling.
+  `handleSearchablePicker`'s label lookup, and `findElementByFuzzyLabel`'s, were
+  the last two label-matching call sites still using bare XPath `text()` — the
+  exact node-set-goes-empty-under-a-nested-`<span>` bug F7 and F12 already fixed
+  everywhere else in this file. Added the same string-value fallback. Needs a
+  real run to confirm; watch for "Could not find searchBox for field of study"
+  disappearing from console.
