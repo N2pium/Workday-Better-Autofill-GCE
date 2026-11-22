@@ -3,16 +3,16 @@ type: plan
 tags:
   - easyapply
 ---
-
+befo
 # Roadmap
 
 Colours on the [[Architecture.canvas|board]]: green = phase 1, purple = 2, cyan = 3, yellow = 4.
 
 ## Phase 0 - Guardrails
 - [x] Budget alert `Monthly-Total` ($10/mo, 50/80/100% actual + 100% forecast) - see [[Budgets]]
-- [ ] Spend limit in AWS Settings > Billing (~$15-20)
-- [ ] Cost Anomaly Detection (free)
-- [ ] Rewrite `PRIVACY_POLICY.md` draft - see [[Security and Privacy]]
+- [x] Spend limit in AWS Settings > Billing (~$15-20)
+- [x] Cost Anomaly Detection (free) - monitor `AWS-Services`, daily email when impact >= $3
+- [x] Rewrite `PRIVACY_POLICY.md` draft - see [[Security and Privacy]] (draft only; rebuild `docs/index.html` with `node design/build-privacy.mjs` at the 2.0 release)
 
 ## Phase 1 - MVP
 - [ ] CDK app skeleton (TypeScript) - [[CDK and CI-CD]]
