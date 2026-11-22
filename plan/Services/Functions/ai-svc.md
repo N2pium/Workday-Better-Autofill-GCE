@@ -15,6 +15,10 @@ tags:
 match scores and follow-up drafts.
 
 - Checks and increments a per-user daily quota item in [[DynamoDB]] (`QUOTA#AI#<date>`, TTL).
-- Never sends demographic fields. Streams the answer back.
+- Never sends demographic fields. Returns the whole answer (no streaming in v1 -
+  [[Key Decisions]] #8).
+- Routes: `POST /ai/answer` (fresh draft), `POST /ai/adapt` (rewrite a saved answer for
+  a new question - [[F11 Answer Library]]), `POST /ai/match` (match score),
+  `POST /ai/categorise` (tiny call for library matching).
 
 Feature: [[F04 AI Answers and Match Score]] · Flow: [[Flow - AI answer]]

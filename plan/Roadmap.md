@@ -31,7 +31,8 @@ Backend code lives in `cloud/` (see `cloud/README.md`). "code" = written and tes
 ## Phase 2 - AI
 - [ ] [[S3 Resumes]] + [[resume-svc]] - [[F02 Resume Vault]]
 - [ ] [[SQS]] + [[parse-worker]] + [[Bedrock]] - [[F03 Resume Parsing]]
-- [ ] [[ai-svc]] with per-user daily quota - [[F04 AI Answers and Match Score]]
+- [ ] [[ai-svc]] with per-user daily quota - [[F04 AI Answers and Match Score]] (no streaming at first - [[Key Decisions]] #8)
+- [ ] [[answers-svc]] + library UI in the extension - [[F11 Answer Library]]
 
 ## Phase 3 - Adapters
 - [ ] Adapter pack JSON schema + interpreter in `content.js` - [[F06 Remote Adapter Packs]]

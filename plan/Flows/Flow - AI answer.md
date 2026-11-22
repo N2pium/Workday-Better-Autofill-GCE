@@ -19,7 +19,7 @@ sequenceDiagram
     I->>D: Increment daily quota if under limit
     D-->>I: OK or limit reached
     I->>B: Prompt with profile minus demographics
-    B-->>I: Streamed answer
-    I-->>X: Streamed answer
+    B-->>I: Complete answer (not streamed in v1)
+    I-->>X: Complete answer
     Note over X: User edits, then inserts into the form
 ```

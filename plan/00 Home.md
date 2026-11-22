@@ -29,11 +29,12 @@ AWS serverless backend. AWS project: paid plan, Region **us-east-2**.
 | 8 | [[F08 Follow-up Reminders]] | 4 |
 | 9 | [[F09 More Job Sites]] | 3 |
 | 10 | [[F10 Insights]] | 4 |
+| 11 | [[F11 Answer Library]] | 2 |
 
 ## Components
 - Clients: [[Chrome Extension]], [[Web Dashboard]]
 - Edge and auth: [[CloudFront]], [[Cognito]], [[API Gateway]]
-- Compute: [[profile-svc]], [[tracker-svc]], [[ai-svc]], [[resume-svc]], [[parse-worker]], [[reminder-worker]], [[telemetry-ingest]]
+- Compute: [[profile-svc]], [[tracker-svc]], [[ai-svc]], [[resume-svc]], [[answers-svc]], [[parse-worker]], [[reminder-worker]], [[telemetry-ingest]]
 - Data: [[DynamoDB]], [[S3 Resumes]], [[S3 Adapter Packs]], [[KMS]]
 - Async and AI: [[SQS]], [[Bedrock]], [[EventBridge Scheduler]], [[SES]]
 - Analytics: [[Firehose]], [[Athena]]
@@ -42,7 +43,7 @@ AWS serverless backend. AWS project: paid plan, Region **us-east-2**.
 ## Flows (sequence diagrams)
 [[Flow - Sign in]] · [[Flow - Profile sync]] · [[Flow - Log an application]] ·
 [[Flow - Resume upload and parse]] · [[Flow - AI answer]] · [[Flow - Load adapter pack]] ·
-[[Flow - Telemetry]] · [[Flow - Follow-up reminder]] · [[Flow - Delete account]]
+[[Flow - Telemetry]] · [[Flow - Answer from library]] · [[Flow - Follow-up reminder]] · [[Flow - Delete account]]
 
 ---
 

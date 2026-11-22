@@ -38,3 +38,21 @@ Sync is opt-in. The extension must keep working with no account. See [[Security 
 ## 7. Single Region
 All Regional resources in **us-east-2**. Only [[CloudFront]] (global) and its optional WAF
 live in us-east-1. No cross-Region replication, no StackSets.
+
+Exception: [[Bedrock]] Claude models in us-east-2 are only offered through cross-Region
+inference profiles. We call from us-east-2 with the **US** profile (`us.anthropic.*`),
+which can process in us-east-1/2 or us-west-2. The project SCP explicitly allows this;
+nothing is stored outside us-east-2, and `PRIVACY_POLICY.md` says so.
+
+## 8. AI answers without streaming at first
+The HTTP API can't stream responses. A ~200-word draft from a fast model takes a few
+seconds, so v1 returns the whole answer behind a spinner and reuses the existing API and
+JWT authorizer unchanged. Upgrade path if it feels slow: a Lambda Function URL in
+`RESPONSE_STREAM` mode with JWT verification in code (`aws-jwt-verify`).
+See [[ai-svc]], [[Flow - AI answer]].
+
+## 9. TypeScript and Python, split by component
+TypeScript for CDK and the API Lambdas (including [[ai-svc]] and [[answers-svc]]) - shared
+auth, quota and validation code, CDK's first-class language. Python for [[parse-worker]]
+(PDF/DOCX libraries) and telemetry analysis ([[Athena]] scripts). The profile schema is
+defined once in zod and exported as JSON Schema, which the Python side validates against.

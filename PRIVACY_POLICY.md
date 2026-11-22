@@ -28,6 +28,7 @@ You sign in with your Google account through Amazon Cognito, our sign-in provide
 - **Profiles** you choose to sync (name, contact details, address, work history, education, skills, languages, job preferences).
 - **Resume files** you upload, and their file names.
 - **Application records** created when you autofill or add an application: company, job title, job posting URL, date, and the status you set.
+- **Saved answers** you choose to keep in your answer library: the application question and the final text you approved, so you can reuse it on later applications.
 - **Reminder settings** for applications you want follow-up reminders on.
 - **Usage counters** for AI features, used only to enforce daily limits.
 
@@ -38,7 +39,7 @@ You sign in with your Google account through Amazon Cognito, our sign-in provide
 ### AI features (optional, used only when you ask)
 When you use an AI feature — parsing a resume into your profile, drafting an answer to an application question, writing a cover letter, or scoring how well your profile matches a job description — the relevant parts of your profile or resume, plus the question or job description you selected, are sent to **Amazon Bedrock** to generate the result.
 - Self-identification answers are **never** included.
-- Amazon Bedrock does not use your inputs or outputs to train AI models, and does not share them with model providers.
+- AI requests are processed by Amazon Bedrock **within the United States** (AWS Regions us-east-1, us-east-2 and us-west-2). Amazon Bedrock does not store your inputs or outputs, does not use them to train AI models, and does not share them with model providers.
 - AI results are suggestions. Nothing is entered into a form or saved to your profile until you review and accept it.
 
 ### Follow-up reminders (optional)
@@ -52,19 +53,20 @@ If you turn on "Help improve autofill", the extension reports when it cannot fin
 
 ## Where and how cloud data is stored
 - Cloud data is stored with **Amazon Web Services (AWS) in the United States** (us-east-2, Ohio).
+- AI requests may be processed in another US AWS Region (us-east-1 or us-west-2) to keep responses fast; nothing is stored there, and no AI processing happens outside the United States.
 - It is encrypted in transit (HTTPS/TLS) and at rest (AWS Key Management Service).
 - Each account can access only its own data. Access by the developer is limited to operating, securing, and troubleshooting the service.
 
 ## How long we keep it
-- **Account data** (profiles, resumes, application records, reminders) is kept until you delete it or delete your account.
+- **Account data** (profiles, resumes, application records, saved answers, reminders) is kept until you delete it or delete your account.
 - **Backups** are kept for up to 35 days, after which deleted data is gone from backups as well.
 - **Service logs** (used to detect errors and abuse) are kept for 14 days.
 - **Error reports** are kept for up to 12 months, and are not linked to any account.
 
 ## Your choices and rights
 - **See and export your data**: View everything in the dashboard, and export your profile as a JSON file at any time.
-- **Correct your data**: Edit any profile, resume, or application record.
-- **Delete your data**: Use **"Delete All Data"** in the extension to clear local data, or **"Delete my account"** in the extension or dashboard to permanently delete your cloud account and all of its data (profiles, resumes, application records and scheduled reminders). Deletion from live systems is immediate; backups expire within 35 days.
+- **Correct your data**: Edit any profile, resume, application record or saved answer.
+- **Delete your data**: Use **"Delete All Data"** in the extension to clear local data, or **"Delete my account"** in the extension or dashboard to permanently delete your cloud account and all of its data (profiles, resumes, application records, saved answers and scheduled reminders). Deletion from live systems is immediate; backups expire within 35 days.
 - **Stop syncing**: Sign out or turn sync off to return to local-only mode. Data already in the cloud stays there until you delete it.
 - **Withdraw consent**: AI features, reminders and error reports can each be turned off at any time.
 

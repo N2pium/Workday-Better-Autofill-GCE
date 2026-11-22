@@ -19,6 +19,7 @@ One on-demand table, point-in-time recovery on, encrypted with the [[KMS]] key.
 | `USER#<sub>` | `APP#<ISO ts>#<id>` | an application ([[F05 Application Tracker]]) |
 | `USER#<sub>` | `RESUME#<id>` | resume metadata ([[F02 Resume Vault]]) |
 | `USER#<sub>` | `QUOTA#AI#<date>` | AI usage counter, TTL ([[ai-svc]]) |
+| `USER#<sub>` | `ANSWER#<id>` | saved answer ([[F11 Answer Library]]) |
 
 - Query `PK = USER#x AND begins_with(SK, "APP#")` lists applications newest-first.
 - DynamoDB Stream on new `APP#` items -> creates reminders ([[EventBridge Scheduler]]).
