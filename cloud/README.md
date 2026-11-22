@@ -25,7 +25,7 @@ Everything Regional is in **us-east-2** (fixed in `lib/config.ts`).
 
 | Key | Meaning |
 |---|---|
-| `extensionIds` | **Required.** Chrome extension IDs (published + unpacked dev). Find them on `chrome://extensions`. |
+| `extensionIds` | **Required.** Chrome extension IDs allowed to sign in. Currently only the **unpacked dev build** (`jhndpohagnfomchdcfnfecdhmdaepgcd` = `C:\Users\Schoo\EasyApply`; unpacked IDs come from the folder path). **Add the published Web Store ID before release**, then `npx cdk deploy EasyApply-Auth`. |
 | `dashboardUrls` | Dashboard origins for redirects/CORS. Default `http://localhost:5173`. |
 | `domainPrefix` | Managed-login domain: `<prefix>.auth.us-east-2.amazoncognito.com` |
 | `googleClientId` | Empty = Google off, Cognito email sign-in (dev only). Set it to make Google the only provider. |
