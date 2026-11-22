@@ -25,7 +25,8 @@ Backend code lives in `cloud/` (see `cloud/README.md`). Deployed to us-east-2 on
 - [x] [[tracker-svc]] - [[F05 Application Tracker]] (deployed)
 - [x] Deploy the three stacks to us-east-2 (bootstrap first)
 - [x] Extension sign-in / sign-out / delete cloud account - [[Chrome Extension]], [[Flow - Sign in]] (`cloud-auth.js`; optional host permissions, requested on Sign in)
-- [ ] Extension: opt-in profile sync toggle - [[F01 Accounts and Profile Sync]]
+- [x] Extension: welcome screen (Sign in / Create account / Continue without an account) - [[Chrome Extension]]
+- [x] Extension: opt-in profile sync toggle - [[F01 Accounts and Profile Sync]] (`cloud-sync.js`; one "default" profile, version-checked, conflicts ask)
 - [ ] Extension: log application after autofill - [[F05 Application Tracker]]
 - [ ] [[Web Dashboard]] on [[CloudFront]] + S3
 - [x] [[Flow - Delete account]] endpoint (deployed)

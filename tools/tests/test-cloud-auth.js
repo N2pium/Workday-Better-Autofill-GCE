@@ -19,7 +19,7 @@ function makeWorld() {
   const area = (m) => ({
     async get(key) { return m.has(key) ? { [key]: structuredClone(m.get(key)) } : {}; },
     async set(obj) { for (const [k, v] of Object.entries(obj)) m.set(k, structuredClone(v)); },
-    async remove(key) { m.delete(key); }
+    async remove(keys) { for (const k of [].concat(keys)) m.delete(k); }
   });
   const log = { authFlows: [], tokenCalls: [], apiCalls: [], revokes: [] };
   const world = {
@@ -116,6 +116,24 @@ test('sign-in uses code + PKCE (S256) with the extension redirect, and stores to
   assert.equal(w.stores.session.get('cloudSession').accessToken, 'access-1');
   assert.equal(w.stores.local.get('cloudAuth').refreshToken, 'refresh-1');
   assert.equal(w.stores.local.get('cloudAuth').accessToken, undefined, 'access token must not be in storage.local');
+});
+
+test('Create account opens the /signup page with the same PKCE parameters', async () => {
+  const w = makeWorld();
+  await w.Cloud.signIn({ signUp: true });
+  const u = new URL(w.log.authFlows[0].url);
+  assert.equal(u.pathname, '/signup');
+  assert.equal(u.searchParams.get('code_challenge_method'), 'S256');
+  assert.equal(u.searchParams.get('redirect_uri'), REDIRECT);
+  assert.equal(w.log.tokenCalls[0].grant_type, 'authorization_code');
+});
+
+test('sign-out also switches sync off on this device', async () => {
+  const w = makeWorld();
+  await w.Cloud.signIn();
+  w.stores.local.set('cloudSync', { enabled: true, version: 3 });
+  await w.Cloud.signOut();
+  assert.equal(w.stores.local.has('cloudSync'), false);
 });
 
 test('a response with the wrong state is rejected and nothing is stored', async () => {

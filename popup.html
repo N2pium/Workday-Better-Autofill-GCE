@@ -9,6 +9,20 @@
 </head>
 
 <body>
+  <!-- First-run welcome: shown until the user signs in or picks "continue
+       without an account" (cloudChoice). Logic in popup.js, Cloud Account block. -->
+  <div id="welcome" class="welcome" hidden>
+    <div class="welcome-inner">
+      <p class="welcome-kicker">Workday: Better Autofill</p>
+      <h2 class="welcome-title">Fill job applications in one click.</h2>
+      <p class="helper">An account keeps your profile in sync across devices. Without one, everything stays
+        on this device. Self-identification answers never leave this device either way.</p>
+      <button type="button" id="welcomeSignInBtn" class="autofill-btn">Sign in</button>
+      <button type="button" id="welcomeSignUpBtn" class="add-btn">Create account</button>
+      <button type="button" id="welcomeGuestBtn" class="welcome-guest">Continue without an account</button>
+      <p class="helper welcome-status" id="welcomeStatus" aria-live="polite"></p>
+    </div>
+  </div>
   <div class="container">
     <header>
       <button id="autofillBtn" class="autofill-btn">AUTOFILL ACTIVE PAGE</button>
@@ -270,6 +284,12 @@
         <div id="cloudSignedIn" hidden>
           <p class="helper">Signed in as <strong id="cloudEmail"></strong></p>
           <p class="helper" id="cloudConnection" aria-live="polite"></p>
+          <div class="input-group checkbox-group">
+            <input type="checkbox" id="cloudSyncToggle" />
+            <label for="cloudSyncToggle">Sync my profile across devices</label>
+          </div>
+          <p class="helper">Syncs personal info, address, education, work experience, skills, languages and job
+            preferences when you press Save. Self-identification answers and your resume file stay on this device.</p>
           <div class="row">
             <button type="button" id="cloudSignOutBtn" class="add-btn half">Sign out</button>
             <button type="button" id="cloudDeleteBtn" class="add-btn half cloud-danger">Delete cloud account</button>
@@ -418,6 +438,7 @@
 
   <script src="cloud-config.js"></script>
   <script src="cloud-auth.js"></script>
+  <script src="cloud-sync.js"></script>
   <script src="popup.js"></script>
 </body>
 

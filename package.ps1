@@ -21,6 +21,7 @@ $include = @(
     'popup.js',
     'cloud-config.js',
     'cloud-auth.js',
+    'cloud-sync.js',
     'icons'
 )
 

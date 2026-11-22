@@ -398,8 +398,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusCtx.style.color = 'var(--success)';
                 if (resumeFile) document.getElementById('resumeStatus').textContent = `Stored: ${resumeFile.name}`;
                 refreshBlankHints();
+                syncAfterSave(); // no-op unless the user turned sync on
             }
-            setTimeout(() => { statusCtx.textContent = ''; }, 3000);
+            const shown = statusCtx.textContent;
+            setTimeout(() => { if (statusCtx.textContent === shown) statusCtx.textContent = ''; }, 3000);
         });
     });
 
@@ -513,14 +515,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // requested in the Sign in click (it must come from a user gesture), the
     // same way Greenhouse support works. See cloud-auth.js.
     const Cloud = window.EasyApplyCloud;
+    const CloudSync = window.EasyApplyCloudSync;
     const cloudUi = {
+        section: document.getElementById('cloudSection'),
         signedOut: document.getElementById('cloudSignedOut'),
         signedIn: document.getElementById('cloudSignedIn'),
         email: document.getElementById('cloudEmail'),
         connection: document.getElementById('cloudConnection'),
+        syncToggle: document.getElementById('cloudSyncToggle'),
         signInBtn: document.getElementById('cloudSignInBtn'),
         signOutBtn: document.getElementById('cloudSignOutBtn'),
         deleteBtn: document.getElementById('cloudDeleteBtn')
+    };
+    const welcomeUi = {
+        root: document.getElementById('welcome'),
+        signInBtn: document.getElementById('welcomeSignInBtn'),
+        signUpBtn: document.getElementById('welcomeSignUpBtn'),
+        guestBtn: document.getElementById('welcomeGuestBtn'),
+        status: document.getElementById('welcomeStatus')
     };
 
     function flash(text, color, ms = 4000) {
@@ -529,15 +541,46 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => { if (statusCtx.textContent === text) statusCtx.textContent = ''; }, ms);
     }
 
-    async function checkCloudConnection() {
+    // When both this device and the account hold a profile, the user picks one.
+    const syncAsk = {
+        chooseCopy({ remoteUpdatedAt, conflict }) {
+            const when = remoteUpdatedAt ? new Date(remoteUpdatedAt).toLocaleString() : 'earlier';
+            const intro = conflict
+                ? `Your profile was changed on another device (${when}) since this device last synced.`
+                : `Your account already has a synced profile (last updated ${when}).`;
+            if (confirm(`${intro}\n\nOK: use the synced profile here (replaces the profile on this device).\nCancel: more options.`)) {
+                return 'cloud';
+            }
+            if (confirm('Upload the profile on this device instead, replacing the synced one?\n\nOK: upload this device\'s profile.\nCancel: decide later.')) {
+                return 'device';
+            }
+            return null;
+        }
+    };
+
+    const when = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '');
+
+    async function showSyncStatus() {
+        const s = await CloudSync.state();
+        cloudUi.syncToggle.checked = s.enabled;
+        cloudUi.connection.textContent = !s.enabled
+            ? 'Connected · sync is off'
+            : s.pending
+                ? 'Connected · changes waiting to sync'
+                : `Connected · synced ${when(s.lastSyncedAt)}`;
+    }
+
+    // On open: pull a newer synced profile, or push changes that couldn't sync earlier.
+    async function refreshCloud() {
         cloudUi.connection.textContent = 'Checking connection…';
         try {
-            const { items } = await Cloud.api('/profiles');
-            const n = items.length;
-            cloudUi.connection.textContent = `Connected · ${n} synced profile${n === 1 ? '' : 's'}`;
+            const result = await CloudSync.onOpen(Cloud, syncAsk);
+            if (result === 'downloaded') { location.reload(); return; } // show the synced profile
+            if (result === 'off') await Cloud.api('/profiles'); // still confirm the connection works
+            await showSyncStatus();
         } catch (e) {
             if (e.notSignedIn) {
-                renderCloud();
+                await renderCloud();
                 flash(e.message, 'var(--primary)');
             } else {
                 cloudUi.connection.textContent = `Can't reach the cloud right now (${e.message})`;
@@ -547,38 +590,105 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function renderCloud() {
         const s = await Cloud.status();
+        const { cloudChoice } = await chrome.storage.local.get('cloudChoice');
+        const showWelcome = !s.signedIn && cloudChoice !== 'guest';
+        welcomeUi.root.hidden = !showWelcome;
+        document.body.classList.toggle('show-welcome', showWelcome);
+
         cloudUi.signedOut.hidden = s.signedIn;
         cloudUi.signedIn.hidden = !s.signedIn;
         if (s.signedIn) {
             cloudUi.email.textContent = s.email || 'your account';
-            checkCloudConnection();
+            refreshCloud();
         }
     }
 
-    cloudUi.signInBtn.addEventListener('click', async () => {
-        cloudUi.signInBtn.disabled = true;
+    // Shared by the welcome screen and the Cloud Account section.
+    async function startSignIn(button, { signUp = false } = {}) {
+        button.disabled = true;
         try {
             // Called first, inside the click, so Chrome treats it as a user gesture.
             const granted = await Cloud.requestPermission();
-            if (!granted) {
-                flash('Permission declined — you stay in local-only mode.', 'var(--primary)');
-                return;
-            }
-            await Cloud.signIn();
-            flash('Signed in.', 'var(--success)');
+            if (!granted) return { ok: false, message: 'Chrome permission declined. Nothing was sent.' };
+            await Cloud.signIn({ signUp });
             await renderCloud();
+            return { ok: true };
         } catch (e) {
-            flash(e.message, 'var(--danger)', 6000);
+            return { ok: false, message: e.message };
         } finally {
-            cloudUi.signInBtn.disabled = false;
+            button.disabled = false;
+        }
+    }
+
+    function afterSignIn() {
+        cloudUi.section.classList.remove('collapsed');
+        cloudUi.section.scrollIntoView({ block: 'start' });
+        flash('Signed in. Turn on "Sync my profile" to back it up to your account.', 'var(--success)', 6000);
+    }
+
+    for (const [button, signUp] of [[welcomeUi.signInBtn, false], [welcomeUi.signUpBtn, true]]) {
+        button.addEventListener('click', async () => {
+            welcomeUi.status.textContent = '';
+            const result = await startSignIn(button, { signUp });
+            if (result.ok) afterSignIn();
+            else welcomeUi.status.textContent = result.message;
+        });
+    }
+
+    welcomeUi.guestBtn.addEventListener('click', async () => {
+        await chrome.storage.local.set({ cloudChoice: 'guest' });
+        await renderCloud();
+    });
+
+    cloudUi.signInBtn.addEventListener('click', async () => {
+        const result = await startSignIn(cloudUi.signInBtn);
+        if (result.ok) afterSignIn();
+        else flash(result.message, 'var(--danger)', 6000);
+    });
+
+    cloudUi.syncToggle.addEventListener('change', async () => {
+        const toggle = cloudUi.syncToggle;
+        toggle.disabled = true;
+        try {
+            if (toggle.checked) {
+                const result = await CloudSync.enable(Cloud, syncAsk);
+                if (result === 'downloaded') { location.reload(); return; }
+                if (result === 'cancelled') flash('Sync stays off.', 'var(--text-muted)');
+                else flash('Sync on. Your profile is backed up to your account.', 'var(--success)');
+            } else {
+                await CloudSync.disable();
+                flash('Sync off on this device. Your synced copy stays in your account.', 'var(--text-muted)', 5000);
+            }
+        } catch (e) {
+            flash(`Sync failed: ${e.message}`, 'var(--danger)', 6000);
+        } finally {
+            toggle.disabled = false;
+            await showSyncStatus();
         }
     });
+
+    // Called by the Save handler after the profile is stored on this device.
+    async function syncAfterSave() {
+        try {
+            const result = await CloudSync.afterLocalSave(Cloud, syncAsk);
+            if (result === 'off') return;
+            if (result === 'downloaded') { location.reload(); return; }
+            if (result === 'uploaded') flash('Profile saved and synced ✓', 'var(--success)');
+            else if (result === 'pending') flash('Saved on this device. It will sync next time you open the panel online.', 'var(--primary)', 6000);
+            else if (result === 'cancelled') flash('Saved on this device only for now. You will be asked again next time.', 'var(--primary)', 6000);
+            await showSyncStatus();
+        } catch (e) {
+            if (e.notSignedIn) await renderCloud();
+            flash(e.notSignedIn ? e.message : `Saved on this device, but sync failed: ${e.message}`, 'var(--danger)', 7000);
+        }
+    }
 
     cloudUi.signOutBtn.addEventListener('click', async () => {
         cloudUi.signOutBtn.disabled = true;
         await Cloud.signOut();
         cloudUi.signOutBtn.disabled = false;
         await renderCloud();
+        welcomeUi.status.textContent = 'Signed out. Your profile on this device is unchanged.';
         flash('Signed out. Your data on this device is unchanged.', 'var(--text-muted)');
     });
 
@@ -592,6 +702,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await Cloud.deleteAccount();
             await renderCloud();
+            welcomeUi.status.textContent = 'Cloud account deleted. Your profile on this device is unchanged.';
             flash('Cloud account deleted.', 'var(--danger)', 5000);
         } catch (e) {
             flash(`Could not delete the account: ${e.message}`, 'var(--danger)', 6000);
@@ -657,8 +768,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         statusCtx.textContent = 'Error importing (file too large?)';
                         statusCtx.style.color = 'var(--danger)';
                     } else {
-                        // Reload panel so the form reflects imported data
-                        location.reload();
+                        // Reload panel so the form reflects imported data; sync it next time.
+                        CloudSync.markPending().finally(() => location.reload());
                     }
                 });
             } catch (err) {

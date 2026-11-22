@@ -57,8 +57,10 @@
 
     const redirectUri = () => chrome.identity.getRedirectURL(); // https://<extension-id>.chromiumapp.org/
 
-    function authorizeUrl(state, challenge) {
-        const url = new URL('/oauth2/authorize', CFG.authDomain);
+    // /signup is Cognito's "Create an account" page; it takes the same parameters
+    // and returns to the same redirect as /oauth2/authorize.
+    function authorizeUrl(state, challenge, signUp = false) {
+        const url = new URL(signUp ? '/signup' : '/oauth2/authorize', CFG.authDomain);
         url.search = new URLSearchParams({
             response_type: 'code',
             client_id: CFG.clientId,
@@ -105,9 +107,11 @@
         });
     }
 
+    // Also switches sync off on this device (cloudSync, see cloud-sync.js): after
+    // a different account signs in, this device's profile must not flow into it.
     async function clearCredentials() {
         await chrome.storage.session.remove(SESSION_KEY);
-        await chrome.storage.local.remove(AUTH_KEY);
+        await chrome.storage.local.remove([AUTH_KEY, 'cloudSync']);
     }
 
     // ------------------------------------------------------------ public API
@@ -121,7 +125,8 @@
         return auth && auth.refreshToken ? { signedIn: true, email: auth.email } : { signedIn: false };
     }
 
-    async function signIn() {
+    /** Opens Cognito's sign-in page, or its "Create an account" page with { signUp: true }. */
+    async function signIn({ signUp = false } = {}) {
         const verifier = randomString(48);
         const state = randomString(16);
         const challenge = await pkceChallenge(verifier);
@@ -129,7 +134,7 @@
         let responseUrl;
         try {
             responseUrl = await chrome.identity.launchWebAuthFlow({
-                url: authorizeUrl(state, challenge),
+                url: authorizeUrl(state, challenge, signUp),
                 interactive: true
             });
         } catch (e) {
