@@ -94,6 +94,28 @@ describe('POST /resumes/parse', () => {
   });
 });
 
+describe('Bedrock failures', () => {
+  const fail = (name: string) => bedrock.on(ConverseCommand).rejects(Object.assign(new Error(name), { name }));
+  it.each([
+    ['ResourceNotFoundException', 503, /isn't switched on yet/],
+    ['AccessDeniedException', 503, /isn't switched on yet/],
+    ['ThrottlingException', 503, /busy/],
+    ['ModelTimeoutException', 504, /too long/],
+    ['ValidationException', 422, /Couldn't open that file/],
+  ])('%s becomes %i with a plain message', async (name, status, message) => {
+    fail(name);
+    const res = await handler(event(pdfBody()));
+    expect(res.statusCode).toBe(status);
+    expect(JSON.parse(res.body!).error).toMatch(message);
+  });
+
+  it('anything unexpected is still a 500', async () => {
+    fail('SomethingNew');
+    const res = await handler(event(pdfBody()));
+    expect(res.statusCode).toBe(500);
+  });
+});
+
 describe('toDraftProfile', () => {
   it('strips self-ID fields anywhere and drops sections the form does not have', () => {
     const out = toDraftProfile({

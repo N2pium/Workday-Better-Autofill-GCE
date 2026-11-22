@@ -137,6 +137,33 @@ export function toDraftProfile(raw: unknown) {
   return parsed.data;
 }
 
+/**
+ * Bedrock failures the user can't fix get a plain message instead of "Internal error".
+ * The full error still goes to the logs (metadata only) so the operator can.
+ */
+export async function callModel(command: ConverseCommand) {
+  try {
+    return await bedrock.send(command);
+  } catch (err) {
+    const name = (err as { name?: string }).name ?? 'Error';
+    logger.error('Bedrock call failed', { errorName: name, error: err as Error });
+    if (name === 'ThrottlingException' || name === 'ServiceUnavailableException') {
+      throw new HttpError(503, 'Resume reading is busy right now. Try again in a minute.');
+    }
+    if (name === 'ModelTimeoutException') {
+      throw new HttpError(504, 'Reading that resume took too long. Try a shorter PDF.');
+    }
+    if (name === 'ValidationException') {
+      throw new HttpError(422, "Couldn't open that file. Try exporting it again as a PDF.");
+    }
+    if (name === 'AccessDeniedException' || name === 'ResourceNotFoundException') {
+      // e.g. the Bedrock model agreement / use-case form isn't complete for this AWS account.
+      throw new HttpError(503, "Resume reading isn't switched on yet. Please try again later.");
+    }
+    throw err;
+  }
+}
+
 export const handler = handle(async (event: Event) => {
   if (event.routeKey !== 'POST /resumes/parse') throw new HttpError(404, 'Not found');
   const sub = callerSub(event);
@@ -152,7 +179,7 @@ export const handler = handle(async (event: Event) => {
   await useAiQuota(sub);
 
   const started = Date.now();
-  const out = await bedrock.send(
+  const out = await callModel(
     new ConverseCommand({
       modelId: MODEL_ID,
       system: [{ text: SYSTEM }],
