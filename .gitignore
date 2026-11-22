@@ -10,3 +10,8 @@ Screenshot*.png
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Obsidian vault: keep shared config (graph colours), skip per-machine UI state
+.obsidian/workspace*.json
+.obsidian/cache
+.trash/
