@@ -413,9 +413,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Delete Data
     const deleteBtn = document.getElementById('deleteBtn');
     if (deleteBtn) {
-        deleteBtn.addEventListener('click', () => {
-            if (confirm("Are you sure you want to wipe all your data? This cannot be undone.")) {
+        deleteBtn.addEventListener('click', async () => {
+            const cloud = await Cloud.status();
+            const question = cloud.signedIn
+                ? 'Wipe all data on this device and sign out? This cannot be undone.\n\n' +
+                  'Your cloud account is NOT deleted — use "Delete cloud account" for that.'
+                : 'Are you sure you want to wipe all your data? This cannot be undone.';
+            if (confirm(question)) {
+                // Sign out first so the refresh token is revoked, not just forgotten.
+                if (cloud.signedIn) await Cloud.signOut().catch(() => {});
                 chrome.storage.local.clear(() => {
+                    renderCloud();
                     statusCtx.textContent = 'All data deleted.';
                     statusCtx.style.color = 'var(--danger)';
 
@@ -500,6 +508,100 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Cloud Account (optional). Signed out = today's local-only behaviour.
+    // Host access to the API and sign-in domains is an optional permission,
+    // requested in the Sign in click (it must come from a user gesture), the
+    // same way Greenhouse support works. See cloud-auth.js.
+    const Cloud = window.EasyApplyCloud;
+    const cloudUi = {
+        signedOut: document.getElementById('cloudSignedOut'),
+        signedIn: document.getElementById('cloudSignedIn'),
+        email: document.getElementById('cloudEmail'),
+        connection: document.getElementById('cloudConnection'),
+        signInBtn: document.getElementById('cloudSignInBtn'),
+        signOutBtn: document.getElementById('cloudSignOutBtn'),
+        deleteBtn: document.getElementById('cloudDeleteBtn')
+    };
+
+    function flash(text, color, ms = 4000) {
+        statusCtx.textContent = text;
+        statusCtx.style.color = color;
+        setTimeout(() => { if (statusCtx.textContent === text) statusCtx.textContent = ''; }, ms);
+    }
+
+    async function checkCloudConnection() {
+        cloudUi.connection.textContent = 'Checking connection…';
+        try {
+            const { items } = await Cloud.api('/profiles');
+            const n = items.length;
+            cloudUi.connection.textContent = `Connected · ${n} synced profile${n === 1 ? '' : 's'}`;
+        } catch (e) {
+            if (e.notSignedIn) {
+                renderCloud();
+                flash(e.message, 'var(--primary)');
+            } else {
+                cloudUi.connection.textContent = `Can't reach the cloud right now (${e.message})`;
+            }
+        }
+    }
+
+    async function renderCloud() {
+        const s = await Cloud.status();
+        cloudUi.signedOut.hidden = s.signedIn;
+        cloudUi.signedIn.hidden = !s.signedIn;
+        if (s.signedIn) {
+            cloudUi.email.textContent = s.email || 'your account';
+            checkCloudConnection();
+        }
+    }
+
+    cloudUi.signInBtn.addEventListener('click', async () => {
+        cloudUi.signInBtn.disabled = true;
+        try {
+            // Called first, inside the click, so Chrome treats it as a user gesture.
+            const granted = await Cloud.requestPermission();
+            if (!granted) {
+                flash('Permission declined — you stay in local-only mode.', 'var(--primary)');
+                return;
+            }
+            await Cloud.signIn();
+            flash('Signed in.', 'var(--success)');
+            await renderCloud();
+        } catch (e) {
+            flash(e.message, 'var(--danger)', 6000);
+        } finally {
+            cloudUi.signInBtn.disabled = false;
+        }
+    });
+
+    cloudUi.signOutBtn.addEventListener('click', async () => {
+        cloudUi.signOutBtn.disabled = true;
+        await Cloud.signOut();
+        cloudUi.signOutBtn.disabled = false;
+        await renderCloud();
+        flash('Signed out. Your data on this device is unchanged.', 'var(--text-muted)');
+    });
+
+    cloudUi.deleteBtn.addEventListener('click', async () => {
+        const ok = confirm(
+            'Delete your cloud account and everything stored in it (synced profiles and tracked applications)?\n\n' +
+            'Your data on this device is not affected. This cannot be undone.'
+        );
+        if (!ok) return;
+        cloudUi.deleteBtn.disabled = true;
+        try {
+            await Cloud.deleteAccount();
+            await renderCloud();
+            flash('Cloud account deleted.', 'var(--danger)', 5000);
+        } catch (e) {
+            flash(`Could not delete the account: ${e.message}`, 'var(--danger)', 6000);
+        } finally {
+            cloudUi.deleteBtn.disabled = false;
+        }
+    });
+
+    renderCloud();
+
     // Live status from content script (side panel stays open, so we can show this)
     chrome.runtime.onMessage.addListener((msg) => {
         if (msg.action === 'fill_complete') {
@@ -519,6 +621,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Export Profile (full backup, including resume)
     document.getElementById('exportBtn').addEventListener('click', () => {
         chrome.storage.local.get(null, (data) => {
+            // Never write sign-in credentials into a backup file.
+            for (const key of Object.keys(data)) if (Cloud.isCloudKey(key)) delete data[key];
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -546,6 +650,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!data || typeof data !== 'object' || Array.isArray(data)) {
                     throw new Error('Invalid profile format');
                 }
+                // A backup file must not be able to plant a sign-in session.
+                for (const key of Object.keys(data)) if (Cloud.isCloudKey(key)) delete data[key];
                 chrome.storage.local.set(data, () => {
                     if (chrome.runtime.lastError) {
                         statusCtx.textContent = 'Error importing (file too large?)';

@@ -8,14 +8,17 @@
         "storage",
         "activeTab",
         "scripting",
-        "sidePanel"
+        "sidePanel",
+        "identity"
     ],
     "host_permissions": [
         "*://*.myworkdayjobs.com/*"
     ],
     "optional_host_permissions": [
         "*://boards.greenhouse.io/*",
-        "*://job-boards.greenhouse.io/*"
+        "*://job-boards.greenhouse.io/*",
+        "https://cfswo4fym6.execute-api.us-east-2.amazonaws.com/*",
+        "https://better-autofill.auth.us-east-2.amazoncognito.com/*"
     ],
     "background": {
         "service_worker": "background.js"

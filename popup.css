@@ -676,3 +676,13 @@ button:focus:not(:focus-visible) {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Cloud account: the destructive action keeps the add-btn shape but reads as danger. */
+.add-btn.cloud-danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+.add-btn.cloud-danger:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+#cloudSection [hidden] { display: none; }

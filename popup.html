@@ -258,6 +258,25 @@
         <div id="resumeStatus" class="helper resume-status"></div>
       </section>
 
+      <!-- Cloud Account (optional; see cloud-auth.js and PRIVACY_POLICY.md) -->
+      <section id="cloudSection">
+        <h2>Cloud Account</h2>
+        <div id="cloudSignedOut">
+          <p class="helper">Optional. Sign in to sync your profile across devices and keep a list of the jobs
+            you apply to. Without an account everything stays on this device, exactly as it does now.
+            Self-identification answers never leave this device.</p>
+          <button type="button" id="cloudSignInBtn" class="add-btn">Sign in</button>
+        </div>
+        <div id="cloudSignedIn" hidden>
+          <p class="helper">Signed in as <strong id="cloudEmail"></strong></p>
+          <p class="helper" id="cloudConnection" aria-live="polite"></p>
+          <div class="row">
+            <button type="button" id="cloudSignOutBtn" class="add-btn half">Sign out</button>
+            <button type="button" id="cloudDeleteBtn" class="add-btn half cloud-danger">Delete cloud account</button>
+          </div>
+        </div>
+      </section>
+
       <!-- Supported Portals -->
       <section>
         <h2>Supported Portals</h2>
@@ -397,6 +416,8 @@
     </div>
   </template>
 
+  <script src="cloud-config.js"></script>
+  <script src="cloud-auth.js"></script>
   <script src="popup.js"></script>
 </body>
 
