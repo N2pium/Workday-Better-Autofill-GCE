@@ -204,8 +204,12 @@ document.addEventListener('DOMContentLoaded', () => {
     form.addEventListener('change', refreshBlankHints);
 
 
-    // Load saved data
-    chrome.storage.local.get(['personalInfo', 'address', 'education', 'workExperience', 'skills', 'language', 'jobPreferences', 'demographics', 'resumeMeta'], (result) => {
+    // Fills the form from profile data: on load, and to show a parsed resume
+    // for review before anything is saved.
+    const PROFILE_KEYS = ['personalInfo', 'address', 'education', 'workExperience', 'skills', 'language', 'jobPreferences', 'demographics', 'resumeMeta'];
+    function populateForm(result) {
+        eduContainer.innerHTML = '';
+        workContainer.innerHTML = '';
         // Personal Info
         if (result.personalInfo) {
             document.getElementById('firstName').value = result.personalInfo.firstName || '';
@@ -283,7 +287,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Must run last: everything above decides what counts as blank.
         refreshBlankHints();
-    });
+    }
+    chrome.storage.local.get(PROFILE_KEYS, populateForm);
 
     // Save data
     form.addEventListener('submit', async (e) => {
@@ -399,6 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (resumeFile) document.getElementById('resumeStatus').textContent = `Stored: ${resumeFile.name}`;
                 refreshBlankHints();
                 syncAfterSave(); // no-op unless the user turned sync on
+                renderHomeProfile();
             }
             const shown = statusCtx.textContent;
             setTimeout(() => { if (statusCtx.textContent === shown) statusCtx.textContent = ''; }, 3000);
@@ -568,6 +574,7 @@ document.addEventListener('DOMContentLoaded', () => {
             : s.pending
                 ? 'Connected · changes waiting to sync'
                 : `Connected · synced ${when(s.lastSyncedAt)}`;
+        renderChip();
     }
 
     // On open: pull a newer synced profile, or push changes that couldn't sync earlier.
@@ -601,6 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cloudUi.email.textContent = s.email || 'your account';
             refreshCloud();
         }
+        renderSignedInViews(s);
     }
 
     // Shared by the welcome screen and the Cloud Account section.
@@ -620,10 +628,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function afterSignIn() {
-        cloudUi.section.classList.remove('collapsed');
-        cloudUi.section.scrollIntoView({ block: 'start' });
-        flash('Signed in. Turn on "Sync my profile" to back it up to your account.', 'var(--success)', 6000);
+    async function afterSignIn() {
+        const { personalInfo } = await chrome.storage.local.get('personalInfo');
+        if (!personalInfo || !personalInfo.firstName) {
+            showTab('profile');
+            importUi.card.classList.add('highlight');
+            flash('Signed in. Upload your resume to fill your profile in seconds.', 'var(--success)', 7000);
+        } else {
+            showTab('settings');
+            cloudUi.section.classList.remove('collapsed');
+            flash('Signed in. Turn on "Sync my profile" to back it up to your account.', 'var(--success)', 7000);
+        }
     }
 
     for (const [button, signUp] of [[welcomeUi.signInBtn, false], [welcomeUi.signUpBtn, true]]) {
@@ -638,6 +653,7 @@ document.addEventListener('DOMContentLoaded', () => {
     welcomeUi.guestBtn.addEventListener('click', async () => {
         await chrome.storage.local.set({ cloudChoice: 'guest' });
         await renderCloud();
+        showTab('home');
     });
 
     cloudUi.signInBtn.addEventListener('click', async () => {
@@ -711,19 +727,345 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // ---------------------------------------------------------------- tabs
+    const Tracker = window.EasyApplyCloudTracker;
+    const tabButtons = Array.from(document.querySelectorAll('.tabbar .tab'));
+    const tabScroll = document.querySelector('.tab-scroll');
+    let signedInNow = false; // kept current by renderCloud(); read inside click handlers
+
+    function showTab(name) {
+        for (const t of tabButtons) {
+            const on = t.dataset.tab === name;
+            t.classList.toggle('active', on);
+            if (on) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
+            document.getElementById(`tab-${t.dataset.tab}`).hidden = !on;
+        }
+        tabScroll.scrollTop = 0;
+        try { sessionStorage.setItem('tab', name); } catch (e) { /* remembering the tab is optional */ } // survives the reload after a sync download
+        if (name === 'home') renderHome();
+        if (name === 'apps') renderApps();
+    }
+    tabButtons.forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab)));
+    document.addEventListener('click', (e) => {
+        const go = e.target.closest('[data-goto]');
+        if (go) showTab(go.dataset.goto);
+    });
+
+    // Builds DOM with textContent only: company and role come from web pages.
+    const el = (tag, cls, text) => {
+        const n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (text !== undefined) n.textContent = text;
+        return n;
+    };
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const shortDate = (iso) => (iso ? new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '');
+    const label = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+    // ---------------------------------------------------------------- home
+    const homeUi = {
+        jobCard: document.querySelector('.job-card'),
+        site: document.getElementById('jobSite'),
+        company: document.getElementById('jobCompany'),
+        role: document.getElementById('jobRole'),
+        name: document.getElementById('homeProfileName'),
+        stats: document.getElementById('homeProfileStats'),
+        list: document.getElementById('homeAppsList'),
+        empty: document.getElementById('homeAppsEmpty')
+    };
+
+    async function renderJobCard() {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        // tab.url is only visible for sites the extension may access (Workday, opted-in Greenhouse).
+        const job = tab && tab.url ? Tracker.normalizeJob({ url: tab.url }) : null;
+        homeUi.jobCard.classList.toggle('inactive', !job);
+        if (job) {
+            homeUi.site.textContent = job.site === 'workday' ? 'Workday application' : 'Greenhouse application';
+            homeUi.company.textContent = job.company;
+            homeUi.role.textContent = job.role;
+        } else {
+            homeUi.site.textContent = 'This page';
+            homeUi.company.textContent = 'Open a job application';
+            homeUi.role.textContent = 'On Workday or Greenhouse, then press Autofill.';
+        }
+    }
+    chrome.tabs.onActivated.addListener(() => renderJobCard());
+    chrome.tabs.onUpdated.addListener((_id, info, tab) => {
+        if (tab.active && (info.url || info.status === 'complete')) renderJobCard();
+    });
+
+    async function renderHomeProfile() {
+        const d = await chrome.storage.local.get(['personalInfo', 'workExperience', 'education', 'skills']);
+        const p = d.personalInfo || {};
+        const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
+        const count = (v) => (Array.isArray(v) ? v.length : 0);
+        homeUi.name.textContent = name || 'Not set up yet';
+        homeUi.stats.textContent = name
+            ? [p.email, [plural(count(d.workExperience), 'job'), plural(count(d.education), 'school'),
+                plural(count(d.skills), 'skill')].join(' · ')].filter(Boolean).join(' — ')
+            : 'Upload your resume or add your details once, and every application fills itself.';
+    }
+
+    async function renderHome() {
+        renderJobCard();
+        renderHomeProfile();
+        if (!signedInNow) {
+            homeUi.list.replaceChildren();
+            homeUi.empty.hidden = false;
+            homeUi.empty.textContent = 'Sign in and every job you autofill is listed here.';
+            return;
+        }
+        try {
+            const { items } = await Tracker.list(Cloud, { limit: 5 });
+            homeUi.list.replaceChildren(...items.map((a) => appItem(a, { compact: true })));
+            homeUi.empty.hidden = items.length > 0;
+            homeUi.empty.textContent = 'No applications yet. Autofill a job and it shows up here.';
+        } catch (e) {
+            homeUi.empty.hidden = false;
+            homeUi.empty.textContent = e.notSignedIn ? e.message : "Couldn't load your applications right now.";
+        }
+    }
+
+    // ---------------------------------------------------------------- applications
+    const appsUi = {
+        list: document.getElementById('appsList'),
+        empty: document.getElementById('appsEmpty'),
+        more: document.getElementById('appsMore'),
+        count: document.getElementById('appsCount'),
+        signedOut: document.getElementById('appsSignedOut')
+    };
+    let appsCursor = null;
+    let appsShown = 0;
+
+    function showAppsCount() {
+        appsUi.count.textContent = appsShown ? `${appsShown}${appsCursor ? '+' : ''}` : '';
+        appsUi.empty.hidden = appsShown > 0 || !signedInNow;
+    }
+
+    function appItem(a, { compact = false } = {}) {
+        const li = el('li', 'app-item');
+        const main = el('div');
+        main.append(el('div', 'app-company', a.company), el('div', 'app-role', a.role));
+        const side = compact ? el('span', 'status-pill', a.status) : el('span', 'app-date', shortDate(a.appliedAt));
+        if (compact) side.dataset.status = a.status;
+        li.append(main, side);
+        if (compact) return li;
+
+        const actions = el('div', 'app-actions');
+        const status = document.createElement('select');
+        status.setAttribute('aria-label', `Status for ${a.company}`);
+        for (const s of Tracker.STATUSES) status.append(Object.assign(el('option', '', label(s)), { value: s }));
+        status.value = a.status;
+        status.addEventListener('change', async () => {
+            const before = a.status;
+            try {
+                await Tracker.update(Cloud, a.id, { status: status.value });
+                a.status = status.value;
+                flash(`${a.company}: ${label(a.status)}`, 'var(--success)');
+            } catch (e) {
+                status.value = before;
+                flash(`Couldn't update the status: ${e.message}`, 'var(--danger)', 6000);
+            }
+        });
+        const open = el('a', '', 'Open posting');
+        if (/^https:\/\//.test(a.url)) Object.assign(open, { href: a.url, target: '_blank', rel: 'noopener noreferrer' });
+        const remove = Object.assign(el('button', '', 'Remove'), { type: 'button' });
+        remove.addEventListener('click', async () => {
+            if (!confirm(`Remove ${a.company} (${a.role}) from your applications?`)) return;
+            try {
+                await Tracker.remove(Cloud, a.id);
+                li.remove();
+                appsShown -= 1;
+                showAppsCount();
+                flash('Removed.', 'var(--text-muted)');
+            } catch (e) {
+                flash(`Couldn't remove it: ${e.message}`, 'var(--danger)', 6000);
+            }
+        });
+        actions.append(status, open, remove);
+        li.append(actions);
+        return li;
+    }
+
+    async function renderApps(append = false) {
+        appsUi.signedOut.hidden = signedInNow;
+        if (!signedInNow) {
+            appsUi.list.replaceChildren();
+            appsUi.more.hidden = true;
+            appsShown = 0;
+            appsCursor = null;
+            showAppsCount();
+            return;
+        }
+        if (!append) { appsCursor = null; appsShown = 0; appsUi.list.replaceChildren(); }
+        try {
+            const page = await Tracker.list(Cloud, { limit: 25, cursor: appsCursor || undefined });
+            appsUi.list.append(...page.items.map((a) => appItem(a)));
+            appsShown += page.items.length;
+            appsCursor = page.cursor || null;
+            appsUi.more.hidden = !appsCursor;
+            showAppsCount();
+        } catch (e) {
+            flash(e.notSignedIn ? e.message : `Couldn't load applications: ${e.message}`, 'var(--danger)', 6000);
+        }
+    }
+    appsUi.more.addEventListener('click', () => renderApps(true));
+
+    // After an autofill: log the job (signed in only) and offer Undo.
+    async function trackApplication(info) {
+        try {
+            const r = await Tracker.track(Cloud, info);
+            if (r.result !== 'tracked') return;
+            const text = `Tracked: ${r.job.company} · ${r.job.role}`;
+            statusCtx.textContent = text;
+            statusCtx.style.color = 'var(--success)';
+            const undo = Object.assign(el('button', '', 'Undo'), { type: 'button' });
+            undo.addEventListener('click', async () => {
+                try {
+                    await Tracker.untrack(Cloud, r.job, r.application);
+                    flash('Not tracked.', 'var(--text-muted)');
+                    refreshTrackedViews();
+                } catch (e) {
+                    flash(`Couldn't undo: ${e.message}`, 'var(--danger)', 6000);
+                }
+            });
+            statusCtx.append(undo);
+            setTimeout(() => { if (statusCtx.textContent.startsWith(text)) statusCtx.textContent = ''; }, 12000);
+            refreshTrackedViews();
+        } catch (e) {
+            flash(`Couldn't track this application: ${e.message}`, 'var(--danger)', 6000);
+        }
+    }
+    function refreshTrackedViews() {
+        if (!document.getElementById('tab-home').hidden) renderHome();
+        if (!document.getElementById('tab-apps').hidden) renderApps();
+    }
+
+    // ---------------------------------------------------------------- resume -> profile
+    const importUi = {
+        card: document.getElementById('resumeImport'),
+        btn: document.getElementById('resumeImportBtn'),
+        file: document.getElementById('resumeImportFile'),
+        status: document.getElementById('resumeImportStatus')
+    };
+    const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const RESUME_TYPES = ['application/pdf', DOCX];
+
+    function updateResumeImport() {
+        importUi.btn.textContent = signedInNow ? 'Upload resume' : 'Sign in to fill from your resume';
+    }
+
+    importUi.btn.addEventListener('click', () => {
+        if (!signedInNow) {
+            showTab('settings');
+            flash('Sign in first: reading a resume uses your account.', 'var(--primary)', 5000);
+            return;
+        }
+        importUi.file.click(); // synchronous, so Chrome keeps the click's user activation
+    });
+
+    // Parsed values overwrite blanks and outdated fields; lists from the resume replace the old ones.
+    // Job preferences and self-ID answers are never touched.
+    function mergeDraft(current, draft) {
+        const out = { ...current };
+        for (const k of ['personalInfo', 'address', 'language']) {
+            if (!draft[k]) continue;
+            const base = { ...(current[k] || {}) };
+            for (const [f, v] of Object.entries(draft[k])) if (v !== '' && v !== null && v !== undefined) base[f] = v;
+            out[k] = base;
+        }
+        for (const k of ['education', 'workExperience']) {
+            if (Array.isArray(draft[k]) && draft[k].length) out[k] = draft[k];
+        }
+        if (Array.isArray(draft.skills) && draft.skills.length) {
+            const have = Array.isArray(current.skills)
+                ? current.skills
+                : String(current.skills || '').split(',').map((s) => s.trim()).filter(Boolean);
+            out.skills = [...new Set([...have, ...draft.skills])];
+        }
+        return out;
+    }
+
+    // Also offer the uploaded file as the resume autofill attaches (kept only if the user saves).
+    function attachResumeFile(file) {
+        try {
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            document.getElementById('resume').files = dt.files;
+            document.getElementById('resumeStatus').textContent = `Will attach: ${file.name} (press Save to keep)`;
+        } catch (e) { /* older Chrome: the user can pick it in the Resume section */ }
+    }
+
+    importUi.file.addEventListener('change', async () => {
+        const file = importUi.file.files[0];
+        importUi.file.value = '';
+        if (!file) return;
+        const lower = file.name.toLowerCase();
+        const type = RESUME_TYPES.includes(file.type) ? file.type
+            : lower.endsWith('.pdf') ? 'application/pdf' : lower.endsWith('.docx') ? DOCX : '';
+        if (!type) { importUi.status.textContent = 'Choose a PDF or Word (.docx) file.'; return; }
+        if (file.size > 3 * 1024 * 1024) { importUi.status.textContent = 'That file is over 3 MB. Export a smaller PDF and try again.'; return; }
+
+        importUi.card.classList.add('busy');
+        importUi.card.classList.remove('highlight');
+        importUi.btn.disabled = true;
+        importUi.status.textContent = 'Reading your resume… this takes about 10 seconds.';
+        try {
+            const data = (await toBase64(file)).split(',')[1];
+            const { profile } = await Cloud.api('/resumes/parse', {
+                method: 'POST',
+                body: { fileName: file.name, contentType: type, data }
+            });
+            const current = await chrome.storage.local.get(PROFILE_KEYS);
+            populateForm(mergeDraft(current, profile));
+            attachResumeFile(file);
+            const n = (v) => (Array.isArray(v) ? v.length : 0);
+            importUi.status.textContent =
+                `Found ${plural(n(profile.workExperience), 'job')}, ${plural(n(profile.education), 'school')} and ` +
+                `${plural(n(profile.skills), 'skill')}. Check the details below, then press Save profile.`;
+            flash('Profile filled from your resume. Review it, then Save.', 'var(--success)', 7000);
+        } catch (e) {
+            importUi.status.textContent = e.notSignedIn ? e.message : `Couldn't read that resume: ${e.message}`;
+        } finally {
+            importUi.card.classList.remove('busy');
+            importUi.btn.disabled = false;
+        }
+    });
+
+    // ---------------------------------------------------------------- top bar + start
+    async function renderChip() {
+        const chip = document.getElementById('syncChip');
+        if (!signedInNow) { chip.hidden = true; return; }
+        const s = await CloudSync.state();
+        chip.hidden = false;
+        chip.className = `chip ${s.enabled ? (s.pending ? 'warn' : 'ok') : ''}`;
+        chip.textContent = s.enabled ? (s.pending ? '● Sync pending' : '● Synced') : 'Signed in';
+    }
+
+    // Called by renderCloud() whenever the account state may have changed.
+    function renderSignedInViews(s) {
+        signedInNow = s.signedIn;
+        renderChip();
+        updateResumeImport();
+        refreshTrackedViews();
+    }
+
+    let lastTab = null;
+    try { lastTab = sessionStorage.getItem('tab'); } catch (e) { /* optional */ }
+    showTab(['home', 'profile', 'apps', 'settings'].includes(lastTab) ? lastTab : 'home');
     renderCloud();
 
     // Live status from content script (side panel stays open, so we can show this)
     chrome.runtime.onMessage.addListener((msg) => {
         if (msg.action === 'fill_complete') {
-            statusCtx.textContent = 'Autofill complete ✓';
-            statusCtx.style.color = 'var(--success)';
-            setTimeout(() => { statusCtx.textContent = ''; }, 5000);
+            // Don't cover a "Tracked … Undo" message from an earlier page of the same form.
+            if (!statusCtx.querySelector('button')) flash('Autofill complete ✓', 'var(--success)', 5000);
+            if (msg.job) trackApplication(msg.job);
         }
     });
 
     // Collapsible sections — click a section title to collapse/expand it
-    document.querySelectorAll('form section h2').forEach(h2 => {
+    document.querySelectorAll('.tab-panel section h2').forEach(h2 => {
         h2.addEventListener('click', () => {
             h2.parentElement.classList.toggle('collapsed');
         });

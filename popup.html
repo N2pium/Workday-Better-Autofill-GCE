@@ -23,13 +23,53 @@
       <p class="helper welcome-status" id="welcomeStatus" aria-live="polite"></p>
     </div>
   </div>
-  <div class="container">
-    <header>
-      <button id="autofillBtn" class="autofill-btn">AUTOFILL ACTIVE PAGE</button>
-      <h1>Profile Settings</h1>
+  <div class="container app">
+    <header class="topbar">
+      <span class="brand">Better Autofill</span>
+      <span id="syncChip" class="chip" hidden></span>
     </header>
 
-    <form id="profileForm">
+    <main class="tab-scroll">
+      <!-- HOME: the page you're on, your profile at a glance, recent applications -->
+      <div class="tab-panel" id="tab-home">
+        <div class="job-card">
+          <p class="kicker" id="jobSite">This page</p>
+          <p class="job-company" id="jobCompany">Open a job application</p>
+          <p class="job-role" id="jobRole">Workday or Greenhouse</p>
+          <button id="autofillBtn" class="autofill-btn">Autofill this page</button>
+        </div>
+
+        <div class="panel-card">
+          <div class="card-head">
+            <p class="kicker">Your profile</p>
+            <button type="button" class="link-btn" data-goto="profile">Edit</button>
+          </div>
+          <p class="card-title" id="homeProfileName">Not set up yet</p>
+          <p class="helper" id="homeProfileStats">Add your details once and every application fills itself.</p>
+        </div>
+
+        <div class="panel-card">
+          <div class="card-head">
+            <p class="kicker">Recent applications</p>
+            <button type="button" class="link-btn" data-goto="apps">See all</button>
+          </div>
+          <ul class="app-list compact" id="homeAppsList"></ul>
+          <p class="helper" id="homeAppsEmpty">Sign in and every job you autofill is listed here.</p>
+        </div>
+      </div>
+
+      <!-- PROFILE: fill from a resume, then the form autofill reads -->
+      <div class="tab-panel" id="tab-profile" hidden>
+        <div class="panel-card resume-import" id="resumeImport">
+          <p class="kicker">Fill from your resume</p>
+          <p class="helper" id="resumeImportHelp">Upload a PDF or Word resume and your profile fills itself.
+            You review everything before saving. The file is read once and not stored.</p>
+          <input type="file" id="resumeImportFile" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
+          <button type="button" id="resumeImportBtn" class="autofill-btn">Upload resume</button>
+          <p class="helper import-status" id="resumeImportStatus" aria-live="polite"></p>
+        </div>
+
+        <form id="profileForm">
       <!-- Names the fields autofill will pass over, because a skipped field and
            a filled one look identical on the job page. Written by popup.js and
            hidden entirely when nothing is blank. -->
@@ -267,11 +307,35 @@
       <!-- Resume -->
       <section>
         <h2>Resume</h2>
-        <p class="helper">Upload PDF or DOCX (Max 2MB)</p>
+        <p class="helper">The file autofill attaches to applications. PDF or Word, up to 3 MB.</p>
         <input type="file" id="resume" accept=".pdf,.doc,.docx" />
         <div id="resumeStatus" class="helper resume-status"></div>
       </section>
 
+          <div class="sticky-footer">
+            <button type="submit" id="saveBtn">Save profile</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- APPLICATIONS: every job you autofilled while signed in -->
+      <div class="tab-panel" id="tab-apps" hidden>
+        <div class="card-head">
+          <p class="kicker">Applications</p>
+          <span class="kicker" id="appsCount"></span>
+        </div>
+        <div class="panel-card" id="appsSignedOut" hidden>
+          <p class="card-title">Track every application</p>
+          <p class="helper">Sign in and each job you autofill is added here automatically, with its link and status.</p>
+          <button type="button" class="add-btn" data-goto="settings">Sign in</button>
+        </div>
+        <ul class="app-list" id="appsList"></ul>
+        <p class="helper" id="appsEmpty" hidden>No applications yet. Autofill a job application and it appears here.</p>
+        <button type="button" class="add-btn" id="appsMore" hidden>Load more</button>
+      </div>
+
+      <!-- SETTINGS: account and sync, job sites, backup -->
+      <div class="tab-panel" id="tab-settings" hidden>
       <!-- Cloud Account (optional; see cloud-auth.js and PRIVACY_POLICY.md) -->
       <section id="cloudSection">
         <h2>Cloud Account</h2>
@@ -320,12 +384,34 @@
         <input type="file" id="importFile" accept=".json,application/json" style="display:none" />
       </section>
 
-      <div class="sticky-footer">
+      <section>
+        <h2>Danger Zone</h2>
+        <p class="helper">Wipes everything stored on this device. Your cloud account is separate.</p>
         <button type="button" id="deleteBtn" class="danger-btn">Delete all data</button>
-        <button type="submit" id="saveBtn">Save Profile</button>
-        <div id="status" class="status"></div>
+      </section>
       </div>
-    </form>
+    </main>
+
+    <div id="status" class="status toast" role="status" aria-live="polite"></div>
+
+    <nav class="tabbar" aria-label="Sections">
+      <button type="button" class="tab active" data-tab="home" aria-controls="tab-home" aria-current="page">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+        <span>Home</span>
+      </button>
+      <button type="button" class="tab" data-tab="profile" aria-controls="tab-profile">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+        <span>Profile</span>
+      </button>
+      <button type="button" class="tab" data-tab="apps" aria-controls="tab-apps">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+        <span>Applications</span>
+      </button>
+      <button type="button" class="tab" data-tab="settings" aria-controls="tab-settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
   </div>
 
   <!-- Templates -->
@@ -439,6 +525,7 @@
   <script src="cloud-config.js"></script>
   <script src="cloud-auth.js"></script>
   <script src="cloud-sync.js"></script>
+  <script src="cloud-tracker.js"></script>
   <script src="popup.js"></script>
 </body>
 

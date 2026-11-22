@@ -97,7 +97,7 @@ describe('ApiStack', () => {
 
   it('requires the JWT authorizer on every route', () => {
     const routes = api.findResources('AWS::ApiGatewayV2::Route');
-    expect(Object.keys(routes)).toHaveLength(9);
+    expect(Object.keys(routes)).toHaveLength(10);
     for (const r of Object.values(routes)) expect(r.Properties.AuthorizationType).toBe('JWT');
   });
 
@@ -122,13 +122,32 @@ describe('ApiStack', () => {
 
   it('runs functions on arm64 Node.js 22 with tracing, outside any VPC', () => {
     const fns = api.findResources('AWS::Lambda::Function');
-    expect(Object.keys(fns)).toHaveLength(3);
+    expect(Object.keys(fns)).toHaveLength(4);
     for (const f of Object.values(fns)) {
       expect(f.Properties.Runtime).toBe('nodejs22.x');
       expect(f.Properties.Architectures).toEqual(['arm64']);
       expect(f.Properties.TracingConfig).toEqual({ Mode: 'Active' });
       expect(f.Properties.VpcConfig).toBeUndefined();
     }
+  });
+
+  it('lets only the resume function call Bedrock, and only the one Haiku model via the US profile', () => {
+    const policies = Object.values(api.findResources('AWS::IAM::Policy'));
+    const withBedrock = policies.filter((p) => JSON.stringify(p).includes('bedrock:'));
+    expect(withBedrock).toHaveLength(1);
+    const text = JSON.stringify(withBedrock[0]);
+    expect(text).toContain('inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0');
+    for (const r of ['us-east-1', 'us-east-2', 'us-west-2']) {
+      expect(text).toContain(`arn:aws:bedrock:${r}::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0`);
+    }
+    expect(text).not.toContain('bedrock:*');
+    expect(text).not.toMatch(/foundation-model\/\*/);
+  });
+
+  it('gives the resume function room for a model call but stays under the API limit', () => {
+    const fns = Object.values(api.findResources('AWS::Lambda::Function'));
+    const resume = fns.find((f) => f.Properties.Environment?.Variables?.MODEL_ID);
+    expect(resume?.Properties.Timeout).toBe(29);
   });
 
   it('grants no table Scan and no wildcard actions', () => {

@@ -41,6 +41,7 @@ When you use an AI feature — parsing a resume into your profile, drafting an a
 - Self-identification answers are **never** included.
 - AI requests are processed by Amazon Bedrock **within the United States** (AWS Regions us-east-1, us-east-2 and us-west-2). Amazon Bedrock does not store your inputs or outputs, does not use them to train AI models, and does not share them with model providers.
 - AI results are suggestions. Nothing is entered into a form or saved to your profile until you review and accept it.
+- A resume you upload to fill in your profile is read once to produce that suggestion and is **not stored** by us or by Amazon Bedrock.
 
 ### Follow-up reminders (optional)
 If you turn on reminders, we email you at your sign-in address (sent through Amazon Simple Email Service) when an application has had no status change for a set number of days. You can turn reminders off for one application or for all of them, and every reminder email includes a way to stop them.

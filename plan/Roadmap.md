@@ -27,14 +27,17 @@ Backend code lives in `cloud/` (see `cloud/README.md`). Deployed to us-east-2 on
 - [x] Extension sign-in / sign-out / delete cloud account - [[Chrome Extension]], [[Flow - Sign in]] (`cloud-auth.js`; optional host permissions, requested on Sign in)
 - [x] Extension: welcome screen (Sign in / Create account / Continue without an account) - [[Chrome Extension]]
 - [x] Extension: opt-in profile sync toggle - [[F01 Accounts and Profile Sync]] (`cloud-sync.js`; one "default" profile, version-checked, conflicts ask)
-- [ ] Extension: log application after autofill - [[F05 Application Tracker]]
+- [x] Extension: log application after autofill, with Undo - [[F05 Application Tracker]] (`cloud-tracker.js`)
+- [x] Side panel overhaul: Home / Profile / Applications / Settings tabs
+- [x] Resume -> profile (pulled forward from phase 2): `POST /resumes/parse`, Claude Haiku 4.5 reads the PDF/DOCX directly, file never stored - [[F03 Resume Parsing]]
+- [ ] Bedrock: submit the Anthropic use-case form, then live-test resume parsing
 - [ ] [[Web Dashboard]] on [[CloudFront]] + S3
 - [x] [[Flow - Delete account]] endpoint (deployed)
 - [ ] Alarms + dashboards - [[Observability]] (alarms in code, no notification target yet)
 
 ## Phase 2 - AI
 - [ ] [[S3 Resumes]] + [[resume-svc]] - [[F02 Resume Vault]]
-- [ ] [[SQS]] + [[parse-worker]] + [[Bedrock]] - [[F03 Resume Parsing]]
+- [~] ~~[[SQS]] + [[parse-worker]]~~ replaced by synchronous `POST /resumes/parse` (phase 1) - [[F03 Resume Parsing]]
 - [ ] [[ai-svc]] with per-user daily quota - [[F04 AI Answers and Match Score]] (no streaming at first - [[Key Decisions]] #8)
 - [ ] [[answers-svc]] + library UI in the extension - [[F11 Answer Library]]
 

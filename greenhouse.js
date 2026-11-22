@@ -65,10 +65,24 @@
         ghIsFilling = false;
 
         try {
-            chrome.runtime.sendMessage({ action: 'fill_complete' }, () => {
+            chrome.runtime.sendMessage({ action: 'fill_complete', job: ghJobInfo() }, () => {
                 void chrome.runtime.lastError;
             });
         } catch (e) { /* panel closed */ }
+    }
+
+    // What the page says about the job, for the application tracker (cloud-tracker.js).
+    function ghJobInfo() {
+        const text = (el) => (el && el.textContent ? el.textContent.replace(/\s+/g, ' ').trim() : '');
+        const heading = document.querySelector('.app-title, .job__title h1, .job-title, h1');
+        const company = document.querySelector('.company-name, .job__company, [class*="company-name"]');
+        return {
+            site: 'greenhouse',
+            url: location.href,
+            title: text(heading).slice(0, 200),
+            company: text(company).replace(/^at\s+/i, '').slice(0, 200),
+            pageTitle: (document.title || '').slice(0, 300)
+        };
     }
 
     /**

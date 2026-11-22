@@ -107,11 +107,12 @@
         });
     }
 
-    // Also switches sync off on this device (cloudSync, see cloud-sync.js): after
-    // a different account signs in, this device's profile must not flow into it.
+    // Also switches sync off on this device (cloudSync, see cloud-sync.js) and
+    // forgets which jobs were logged (cloudTracked, cloud-tracker.js): after a
+    // different account signs in, nothing from this one may flow into it.
     async function clearCredentials() {
         await chrome.storage.session.remove(SESSION_KEY);
-        await chrome.storage.local.remove([AUTH_KEY, 'cloudSync']);
+        await chrome.storage.local.remove([AUTH_KEY, 'cloudSync', 'cloudTracked']);
     }
 
     // ------------------------------------------------------------ public API

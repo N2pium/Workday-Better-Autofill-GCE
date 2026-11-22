@@ -56,3 +56,14 @@ TypeScript for CDK and the API Lambdas (including [[ai-svc]] and [[answers-svc]]
 auth, quota and validation code, CDK's first-class language. Python for [[parse-worker]]
 (PDF/DOCX libraries) and telemetry analysis ([[Athena]] scripts). The profile schema is
 defined once in zod and exported as JSON Schema, which the Python side validates against.
+
+## 10. Resume parsing: synchronous, document input, nothing stored
+Supersedes the queue design in #5 and the Python worker in #9 for this feature. Claude on
+Bedrock reads PDF/DOCX directly (Converse `document` block), so no PDF libraries are
+needed. `POST /resumes/parse` sends the file, forces a `save_profile` tool whose schema is
+the profile shape, validates the result with the same zod schema as `PUT /profiles`, and
+strips self-ID keys. The file is never written anywhere. Trade-off: the request waits
+~5-15 s (API limit 30 s); if resumes ever run long, move to S3 + SQS as originally planned.
+Model: Claude Haiku 4.5 via the `us.` profile (Haiku 5.5 is not enabled for this account).
+Shared daily AI quota: 20 calls per user.
+

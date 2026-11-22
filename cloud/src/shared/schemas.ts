@@ -15,7 +15,7 @@ const monthYear = z.object({ month: text(20), year: text(10) }).partial().catcha
 
 export const SELF_ID_KEY = /^(demographics?|gender|race|ethnicity|hispanic.*|veteran.*|disabilit.*|selfid.*|self_id.*)$/i;
 
-const profileData = z
+export const profileData = z
   .object({
     personalInfo: z
       .object({

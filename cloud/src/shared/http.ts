@@ -41,10 +41,10 @@ export function callerUsername(event: Event): string {
 
 export const MAX_BODY_BYTES = 100_000;
 
-export function parseBody(event: Event): unknown {
+export function parseBody(event: Event, maxBytes = MAX_BODY_BYTES): unknown {
   if (!event.body) throw new HttpError(400, 'Request body required');
   const raw = event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString('utf8') : event.body;
-  if (Buffer.byteLength(raw, 'utf8') > MAX_BODY_BYTES) throw new HttpError(413, 'Request body too large');
+  if (Buffer.byteLength(raw, 'utf8') > maxBytes) throw new HttpError(413, 'Request body too large');
   try {
     return JSON.parse(raw);
   } catch {

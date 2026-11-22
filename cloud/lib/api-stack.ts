@@ -41,7 +41,12 @@ export class ApiStack extends Stack {
     const { config, table, key, userPool, clients } = props;
 
     // ---------------------------------------------------------------- functions
-    const fn = (name: string, entry: string, actions: string[]) => {
+    const fn = (
+      name: string,
+      entry: string,
+      actions: string[],
+      opts: { timeout?: Duration; memorySize?: number } = {},
+    ) => {
       const logGroup = new logs.LogGroup(this, `${name}Logs`, {
         retention: LOG_RETENTION,
         removalPolicy: RemovalPolicy.DESTROY,
@@ -51,8 +56,8 @@ export class ApiStack extends Stack {
         handler: 'handler',
         runtime: lambda.Runtime.NODEJS_22_X,
         architecture: lambda.Architecture.ARM_64,
-        memorySize: 256,
-        timeout: Duration.seconds(10),
+        memorySize: opts.memorySize ?? 256,
+        timeout: opts.timeout ?? Duration.seconds(10),
         tracing: lambda.Tracing.ACTIVE,
         logGroup,
         loggingFormat: lambda.LoggingFormat.JSON,
@@ -77,6 +82,29 @@ export class ApiStack extends Stack {
       new iam.PolicyStatement({
         actions: ['cognito-idp:AdminDeleteUser', 'cognito-idp:AdminUserGlobalSignOut'],
         resources: [userPool.userPoolArn],
+      }),
+    );
+
+    // Resume -> draft profile with Claude on Bedrock. Claude in us-east-2 is only
+    // offered through the US cross-Region inference profile (plan/Key Decisions.md #7),
+    // which the project SCP allows; the file is never stored.
+    const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+    const BASE_MODEL = MODEL_ID.replace(/^us\./, '');
+    const resumes = fn('ResumesFn', 'resumes/handler.ts', ['dynamodb:UpdateItem'], {
+      timeout: Duration.seconds(29), // API Gateway's integration limit is 30 s
+      memorySize: 512,
+    });
+    resumes.addEnvironment('MODEL_ID', MODEL_ID);
+    resumes.addEnvironment('AI_DAILY_LIMIT', '20');
+    resumes.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [
+          `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/${MODEL_ID}`,
+          ...['us-east-1', 'us-east-2', 'us-west-2'].map(
+            (r) => `arn:aws:bedrock:${r}::foundation-model/${BASE_MODEL}`,
+          ),
+        ],
       }),
     );
 
@@ -119,6 +147,7 @@ export class ApiStack extends Stack {
     route(PATCH, '/applications/{id}', applications, 'UpdateApplication');
     route(DELETE, '/applications/{id}', applications, 'DeleteApplication');
     route(DELETE, '/account', account, 'DeleteAccount');
+    route(POST, '/resumes/parse', resumes, 'ParseResume');
 
     // Throttling protects the bill; access logs record authorizer decisions (no bodies).
     const accessLogs = new logs.LogGroup(this, 'ApiAccessLogs', {
@@ -142,7 +171,7 @@ export class ApiStack extends Stack {
     // ---------------------------------------------------------------- alarms
     // No notification target yet; they show in the CloudWatch console. Wire an
     // SNS topic here once there is an address to page.
-    for (const f of [profiles, applications, account]) {
+    for (const f of [profiles, applications, account, resumes]) {
       new cloudwatch.Alarm(this, `${f.node.id}Errors`, {
         metric: f.metricErrors({ period: Duration.minutes(5) }),
         threshold: 1,

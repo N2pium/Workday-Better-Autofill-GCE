@@ -225,9 +225,10 @@ async function scanAndFill() {
     console.log("Workday Autoplay: Scan completed.");
     isScanning = false;
 
-    // Notify the side panel so it can show live status
+    // Notify the side panel so it can show live status. `job` lets a signed-in
+    // user's panel log the application (cloud-tracker.js); nothing is sent otherwise.
     try {
-        chrome.runtime.sendMessage({ action: 'fill_complete' }, () => {
+        chrome.runtime.sendMessage({ action: 'fill_complete', job: workdayJobInfo() }, () => {
             // Reading lastError prevents "Unchecked runtime.lastError" noise when panel is closed
             void chrome.runtime.lastError;
         });
@@ -238,6 +239,21 @@ async function scanAndFill() {
         observer.disconnect();
         console.log("Workday Autoplay: Observer disconnected. Will not auto-scan again on this page.");
     }
+}
+
+// What the page says about the job, for the application tracker. Raw text only;
+// cloud-tracker.js turns it into company / role / link and falls back to the URL.
+function workdayJobInfo() {
+    const text = (el) => (el && el.textContent ? el.textContent.replace(/\s+/g, ' ').trim() : '');
+    const heading = document.querySelector('[data-automation-id="jobTitleHeading"], [data-automation-id="jobPostingHeader"]');
+    const logo = document.querySelector('[data-automation-id="logo"] img, img[data-automation-id="logo"]');
+    return {
+        site: 'workday',
+        url: location.href,
+        title: text(heading).slice(0, 200),
+        company: ((logo && logo.alt) || '').trim().slice(0, 200),
+        pageTitle: (document.title || '').slice(0, 300)
+    };
 }
 
 function formatDateString(dateObj) {
