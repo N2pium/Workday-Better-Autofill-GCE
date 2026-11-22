@@ -101,6 +101,12 @@ describe('ApiStack', () => {
     for (const r of Object.values(routes)) expect(r.Properties.AuthorizationType).toBe('JWT');
   });
 
+  it('allows only http(s) dashboard origins in CORS (API Gateway rejects chrome-extension://)', () => {
+    api.hasResourceProperties('AWS::ApiGatewayV2::Api', {
+      CorsConfiguration: Match.objectLike({ AllowOrigins: ['http://localhost:5173'] }),
+    });
+  });
+
   it('throttles the stage and writes access logs', () => {
     api.hasResourceProperties('AWS::ApiGatewayV2::Stage', {
       DefaultRouteSettings: { ThrottlingRateLimit: 20, ThrottlingBurstLimit: 40 },

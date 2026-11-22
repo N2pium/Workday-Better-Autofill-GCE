@@ -3,3 +3,4 @@ cdk.out/
 *.js
 *.d.ts
 .env*
+cdk-outputs.json

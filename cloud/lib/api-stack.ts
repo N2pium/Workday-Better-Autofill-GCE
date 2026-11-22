@@ -81,14 +81,13 @@ export class ApiStack extends Stack {
     );
 
     // ---------------------------------------------------------------- API
-    const allowOrigins = [
-      ...config.extensionIds.map((id) => `chrome-extension://${id}`),
-      ...config.dashboardUrls,
-    ];
+    // CORS is for the web dashboard only. API Gateway rejects chrome-extension://
+    // origins, and the extension doesn't need CORS: an MV3 extension may call any
+    // host listed in its manifest host_permissions (add the ApiUrl there).
     this.api = new apigw.HttpApi(this, 'HttpApi', {
       apiName: 'easyapply-api',
       corsPreflight: {
-        allowOrigins,
+        allowOrigins: config.dashboardUrls,
         allowMethods: [
           apigw.CorsHttpMethod.GET,
           apigw.CorsHttpMethod.POST,
