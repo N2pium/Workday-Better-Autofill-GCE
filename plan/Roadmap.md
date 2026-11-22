@@ -15,16 +15,18 @@ Colours on the [[Architecture.canvas|board]]: green = phase 1, purple = 2, cyan 
 - [x] Rewrite `PRIVACY_POLICY.md` draft - see [[Security and Privacy]] (draft only; rebuild `docs/index.html` with `node design/build-privacy.mjs` at the 2.0 release)
 
 ## Phase 1 - MVP
-- [ ] CDK app skeleton (TypeScript) - [[CDK and CI-CD]]
-- [ ] [[Cognito]] user pool + Google sign-in + extension redirect URI
-- [ ] [[API Gateway]] HTTP API + JWT authorizer + throttling
-- [ ] [[DynamoDB]] single table, PITR on
-- [ ] [[profile-svc]] - [[F01 Accounts and Profile Sync]]
-- [ ] [[tracker-svc]] - [[F05 Application Tracker]]
+Backend code lives in `cloud/` (see `cloud/README.md`). "code" = written and tested, not yet deployed.
+- [x] CDK app skeleton (TypeScript) - [[CDK and CI-CD]] (code; 24 tests passing)
+- [ ] [[Cognito]] user pool + Google sign-in + extension redirect URI (code; needs extension ID + Google OAuth client to deploy)
+- [ ] [[API Gateway]] HTTP API + JWT authorizer + throttling (code)
+- [ ] [[DynamoDB]] single table, PITR on (code)
+- [ ] [[profile-svc]] - [[F01 Accounts and Profile Sync]] (code)
+- [ ] [[tracker-svc]] - [[F05 Application Tracker]] (code)
+- [ ] Deploy the three stacks to us-east-2 (bootstrap first)
 - [ ] Extension: sign-in, opt-in sync toggle, log application after autofill - [[Chrome Extension]]
 - [ ] [[Web Dashboard]] on [[CloudFront]] + S3
-- [ ] [[Flow - Delete account]] endpoint
-- [ ] Alarms + dashboards - [[Observability]]
+- [ ] [[Flow - Delete account]] endpoint (code)
+- [ ] Alarms + dashboards - [[Observability]] (alarms in code, no notification target yet)
 
 ## Phase 2 - AI
 - [ ] [[S3 Resumes]] + [[resume-svc]] - [[F02 Resume Vault]]
