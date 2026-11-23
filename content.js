@@ -2482,25 +2482,32 @@ async function handleJobPreferences() {
         });
     }
 
-    // 5. US Citizenship — always answer Yes
-    const citizenshipKeywords = [
-        'citizen of the united states',
-        'u.s. citizen',
-        'us citizen',
-        'united states citizen',
-        'are you a citizen'
-    ];
-    // Try radio-button style first
-    let citizenAnswered = await answerYesNo(citizenshipKeywords, 'Yes');
-    // Try Workday dropdown style as fallback
-    if (!citizenAnswered) {
-        citizenAnswered = await selectWorkdayDropdown('citizen of the United States', 'Yes');
-    }
-    if (!citizenAnswered) {
-        citizenAnswered = await selectWorkdayDropdown('U.S. Citizen', 'Yes');
-    }
-    if (!citizenAnswered) {
-        await selectWorkdayDropdown('citizenship', 'Yes');
+    // 5. US Citizenship. Answered Yes ONLY when the user ticked "I am a U.S.
+    // citizen". This used to answer Yes for everyone, which is a false
+    // statement on an application for anyone who isn't a citizen. Unticked
+    // means unanswered (never "No": unticked can just mean "not set").
+    if (prefs.usCitizen) {
+        const citizenshipKeywords = [
+            'citizen of the united states',
+            'u.s. citizen',
+            'us citizen',
+            'united states citizen',
+            'are you a citizen'
+        ];
+        // Radios or a dropdown inside the question's own block first, then a
+        // dropdown found by its question text.
+        let citizenAnswered = await answerYesNo(citizenshipKeywords, 'Yes');
+        if (!citizenAnswered) {
+            await step('U.S. citizen', async () => {
+                for (const label of ['citizen of the United States', 'U.S. Citizen', 'citizenship']) {
+                    const r = await selectWorkdayDropdown(label, 'Yes');
+                    if (r !== ABSENT) return r;
+                }
+                return ABSENT;
+            });
+        }
+    } else {
+        console.log('Workday Autoplay: citizenship question left for the user ("I am a U.S. citizen" not ticked).');
     }
 }
 

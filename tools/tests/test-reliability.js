@@ -71,6 +71,15 @@ function boot(body, opts = {}) {
   const t = JSON.parse(w.eval('__trace()'));
   check('a choice that did not stick is reported as failed', [t[0] && t[0].status, /still shows/.test(t[0] && t[0].detail)], ['failed', true]);
 
+  // ---------------------------------------------------------------- citizenship
+  const citizenQ = () => question('Are you a citizen of the United States?', ['Yes', 'No'], 'cz');
+  w = boot(citizenQ());
+  await w.eval(`__set({ jobPreferences: {} }); handleJobPreferences()`);
+  check('citizenship left unanswered when "I am a U.S. citizen" is not ticked', w.document.getElementById('cz').textContent, 'Select One');
+  w = boot(citizenQ());
+  await w.eval(`__set({ jobPreferences: { usCitizen: true } }); handleJobPreferences()`);
+  check('citizenship answered Yes only when ticked', w.document.getElementById('cz').textContent, 'Yes');
+
   // ---------------------------------------------------------------- voluntary disclosures
   w = boot(
     question('Gender', ['Male', 'Female', 'I do not wish to self-identify'], 'g') +

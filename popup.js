@@ -266,6 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Defaults to false, unlike authorizedToWork below. Nobody's age
             // should be asserted on their behalf by a default.
             document.getElementById('isAtLeast18').checked = result.jobPreferences.isAtLeast18 || false;
+            document.getElementById('usCitizen').checked = result.jobPreferences.usCitizen || false;
             document.getElementById('formerEmployee').checked = result.jobPreferences.formerEmployee || false;
             document.getElementById('authorizedToWork').checked = result.jobPreferences.authorizedToWork !== false; // Default true
             document.getElementById('requiresSponsorship').checked = result.jobPreferences.requiresSponsorship || false;
@@ -356,6 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             jobPreferences: {
                 isAtLeast18: document.getElementById('isAtLeast18').checked,
+                usCitizen: document.getElementById('usCitizen').checked,
                 formerEmployee: document.getElementById('formerEmployee').checked,
                 authorizedToWork: document.getElementById('authorizedToWork').checked,
                 requiresSponsorship: document.getElementById('requiresSponsorship').checked,

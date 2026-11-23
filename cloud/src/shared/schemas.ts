@@ -56,6 +56,7 @@ export const profileData = z
       .object({
         isAtLeast18: z.boolean(), formerEmployee: z.boolean(), authorizedToWork: z.boolean(),
         requiresSponsorship: z.boolean(), sourceReferral: text(200), autoDisclosures: z.boolean(),
+        usCitizen: z.boolean(),
       })
       .partial()
       .catchall(scalar),
