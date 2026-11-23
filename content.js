@@ -41,6 +41,46 @@ let isScanning = false; // Guard flag to prevent infinite loops
 // question: whichever rule answers a block first owns it, and no later rule may
 // overwrite that answer. Reset at the top of every scan.
 let answeredQuestions = new WeakSet();
+
+/*
+ * FILL REPORT. Every fill step records how far it got, so a failure on a real
+ * page says WHERE it failed (not found / no options / chose it but it didn't
+ * stick) instead of silently looking like success. Labels and statuses only:
+ * never the values written. Sent to the side panel with fill_complete.
+ */
+let fillTrace = [];
+let traceSection = '';
+const ABSENT = null; // a step whose field isn't on this page: not reported
+
+async function step(field, run) {
+    const warns = [];
+    const orig = console.warn;
+    console.warn = (...a) => {
+        warns.push(a.filter(x => typeof x !== 'object').join(' ').replace(/^Workday Autoplay:\s*/, ''));
+        orig.apply(console, a);
+    };
+    let result;
+    try { result = await run(); }
+    catch (e) { result = false; warns.push(e.message); }
+    finally { console.warn = orig; }
+    if (result === ABSENT || result === undefined && !warns.length) return result;
+    const status = result === false ? 'failed' : result === 'skipped' ? 'skipped' : 'filled';
+    fillTrace.push({ section: traceSection, field, status, detail: status === 'filled' ? '' : (warns[warns.length - 1] || '').slice(0, 200) });
+    return result;
+}
+
+/*
+ * SCOPE. Lookups inside a repeated panel (Education 2, Work Experience 3) must
+ * not find the same-named field in another panel. While a panel is being
+ * filled, label/XPath lookups search only inside it. Dropdown option lists are
+ * portalled to <body>, so those lookups stay document-wide on purpose.
+ */
+let SCOPE = document;
+async function withScope(root, fn) {
+    const prev = SCOPE;
+    SCOPE = root || document;
+    try { return await fn(); } finally { SCOPE = prev; }
+}
 let lastScannedUrl = ''; // Track URL to detect navigation
 let hasUploadedResume = false; // Track resume upload status
 
@@ -81,6 +121,8 @@ async function scanAndFill() {
 
     // Fresh page, fresh set of answered questions.
     answeredQuestions = new WeakSet();
+    fillTrace = [];
+    traceSection = '';
 
     if (!userProfile) {
         isScanning = false;
@@ -88,110 +130,87 @@ async function scanAndFill() {
     }
 
     // 1. Personal & Address
+    traceSection = 'My Information';
     if (userProfile.personalInfo) {
-        fillFieldByFuzzyLabel(['first name', 'given name'], userProfile.personalInfo.firstName);
-        fillFieldByFuzzyLabel(['last name', 'family name', 'surname'], userProfile.personalInfo.lastName);
-        fillFieldByFuzzyLabel(['phone', 'mobile'], userProfile.personalInfo.phone);
-        // Phone Device Type dropdown — select Mobile
-        await selectWorkdayDropdown('Phone Device Type', 'Mobile');
-        await selectWorkdayDropdown('Device Type', 'Mobile');
-        fillFieldByFuzzyLabel(['email'], userProfile.personalInfo.email);
+        const p = userProfile.personalInfo;
+        await step('First name', () => fillFieldByFuzzyLabel(['first name', 'given name'], p.firstName));
+        await step('Last name', () => fillFieldByFuzzyLabel(['last name', 'family name', 'surname'], p.lastName));
+        await step('Phone', () => fillFieldByFuzzyLabel(['phone', 'mobile'], p.phone));
+        await step('Phone device type', async () => (await selectWorkdayDropdown('Phone Device Type', 'Mobile')) ?? selectWorkdayDropdown('Device Type', 'Mobile'));
+        await step('Email', () => fillFieldByFuzzyLabel(['email'], p.email));
 
         // LinkedIn and the personal website are two different profile fields and
-        // have to stay two different fields on the form. 'website' used to be a
-        // key on the LinkedIn fill, so a portfolio/website box was given the
-        // LinkedIn URL and the real website was never asked for at all.
-        //
-        // The fallback is deliberate: with no website stored, a lone "Website"
-        // field still gets the LinkedIn URL, which is the shipped behaviour.
-        const linkedinUrl = userProfile.personalInfo.linkedinUrl;
-        const websiteUrl = userProfile.personalInfo.websiteUrl;
-        fillFieldByFuzzyLabel(['linkedin'], linkedinUrl);
-        fillByFieldId(/linked-?in/i, linkedinUrl); // Social Network URLs, when the label isn't tied to the input
-        fillFieldByFuzzyLabel(['personal website', 'portfolio', 'website'], websiteUrl || linkedinUrl);
-
-        // Websites (Dynamic Section) - Phase 3. Takes both links now, and adds a
-        // row per link rather than overwriting the one row it finds.
-        await handleWebsitesSection([linkedinUrl, websiteUrl]);
+        // have to stay two different fields on the form. With no website stored,
+        // a lone "Website" field still gets the LinkedIn URL (shipped behaviour).
+        const linkedinUrl = p.linkedinUrl;
+        const websiteUrl = p.websiteUrl;
+        traceSection = 'Social Network URLs';
+        await step('LinkedIn', async () => {
+            const byLabel = fillFieldByFuzzyLabel(['linkedin'], linkedinUrl);
+            const byId = fillByFieldId(/linked-?in/i, linkedinUrl);
+            return byLabel === true || byId > 0 ? true : byLabel === 'skipped' ? 'skipped' : byLabel === false ? false : ABSENT;
+        });
+        traceSection = 'Websites';
+        await step('Website', () => fillFieldByFuzzyLabel(['personal website', 'portfolio', 'website'], websiteUrl || linkedinUrl));
+        await step('Websites section', () => handleWebsitesSection([linkedinUrl, websiteUrl]));
     }
 
+    traceSection = 'My Information';
     if (userProfile.address) {
-        fillFieldByFuzzyLabel(['address line 1', 'street'], userProfile.address.street);
-        fillFieldByFuzzyLabel(['city', 'town'], userProfile.address.city);
-        fillFieldByFuzzyLabel(['zip', 'postal code'], userProfile.address.zip);
-
-        // Standard Dropdown for Country
-        await handleDropdown(['country', 'region'], userProfile.address.country);
-
-        // Phase 5: "State" uses selectWorkdayDropdown logic
-        if (userProfile.address.state) {
-            // Try standard keys for state label
-            const stateKeys = ['state', 'province', 'territory'];
-            // We try to find the label on page to pass to selectWorkdayDropdown
-            // Or just try "State" and "Province" sequentially
-            let success = await selectWorkdayDropdown('State', userProfile.address.state);
-            if (!success) await selectWorkdayDropdown('Province', userProfile.address.state);
+        const a = userProfile.address;
+        await step('Address line 1', () => fillFieldByFuzzyLabel(['address line 1', 'street'], a.street));
+        await step('City', () => fillFieldByFuzzyLabel(['city', 'town'], a.city));
+        await step('Postal code', () => fillFieldByFuzzyLabel(['zip', 'postal code'], a.zip));
+        await step('Country', () => handleDropdown(['country', 'region'], a.country));
+        if (a.state) {
+            await step('State', async () => (await selectWorkdayDropdown('State', a.state)) || selectWorkdayDropdown('Province', a.state));
         }
     }
 
     // 2. Work Experience. Every job in the profile, one Workday panel each.
+    traceSection = 'Work Experience';
     if (userProfile.workExperience && userProfile.workExperience.length > 0) {
-        await handleWorkExperience(userProfile.workExperience);
+        await step('Work experience', () => handleWorkExperience(userProfile.workExperience));
     }
 
-    // 3. Education
+    // 3. Education. Every school, one panel each, opening panels with Education's own Add button.
+    traceSection = 'Education';
     if (userProfile.education && userProfile.education.length > 0) {
-        const edu = userProfile.education[0];
-
-        // Phase 5: School uses Searchable Picker
-        if (edu.school) {
-            await handleSearchablePicker(['school', 'institution', 'university'], edu.school);
-        }
-
-        // Phase 3: Field of Study uses Searchable Picker
-        if (edu.fieldOfStudy) {
-            await handleSearchablePicker(['field of study', 'major'], edu.fieldOfStudy);
-        }
-
-        // Degree Dropdown
-        if (edu.degree) {
-            await handleDropdown(['degree', 'qualification'], edu.degree, matchDegreeOption);
-            // Also try selectWorkdayDropdown as fallback — more reliable for Workday's
-            // custom selectSelectedOption / selectWidget elements
-            await selectWorkdayDropdown('Degree', edu.degree, matchDegreeOption);
-        }
-
-        if (edu.startDate) await fillDate('first year attended', edu.startDate);
-        if (edu.endDate) await fillDate('last year attended', edu.endDate);
-
-        // Cumulative GPA
-        fillGPA(edu.gpa || "2.8");
+        await step('Education', () => handleEducation(userProfile.education));
     }
 
     // 4. Skills (Async Injection)
+    traceSection = 'Skills';
     if (userProfile.skills && userProfile.skills.length > 0) {
-        const skillsInput = findElementByFuzzyLabel(['skills', 'competencies']);
-        if (skillsInput) {
+        await step('Skills', async () => {
+            const skillsInput = findElementByFuzzyLabel(['skills', 'competencies']);
+            if (!skillsInput) return ABSENT;
             await injectSkills(skillsInput, userProfile.skills);
-        }
+            return true;
+        });
     }
 
-    // 5. Language (New Phase)
+    // 5. Language
+    traceSection = 'Languages';
     if (userProfile.language && userProfile.language.name) {
-        await handleLanguages(userProfile.language);
+        await step('Language', () => handleLanguages(userProfile.language));
     }
 
     // 5. Resume Upload
+    traceSection = 'Resume';
     if (userProfile.resume && userProfile.resumeMeta) {
-        uploadResume(userProfile.resume, userProfile.resumeMeta);
+        await step('Resume file', () => uploadResume(userProfile.resume, userProfile.resumeMeta));
     }
 
     // 6. Application Questions & Disclosures (Async)
-    await handleJobPreferences(); // NEW
+    traceSection = 'Application Questions';
+    await handleJobPreferences();
+    traceSection = 'Voluntary Disclosures';
     await fillDisclosures();
 
     // 7. Terms & Conditions
-    handleTerms();
+    traceSection = 'Terms';
+    await step('Terms checkbox', () => handleTerms());
 
     console.log("Workday Autoplay: Scan completed.");
     isScanning = false;
@@ -199,7 +218,7 @@ async function scanAndFill() {
     // Notify the side panel so it can show live status. `job` lets a signed-in
     // user's panel log the application (cloud-tracker.js); nothing is sent otherwise.
     try {
-        chrome.runtime.sendMessage({ action: 'fill_complete', job: workdayJobInfo() }, () => {
+        chrome.runtime.sendMessage({ action: 'fill_complete', job: workdayJobInfo(), report: buildFillReport() }, () => {
             // Reading lastError prevents "Unchecked runtime.lastError" noise when panel is closed
             void chrome.runtime.lastError;
         });
@@ -348,6 +367,161 @@ async function handleWorkExperience(jobs) {
         console.log(`Workday Autoplay: filling work experience ${i + 1}`, panels[i]);
         await fillWorkPanel(jobs[i], panels[i]);
     }
+}
+
+/**
+ * Generic repeated panels: "Education 1", "Education 2", ...
+ */
+function findPanels(headingRe) {
+    const panels = [];
+    for (const h of document.querySelectorAll('h2, h3, h4, h5, h6, [role="heading"], legend')) {
+        if (!headingRe.test(h.innerText || h.textContent || '')) continue;
+        let el = h.closest('div[role="group"], fieldset') || h.parentElement;
+        while (el && !el.querySelector('input, textarea, button[aria-haspopup="listbox"]') && el.parentElement) el = el.parentElement;
+        if (!el) continue;
+        const headings = Array.from(el.querySelectorAll('h2, h3, h4, h5, h6, [role="heading"], legend'))
+            .filter(x => headingRe.test(x.innerText || x.textContent || ''));
+        if (headings.length > 1) el = h.parentElement;
+        if (el && el.offsetParent !== null && !panels.includes(el)) panels.push(el);
+    }
+    return panels;
+}
+
+const EDU_PANEL_HEADING = /^\s*education\s*\d+\s*$/i;
+
+async function fillEducationPanel(edu, root) {
+    return withScope(root, async () => {
+        let ok = true;
+        if (edu.school) ok = (await handleSearchablePicker(['school', 'institution', 'university'], edu.school)) !== false && ok;
+        if (edu.fieldOfStudy) ok = (await handleSearchablePicker(['field of study', 'major'], edu.fieldOfStudy)) !== false && ok;
+        if (edu.degree) {
+            const viaDropdown = await handleDropdown(['degree', 'qualification'], edu.degree, matchDegreeOption);
+            if (!viaDropdown) ok = (await selectWorkdayDropdown('Degree', edu.degree, matchDegreeOption)) !== false && ok;
+        }
+        if (edu.startDate) await fillDate('first year attended', edu.startDate, root);
+        if (edu.endDate) await fillDate('last year attended', edu.endDate, root);
+        // Only a GPA the user actually entered. This used to default to "2.8",
+        // which put an invented GPA on real applications.
+        if (edu.gpa) fillGPA(edu.gpa);
+        return ok;
+    });
+}
+
+async function handleEducation(list) {
+    const schools = (list || []).filter(e => e && (e.school || e.degree || e.fieldOfStudy || e.gpa || e.startDate || e.endDate));
+    if (!schools.length) return ABSENT;
+
+    if (!findPanels(EDU_PANEL_HEADING).length) {
+        const addBtn = findSectionAddButton(/^\s*education\s*$/i, ['Add Education']);
+        if (addBtn) {
+            addBtn.click();
+            await waitForCondition(() => findPanels(EDU_PANEL_HEADING).length > 0, 2500);
+        }
+        if (!findPanels(EDU_PANEL_HEADING).length) {
+            // A single-entry form (no numbered panels): the old page-wide fill.
+            return fillEducationPanel(schools[0], document);
+        }
+    }
+
+    let ok = true;
+    for (let i = 0; i < schools.length; i++) {
+        let panels = findPanels(EDU_PANEL_HEADING);
+        if (!panels[i]) {
+            const addBtn = findSectionAddButton(/^\s*education\s*$/i, ['Add Education']);
+            if (!addBtn) { console.warn(`Workday Autoplay: no Add button for education ${i + 1}`); return false; }
+            const before = panels.length;
+            addBtn.click();
+            if (!await waitForCondition(() => findPanels(EDU_PANEL_HEADING).length > before, 2500)) {
+                console.warn(`Workday Autoplay: Add did not open education ${i + 1}`);
+                return false;
+            }
+            panels = findPanels(EDU_PANEL_HEADING);
+        }
+        ok = (await fillEducationPanel(schools[i], panels[i])) && ok;
+    }
+    return ok;
+}
+
+/** The question a control belongs to: legend, then label, never the control's own value text. */
+function questionLabelFor(el) {
+    const t = (n) => (n ? (n.innerText || n.textContent || '').replace(/\s+/g, ' ').replace(/\*/g, '').trim() : '');
+    const fs = el.closest('fieldset');
+    if (fs && t(fs.querySelector('legend'))) return t(fs.querySelector('legend'));
+    if (el.id) {
+        const l = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+        if (t(l)) return t(l);
+    }
+    const field = el.closest('[data-automation-id^="formField"]');
+    if (field && t(field.querySelector('label, legend'))) return t(field.querySelector('label, legend'));
+    if (el.type === 'checkbox' || el.getAttribute('role') === 'checkbox') {
+        const wrap = el.closest('label');
+        if (t(wrap)) return t(wrap);
+    }
+    if (el.tagName !== 'BUTTON' && el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
+    return '';
+}
+
+/** What is still empty when autofill finishes: the fields it missed entirely. */
+function emptyFieldSweep() {
+    const out = [];
+    const root = document.querySelector('[data-automation-id="applyFlowPage"]') || document.body;
+    const visible = (el) => el.offsetParent !== null;
+    const required = (el, label) => el.required || el.getAttribute('aria-required') === 'true'
+        || /\bRequired\b/.test(el.getAttribute('aria-label') || '') || /\*\s*$/.test(label);
+    const field = (el) => {
+        const f = el.closest('[data-automation-id^="formField"]');
+        return f ? f.getAttribute('data-automation-id').replace(/^formField-?/, '').slice(0, 60) : '';
+    };
+    const push = (el, kind) => {
+        const label = questionLabelFor(el);
+        if (!label && !field(el)) return;
+        out.push({ kind, label: label.slice(0, 140), field: field(el), required: required(el, label) });
+    };
+
+    root.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input:not([type]), textarea').forEach(el => {
+        if (!visible(el) || el.value) return;
+        if (el.getAttribute('data-automation-id') === 'searchBox') {
+            const f = el.closest('[data-automation-id^="formField"]');
+            if (f && f.querySelector('[data-automation-id="selectedItem"]')) return; // multiselect with a pill
+        }
+        if (el.closest('[role="listbox"], [data-automation-id="dateWidget"]')) return;
+        push(el, el.getAttribute('data-automation-id') === 'searchBox' ? 'picker' : 'text');
+    });
+    root.querySelectorAll('button[aria-haspopup="listbox"]').forEach(el => {
+        if (!visible(el)) return;
+        const shown = (el.innerText || '').trim();
+        if (shown && !/^select one$/i.test(shown)) return;
+        push(el, 'dropdown');
+    });
+    root.querySelectorAll('input[type="checkbox"], [role="checkbox"]').forEach(el => {
+        if (!visible(el) && !(el.parentElement && visible(el.parentElement))) return;
+        const checked = el.checked || el.getAttribute('aria-checked') === 'true';
+        if (checked) return;
+        const label = questionLabelFor(el);
+        if (!required(el, label)) return; // optional boxes are meant to stay as they are
+        push(el, 'checkbox');
+    });
+    return out.slice(0, 60);
+}
+
+function buildFillReport() {
+    const heading = document.querySelector('[data-automation-id="applyFlowPage"] h2, [data-automation-id="applyFlowPage"] h3, h2');
+    const steps = fillTrace.slice(0, 120);
+    const empty = emptyFieldSweep();
+    return {
+        page: ((heading && heading.innerText) || '').trim().slice(0, 80),
+        path: location.pathname.slice(0, 200),
+        at: new Date().toISOString(),
+        counts: {
+            filled: steps.filter(x => x.status === 'filled').length,
+            failed: steps.filter(x => x.status === 'failed').length,
+            skipped: steps.filter(x => x.status === 'skipped').length,
+            emptyRequired: empty.filter(x => x.required).length,
+            empty: empty.length
+        },
+        steps,
+        empty
+    };
 }
 
 function formatDateString(dateObj) {
@@ -768,7 +942,7 @@ async function fillDate(labelKeys, dateObj, root = document) {
     }
 
     console.log(`Workday Autoplay: no date field found for ${keys.join(' / ')}`);
-    return false;
+    return ABSENT;
 }
 
 /**
@@ -815,36 +989,42 @@ function normalizeLabel(text) {
     return text.toLowerCase().replace(/\*/g, '').replace(/\(required\)/g, '').replace(/\s+/g, ' ').trim();
 }
 
-function fillFieldByFuzzyLabel(keys, value, root = document) {
-    if (!value) return;
-
+function fillFieldByFuzzyLabel(keys, value, root = SCOPE) {
+    // Returns ABSENT (no such field here), 'skipped' (field here, no profile
+    // value), true (written and read back), or false (written but didn't stick).
     const candidates = [];
     root.querySelectorAll('input:not([type="hidden"]), textarea').forEach(input => {
-        if (input.value && input.value === value) return;
         const texts = collectLabelTexts(input);
         if (texts.length) candidates.push({ input, texts });
     });
 
     // `keys` is ordered most-specific-first. Take the first key that matches
     // anything and stop, so a loose trailing key cannot poach a field a more
-    // specific key already identified — 'role' was writing the job title into
-    // "Role Description" because it substring-matches.
-    //
-    // Within the winning key, an exact label match beats substring matches.
-    // Without this, 'to' (the end-date label) also matched every field whose
-    // text merely contains "to": "Total Compensation", "Story", and so on.
-    //
+    // specific key already identified ('role' used to write the job title into
+    // "Role Description"). Within the winning key, an exact label match beats
+    // substring matches ('to' matched "Total Compensation", "Story", ...).
     // When nothing matches exactly, all substring hits are still filled, which
     // preserves the intended behavior for pairs like Email / Confirm Email.
     for (const key of keys) {
         const needle = key.toLowerCase();
         const hits = candidates.filter(c => c.texts.some(t => t.toLowerCase().includes(needle)));
         if (!hits.length) continue;
+        if (!value) return 'skipped';
 
         const exact = hits.filter(c => c.texts.some(t => normalizeLabel(t) === normalizeLabel(key)));
-        (exact.length ? exact : hits).forEach(c => setNativeValue(c.input, value));
-        return;
+        const targets = exact.length ? exact : hits;
+        let ok = true;
+        for (const c of targets) {
+            if (c.input.value === value) continue;
+            setNativeValue(c.input, value);
+            if (c.input.value !== value) {
+                ok = false;
+                console.warn(`Workday Autoplay: wrote "${key}" but the box did not keep it`);
+            }
+        }
+        return ok;
     }
+    return ABSENT;
 }
 
 /**
@@ -889,6 +1069,14 @@ function checkboxLabelTexts(input) {
     // checkbox's name, unlike an enclosing <div>, so it is safe to read.
     const wrapping = input.closest('label');
     if (wrapping && wrapping.innerText) texts.push(wrapping.innerText);
+    const by = input.getAttribute('aria-labelledby');
+    if (by) for (const id of by.split(/\s+/)) {
+        const n = document.getElementById(id);
+        if (n && n.innerText) texts.push(n.innerText);
+    }
+    const field = input.closest('[data-automation-id^="formField"]');
+    const fieldLabel = field && field.querySelector('label, legend');
+    if (fieldLabel && fieldLabel.innerText && fieldLabel.querySelector('input, [role="checkbox"]') === null) texts.push(fieldLabel.innerText);
 
     return texts.filter(Boolean);
 }
@@ -903,20 +1091,41 @@ function checkboxLabelTexts(input) {
  * used to exist here — it stayed ticked, the To date became unreachable, and the
  * entry claimed a job the user had already left. Reported 2026-08-24.
  */
-function setCheckbox(keys, desired, root = document) {
+const isChecked = (el) => (el.type === 'checkbox' ? el.checked : el.getAttribute('aria-checked') === 'true');
+
+/** Click a checkbox and confirm it changed; replay a full pointer sequence on its label if a plain click didn't take. */
+async function toggleCheckbox(el, desired) {
+    if (isChecked(el) === desired) return true;
+    el.click();
+    if (el.type === 'checkbox') el.dispatchEvent(new Event('change', { bubbles: true }));
+    if (await waitForCondition(() => isChecked(el) === desired, 500)) return true;
+    const target = (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`)) || el.closest('label') || el;
+    const r = target.getBoundingClientRect();
+    const init = { bubbles: true, cancelable: true, composed: true, view: window, button: 0, clientX: r.left + 4, clientY: r.top + 4 };
+    for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click']) {
+        const Ctor = type.startsWith('pointer') && window.PointerEvent ? PointerEvent : MouseEvent;
+        target.dispatchEvent(new Ctor(type, init));
+    }
+    const ok = await waitForCondition(() => isChecked(el) === desired, 800);
+    if (!ok) console.warn(`Workday Autoplay: clicked the "${(checkboxLabelTexts(el)[0] || 'checkbox').trim().slice(0, 60)}" checkbox but it did not change`);
+    return ok;
+}
+
+function checkboxCandidates(root) {
+    return Array.from(root.querySelectorAll('input[type="checkbox"], [role="checkbox"]'))
+        .filter(el => !(el.getAttribute('role') === 'checkbox' && el.querySelector('input[type="checkbox"]')));
+}
+
+function setCheckbox(keys, desired, root = SCOPE) {
     let changed = false;
-
-    root.querySelectorAll('input[type="checkbox"]').forEach(input => {
+    for (const input of checkboxCandidates(root)) {
         const texts = checkboxLabelTexts(input);
-        if (!texts.some(t => matchesAny(t, keys))) return;
-        if (input.checked === desired) return;
-
+        if (!texts.some(t => matchesAny(t, keys))) continue;
+        if (isChecked(input) === desired) continue;
         console.log(`Workday Autoplay: ${desired ? 'ticking' : 'clearing'} checkbox "${texts[0].trim().slice(0, 60)}"`, input);
-        input.click();
-        input.dispatchEvent(new Event('change', { bubbles: true }));
+        toggleCheckbox(input, desired); // verified asynchronously; the caller waits briefly anyway
         changed = true;
-    });
-
+    }
     return changed;
 }
 
@@ -931,7 +1140,7 @@ function checkCheckbox(keys) {
 
 // 1. Cumulative GPA
 function fillGPA(gpaValue) {
-    const inputs = document.querySelectorAll('input');
+    const inputs = SCOPE.querySelectorAll('input');
     let target = null;
     inputs.forEach(input => {
         if (target) return;
@@ -1047,7 +1256,7 @@ async function handleSearchablePicker(keys, value) {
 
         if (!input) {
             for (const key of keys) {
-                input = document.querySelector(`input[data-automation-id="searchBox"][id*="${key.toLowerCase().replace(/\s+/g, '')}"]`);
+                input = SCOPE.querySelector(`input[data-automation-id="searchBox"][id*="${key.toLowerCase().replace(/\s+/g, '')}"]`);
                 if (input) break;
             }
         }
@@ -1058,7 +1267,7 @@ async function handleSearchablePicker(keys, value) {
 
         if (!input) {
             console.log(`Workday Autoplay: Could not find searchBox for ${keys[0]}`);
-            return;
+            return ABSENT;
         }
 
         if (input.value && input.value.toLowerCase().includes(value.toLowerCase())) {
@@ -1356,31 +1565,56 @@ async function setLanguageProficiency(languageData) {
 // only because the reassignment reads as an edit to it. Do not resurrect these
 // three lines: all three ignore the user's own toggles, and the age one in
 // particular would answer a legal question on their behalf.
+/**
+ * Voluntary disclosures. ONE definition: a later "Enhanced" override used to
+ * replace this function at load time, so this one never ran; the override did
+ * nothing unless "Decline All Disclosures" was ticked, ignored the answers saved
+ * in the profile, never handled Gender, and looked dropdowns up by aria-label,
+ * which on Workday holds the current answer, not the question.
+ *
+ * Rules, in order, for each question:
+ *   1. the answer saved in the profile (gender, Hispanic/Latino, race);
+ *   2. otherwise "decline" ONLY if the user ticked Decline All Disclosures;
+ *   3. otherwise left unanswered for the user (and listed in the fill report).
+ * Nothing is ever invented. Values never go into the report.
+ */
 async function fillDisclosures() {
     console.log("Workday Autoplay: Filling Disclosures...");
+    const prefs = userProfile.jobPreferences || {};
+    const demo = userProfile.demographics || {};
+    const decline = !!prefs.autoDisclosures;
+    const DECLINE = 'I do not wish to answer'; // chooseOption maps it to the tenant's own decline wording
 
-    // Standard yes/no questions
-    await selectWorkdayDropdown('18 years of age or older', 'Yes');
-    await selectWorkdayDropdown('legally authorized to work in the US', 'Yes');
-    await selectWorkdayDropdown('require immigration sponsorship', 'No');
+    // Gated on the attestation, exactly like handleJobPreferences: an unticked
+    // box means the question is left for the user, never answered for them.
+    if (prefs.isAtLeast18) {
+        await step('18 or older', () => selectWorkdayDropdown('18 years of age or older', 'Yes'));
+    }
 
-    // Demographics from user profile (with fallbacks)
-    const demographics = userProfile.demographics || {};
+    const ask = async (name, labels, value) => {
+        if (!value) return;
+        await step(name, async () => {
+            for (const label of labels) {
+                const r = await selectWorkdayDropdown(label, value);
+                if (r !== ABSENT) return r;
+            }
+            return ABSENT;
+        });
+    };
 
-    const gender = demographics.gender || 'Decline to Self-Identify';
-    const hispanicLatino = demographics.hispanicLatino || 'Decline to Self-Identify';
-    const race = demographics.race || 'I do not wish to answer';
+    await ask('Gender', ['Gender', 'Sex'], demo.gender || (decline ? DECLINE : ''));
+    await ask('Hispanic or Latino', ['Hispanic or Latino', 'Hispanic/Latino', 'Hispanic'], demo.hispanicLatino || (decline ? DECLINE : ''));
+    await ask('Race / ethnicity', ['Race', 'Ethnicity'], demo.race || (decline ? DECLINE : ''));
+    await ask('Veteran status', ['Veteran Status', 'Veteran'], decline ? DECLINE : '');
 
-    console.log(`Workday Autoplay: Using demographics - Gender: ${gender}, Hispanic: ${hispanicLatino}, Race: ${race}`);
-
-    await selectWorkdayDropdown('Gender', gender);
-    await selectWorkdayDropdown('Hispanic or Latino', hispanicLatino);
-
-    // Race/Ethnicity (try multiple variations)
-    await selectWorkdayDropdown('Race', race);
-    await selectWorkdayDropdown('Ethnicity', race);
-
-    await selectWorkdayDropdown('Veteran Status', 'I am not a veteran');
+    if (decline) {
+        // Disability is often a dropdown, sometimes radios/checkboxes (CC-305).
+        await ask('Disability', ['Disability'], DECLINE);
+        const disabilityKeywords = ['disability', 'disabled', 'handicapped'];
+        for (const choice of ['I do not wish to answer', 'I do not want to answer', 'I don’t wish to answer', "I don't wish to answer"]) {
+            if (await autoAnswerRadioExact(disabilityKeywords, choice)) break;
+        }
+    }
 
     // Auto-fill Date field in disclosure section with TODAY's date
     await fillDisclosureDate();
@@ -1475,7 +1709,7 @@ const TERMS_PATTERNS = /i agree|i accept|i consent|i acknowledge|i have read|i c
 // what the application says about them.
 const NEVER_TERMS = /currently work here|current job|current employer|18 years|veteran|disab|sponsor|authoriz/i;
 
-function handleTerms() {
+async function handleTerms() {
     // Match on the checkbox's own name.
     //
     // The old lookup was an XPath that selected a checkbox because some LATER
@@ -1493,7 +1727,7 @@ function handleTerms() {
     // This runs unconditionally on every scan, on every page, and could only
     // ever tick — never clear. That combination is how a checkbox nobody asked
     // for ends up set. Reported 2026-08-24.
-    const target = Array.from(document.querySelectorAll('input[type="checkbox"]')).find(box => {
+    const target = checkboxCandidates(document).find(box => {
         const texts = checkboxLabelTexts(box);
         if (!texts.length) return false;
         if (texts.some(t => NEVER_TERMS.test(t))) return false;
@@ -1502,98 +1736,116 @@ function handleTerms() {
 
     if (!target) {
         console.log('Workday Autoplay: no terms checkbox identified on this page, ticking nothing.');
-        return false;
+        return ABSENT;
     }
-    if (target.checked) return true;
+    if (isChecked(target)) return true;
 
     const name = checkboxLabelTexts(target)[0].trim().slice(0, 80);
     console.log(`Workday Autoplay: Checking Terms & Conditions — "${name}"`, target);
-    target.click();
-    target.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
+    return toggleCheckbox(target, true);
 }
 
+// "Decline to self-identify", "I do not wish to answer", "I prefer not to say", ...
+const DECLINE_RE = /decline|do not wish|don['’]?t wish|not wish to|prefer not|choose not|not to (answer|disclose|self)/i;
+const STOP_WORDS = new Set(['i', 'am', 'a', 'an', 'the', 'to', 'of', 'or', 'and', 'my', 'is']);
+
+/** The best option for `desired` among open options, or null. Placeholders never count. */
+function chooseOption(options, desired, matcher = null) {
+    const real = options.filter(o => o.getAttribute('aria-disabled') !== 'true' && !/^select one$/i.test(o.innerText.trim()));
+    const text = (o) => o.innerText.replace(/\s+/g, ' ').trim();
+    const want = String(desired).trim();
+    const lower = want.toLowerCase();
+    return real.find(o => text(o) === want)
+        || real.find(o => text(o).toLowerCase() === lower)
+        || (matcher && matcher(real, want))
+        || (DECLINE_RE.test(want) ? real.find(o => DECLINE_RE.test(text(o))) : null)
+        || (() => {
+            // Every meaningful word of the wanted answer present: "I am not a veteran"
+            // finds "I am not a protected veteran".
+            const words = lower.split(/[^a-z0-9]+/).filter(w => w && !STOP_WORDS.has(w));
+            if (!words.length) return null;
+            return real.find(o => {
+                const t = text(o).toLowerCase();
+                return words.every(w => new RegExp(`\\b${escapeRegExp(w)}\\b`).test(t));
+            }) || null;
+        })()
+        || real.find(o => text(o).toLowerCase().includes(lower))
+        || null;
+}
+
+/**
+ * The dropdown that answers the question `label`. Workday's question pages put
+ * the question in a <fieldset><legend>, and the button's aria-label is the
+ * CURRENT ANSWER (" Yes Required", tools/LegallyAuthorized.png), so label- and
+ * aria-label lookups never found these. Container first, whole-word match.
+ */
+function findDropdownForQuestion(label) {
+    const re = new RegExp(`(^|[^a-z0-9])${escapeRegExp(label.toLowerCase())}([^a-z0-9]|$)`);
+    const textOf = (n) => (n ? (n.innerText || n.textContent || '').replace(/\s+/g, ' ').toLowerCase() : '');
+    for (const sel of ['fieldset', 'div[data-automation-id^="formField"]']) {
+        for (const box of SCOPE.querySelectorAll(sel)) {
+            const q = box.querySelector(':scope > legend, :scope label, :scope legend');
+            if (!q || !re.test(textOf(q))) continue;
+            const btn = box.querySelector('button[aria-haspopup="listbox"]');
+            if (btn && btn.offsetParent !== null) return btn;
+        }
+    }
+    const lower = label.toLowerCase();
+    return getElementByXpath(`//label[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${lower}")]/following::div[@data-automation-id="selectSelectedOption" or @data-automation-id="selectWidget"][1]`)
+        || null;
+}
+
+function closeOpenListbox(trigger) {
+    const t = document.activeElement || trigger;
+    t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+}
+
+/**
+ * Open the dropdown for `label`, pick the option for `desiredValue`, and only
+ * report success when the dropdown then SHOWS that option. Returns ABSENT when
+ * the question isn't on this page.
+ */
 async function selectWorkdayDropdown(label, desiredValue, matcher = null) {
     try {
-        const xpath = `//label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${label.toLowerCase()}")]/following::div[@data-automation-id="selectSelectedOption" or @data-automation-id="selectWidget"][1] | //label[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${label.toLowerCase()}")]/parent::*/following-sibling::div//div[@data-automation-id="selectSelectedOption" or @data-automation-id="selectWidget"]`;
-
-        let trigger = getElementByXpath(xpath);
-        if (!trigger) {
-            const btnXpath = `//button[@aria-label and contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "${label.toLowerCase()}")]`;
-            trigger = getElementByXpath(btnXpath);
-        }
-
-        if (!trigger) return false;
-
-        if (trigger.innerText.includes(desiredValue)) {
-            console.log(`Workday Autoplay: ${label} already set to ${desiredValue}`);
-            return true;
-        }
-
-        console.log(`Workday Autoplay: Opening dropdown for ${label}`);
-        scrollIntoViewIfNeeded(trigger);
-        trigger.click();
-
-        // Wait for the OPEN dropdown to carry options, not merely for some
-        // listbox to exist. The selected-pill listboxes always exist, so the
-        // previous waitForElement returned instantly with the wrong element.
-        await waitForCondition(() => getOpenListboxOptions().length > 0, 3000);
-        const options = getOpenListboxOptions();
-
-        if (!options.length) {
-            console.warn(`Workday Autoplay: No dropdown options appeared for ${label}`);
-            return false;
-        }
-        console.log(`Workday Autoplay: Found ${options.length} options for ${label}`);
-
-        for (const opt of options) {
-            const optionText = opt.innerText.trim();
-            if (optionText === desiredValue) {
-                console.log(`Workday Autoplay: Found exact match: "${optionText}" for ${label}`);
-                await commitOptionSelection(opt, label);
-                await new Promise(r => setTimeout(r, 300));
-                return true;
-            }
-        }
-
-        for (const opt of options) {
-            const optionText = opt.innerText.trim();
-            if (optionText.toLowerCase() === desiredValue.toLowerCase()) {
-                console.log(`Workday Autoplay: Found case-insensitive exact match: "${optionText}" for ${label}`);
-                await commitOptionSelection(opt, label);
-                await new Promise(r => setTimeout(r, 300));
-                return true;
-            }
-        }
-
-        // Partial match, still scoped to the open dropdown. The previous global
-        // XPath could match an option belonging to a different widget entirely.
-        console.warn(`Workday Autoplay: No exact match found, trying partial match for ${label}`);
-        const needle = desiredValue.toLowerCase();
-        // Ahead of the substring fallback on purpose: where a matcher is
-        // supplied, substring is the path that mis-picks.
-        const option = (matcher && matcher(options, desiredValue))
-            || options.find(opt => opt.innerText.toLowerCase().includes(needle));
-
-        if (option) {
-            console.log(`Workday Autoplay: Selecting ${desiredValue} for ${label} (partial match)`);
-            await commitOptionSelection(option, label);
-            await new Promise(r => setTimeout(r, 300));
-            return true;
-        } else {
-            console.warn(`Workday Autoplay: Option '${desiredValue}' not found for ${label}`);
-            return false;
-        }
+        const trigger = findDropdownForQuestion(label);
+        if (!trigger) return ABSENT;
+        return await pickFromDropdown(trigger, desiredValue, label, matcher);
     } catch (e) {
-        console.error(`Workday Autoplay: Error in selectWorkdayDropdown for ${label}:`, e);
+        console.warn(`Workday Autoplay: error choosing an option for ${label}: ${e.message}`);
         return false;
     }
 }
 
-/**
- * Helper function to select dropdown options using aria-label matching
- * This is more reliable for standardized Workday disclosure fields
- */
+async function pickFromDropdown(trigger, desiredValue, label, matcher = null) {
+    const shown = () => (trigger.innerText || '').replace(/\s+/g, ' ').trim();
+    const before = shown();
+    if (before && !/^select one$/i.test(before)) {
+        const probe = { innerText: before, getAttribute: () => null };
+        if (chooseOption([probe], desiredValue, matcher)) return true; // already answered this way
+    }
+
+    scrollIntoViewIfNeeded(trigger);
+    trigger.click();
+    if (!await waitForCondition(() => getOpenListboxOptions().length > 0, 3000)) {
+        console.warn(`Workday Autoplay: the ${label} dropdown did not open`);
+        return false;
+    }
+    const options = getOpenListboxOptions();
+    const option = chooseOption(options, desiredValue, matcher);
+    if (!option) {
+        const sample = options.map(o => o.innerText.trim()).filter(Boolean).slice(0, 8).join(' | ');
+        console.warn(`Workday Autoplay: no matching option for ${label} (options: ${sample})`);
+        closeOpenListbox(trigger);
+        return false;
+    }
+    const want = option.innerText.replace(/\s+/g, ' ').trim();
+    await commitOptionSelection(option, label);
+    const stuck = await waitForCondition(() => shown() === want || (trigger.getAttribute('aria-label') || '').includes(want), 1500);
+    if (!stuck) console.warn(`Workday Autoplay: chose an option for ${label} but the dropdown still shows "${shown() || 'nothing'}"`);
+    await new Promise(r => setTimeout(r, 200));
+    return stuck;
+}
+
 async function selectByAriaLabel(ariaLabelKeyword, desiredValue) {
     // Find button/div with aria-label containing the keyword
     const elements = document.querySelectorAll('[aria-label]');
@@ -1709,7 +1961,10 @@ function setNativeValue(element, value) {
 
 function getElementByXpath(path) {
     try {
-        return document.evaluate(path, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+        // Inside a panel scope, absolute "//x" paths become relative ".//x".
+        const scoped = SCOPE !== document;
+        const expr = scoped ? path.split(' | ').map(p => p.trim().replace(/^\/\//, './/')).join(' | ') : path;
+        return document.evaluate(expr, SCOPE, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
     } catch (e) {
         console.error("XPath error", e);
         return null;
@@ -2216,13 +2471,15 @@ async function handleJobPreferences() {
             'how did you find'
         ];
 
-        for (const keyword of sourceKeywords) {
-            const success = await selectWorkdayDropdown(keyword, prefs.sourceReferral);
-            if (success) break;
-        }
-
-        // Also try aria-label approach
-        await selectByAriaLabel('source', prefs.sourceReferral);
+        // Found by the question text (legend/label); the old aria-label lookup
+        // matched the dropdown's current VALUE, never the question.
+        await step('How did you hear about us', async () => {
+            for (const keyword of sourceKeywords) {
+                const r = await selectWorkdayDropdown(keyword, prefs.sourceReferral);
+                if (r !== ABSENT) return r;
+            }
+            return ABSENT;
+        });
     }
 
     // 5. US Citizenship — always answer Yes
@@ -2295,36 +2552,10 @@ function findQuestionBlocks(keywords) {
  * two-choice question.
  */
 async function answerDropdownYesNo(trigger, userChoice, questionText) {
-    const want = userChoice.toLowerCase();
-    const current = (trigger.innerText || '').trim();
-
-    if (current.toLowerCase() === want) {
-        console.log(`Workday Autoplay: "${questionText.slice(0, 60)}" already answered ${userChoice}`);
-        return true;
-    }
-
-    scrollIntoViewIfNeeded(trigger);
-    trigger.click();
-
-    if (!await waitForCondition(() => getOpenListboxOptions().length > 0, 3000)) {
-        console.warn(`Workday Autoplay: no options opened for "${questionText.slice(0, 60)}"`);
-        return false;
-    }
-
-    // The "Select One" placeholder is aria-disabled AND carries
-    // aria-selected="true" even though nothing has been chosen, so exclude it
-    // rather than let it look like an answer.
-    const option = getOpenListboxOptions()
-        .filter(o => o.getAttribute('aria-disabled') !== 'true')
-        .find(o => o.innerText.trim().toLowerCase() === want);
-
-    if (!option) {
-        console.warn(`Workday Autoplay: no "${userChoice}" option for "${questionText.slice(0, 60)}"`);
-        return false;
-    }
-
-    console.log(`Workday Autoplay: answering "${questionText.slice(0, 60)}" with ${userChoice}`);
-    return await commitOptionSelection(option, questionText.slice(0, 40));
+    // Exact Yes/No only: "No" is a substring of "None of the above" and
+    // "Not applicable", which are wrong answers, not near misses.
+    const exact = (opts, want) => opts.find(o => o.innerText.trim().toLowerCase() === want.toLowerCase()) || null;
+    return pickFromDropdown(trigger, userChoice, `"${questionText.slice(0, 60)}"`, exact);
 }
 
 /**
@@ -2336,6 +2567,10 @@ async function answerDropdownYesNo(trigger, userChoice, questionText) {
  * United States?" ended up reading No — see handleJobPreferences.
  */
 async function answerQuestionBlock(block, userChoice) {
+    return step(block.text.replace(/\s+/g, ' ').replace(/\*/g, '').trim().slice(0, 140), () => answerQuestionBlockInner(block, userChoice));
+}
+
+async function answerQuestionBlockInner(block, userChoice) {
     const container = block.container;
     if (answeredQuestions.has(container)) {
         console.log(`Workday Autoplay: "${block.text.slice(0, 60)}" was already answered this scan, leaving it.`);
@@ -2396,75 +2631,3 @@ async function autoAnswerRadio(keywords, choice) {
     return await answerYesNo(keywords, choice);
 }
 
-/**
- * ONE-CLICK DISCLOSURES OVERRIDE
- */
-// Extending existing fillDisclosures
-const originalFillDisclosures = fillDisclosures; // Keep reference if needed, but we essentially replace/augment it.
-
-// Re-write fillDisclosures to handle the "Quick-Decline" logic
-fillDisclosures = async function () {
-    console.log("Workday Autoplay: Filling Disclosures (Enhanced)...");
-
-    // Gated on the attestation, exactly like the ageKeywords path in
-    // handleJobPreferences. This call used to run unconditionally — carrying a
-    // "// Always Yes?" comment from whoever wrote it — which silently defeated
-    // the whole point of the checkbox: handleJobPreferences would correctly
-    // leave the question alone, and then this line answered it Yes anyway.
-    // Nobody's age gets asserted for them. An unticked box means unanswered.
-    if (userProfile.jobPreferences && userProfile.jobPreferences.isAtLeast18) {
-        await selectWorkdayDropdown('18 years of age or older', 'Yes');
-    } else {
-        console.log('Workday Autoplay: age question left for the user (18+ attestation not ticked).');
-    }
-
-    // Check for Quick Decline Preference (declineDisclosures)
-    const declineDisclosures = userProfile.jobPreferences && userProfile.jobPreferences.autoDisclosures;
-
-    // 1. Race / Ethnicity - Using aria-label matching for standardized Workday fields
-    if (declineDisclosures) {
-        console.log("Workday Autoplay: Auto-declining Race/Ethnicity disclosures");
-
-        // Try multiple variations of "decline to identify" that Workday uses
-        let success = await selectByAriaLabel('race', 'Decline to identify');
-        if (!success) success = await selectByAriaLabel('race', 'I do not wish to answer');
-        if (!success) success = await selectWorkdayDropdown('Race', 'Decline to identify');
-        if (!success) await selectWorkdayDropdown('Race', 'I do not wish to answer');
-
-        success = await selectByAriaLabel('ethnicity', 'Decline to identify');
-        if (!success) success = await selectByAriaLabel('ethnicity', 'I do not wish to answer');
-        if (!success) success = await selectWorkdayDropdown('Ethnicity', 'Decline to identify');
-        if (!success) await selectWorkdayDropdown('Ethnicity', 'I do not wish to answer');
-    }
-
-    // 2. Veteran Status - Using aria-label matching
-    if (declineDisclosures) {
-        console.log("Workday Autoplay: Auto-declining Veteran Status");
-
-        // Try "I DECLINE TO SELF-IDENTIFY" or "I AM NOT A VETERAN" based on preference
-        let success = await selectByAriaLabel('veteran', 'I DECLINE TO SELF-IDENTIFY');
-        if (!success) success = await selectByAriaLabel('veteran status', 'I DECLINE TO SELF-IDENTIFY');
-        if (!success) success = await selectWorkdayDropdown('Veteran Status', 'I DECLINE TO SELF-IDENTIFY');
-        if (!success) success = await selectWorkdayDropdown('Veteran Status', 'I do not wish to answer');
-        if (!success) await selectWorkdayDropdown('Veteran Status', 'I am not a veteran');
-    }
-
-    // 3. Disability Status - Using aria-label matching and radio buttons
-    if (declineDisclosures) {
-        console.log("Workday Autoplay: Auto-declining Disability disclosures");
-
-        // Try dropdown first with aria-label
-        let success = await selectByAriaLabel('disability', 'I DO NOT WISH TO ANSWER');
-        if (!success) success = await selectByAriaLabel('disability', 'No, I Don\'t Have A Disability');
-        if (!success) success = await selectWorkdayDropdown('Disability', 'I DO NOT WISH TO ANSWER');
-        if (!success) await selectWorkdayDropdown('Disability', 'I do not wish to answer');
-
-        // Also try radio buttons with specific text matching
-        const disabilityKeywords = ['disability', 'disabled', 'handicapped'];
-        await autoAnswerRadioExact(disabilityKeywords, 'I DO NOT WISH TO ANSWER');
-        await autoAnswerRadioExact(disabilityKeywords, 'I do not wish to answer');
-        await autoAnswerRadioExact(disabilityKeywords, 'No, I don\'t have a disability');
-    }
-
-    // Terms is handled separately
-}

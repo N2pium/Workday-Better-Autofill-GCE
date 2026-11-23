@@ -39,6 +39,17 @@
           <button id="autofillBtn" class="autofill-btn">Autofill this page</button>
         </div>
 
+        <div class="panel-card" id="fillReport" hidden>
+          <div class="card-head">
+            <p class="kicker">Fill report</p>
+            <button type="button" class="link-btn no-arrow" id="fillReportCopy">Copy report</button>
+          </div>
+          <p class="card-title" id="fillReportSummary"></p>
+          <ul class="report-list" id="fillReportList"></ul>
+          <p class="helper">Lists what autofill couldn't do on this page. Copy report shares only field names and
+            what happened, never your answers.</p>
+        </div>
+
         <div class="panel-card" id="matchCard" hidden>
           <div class="card-head">
             <p class="kicker">Match score</p>

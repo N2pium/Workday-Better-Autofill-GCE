@@ -1294,9 +1294,52 @@ document.addEventListener('DOMContentLoaded', () => {
     showTab(['home', 'profile', 'apps', 'settings'].includes(lastTab) ? lastTab : 'home');
     renderCloud();
 
+    // ---------------------------------------------------------------- fill report
+    const reportUi = {
+        card: document.getElementById('fillReport'),
+        summary: document.getElementById('fillReportSummary'),
+        list: document.getElementById('fillReportList'),
+        copy: document.getElementById('fillReportCopy')
+    };
+    let lastReport = null;
+
+    function renderFillReport(r) {
+        lastReport = r;
+        const c = r.counts || {};
+        reportUi.card.hidden = false;
+        const parts = [`${c.filled || 0} filled`];
+        if (c.failed) parts.push(`${c.failed} didn't work`);
+        if (c.emptyRequired) parts.push(`${c.emptyRequired} required still empty`);
+        reportUi.summary.textContent = `${r.page ? `${r.page}: ` : ''}${parts.join(' · ')}`;
+        const items = [];
+        for (const s of (r.steps || []).filter((x) => x.status === 'failed')) {
+            const li = el('li');
+            li.append(el('span', 'tag failed', 'failed'), document.createTextNode(`${s.section ? `${s.section} › ` : ''}${s.field}`));
+            if (s.detail) li.append(el('span', 'why', s.detail));
+            items.push(li);
+        }
+        for (const e of (r.empty || []).filter((x) => x.required)) {
+            const li = el('li');
+            li.append(el('span', 'tag empty', 'empty'), document.createTextNode(e.label || e.field));
+            items.push(li);
+        }
+        reportUi.list.replaceChildren(...items.slice(0, 25));
+    }
+
+    reportUi.copy.addEventListener('click', async () => {
+        if (!lastReport) return;
+        try {
+            await navigator.clipboard.writeText(JSON.stringify(lastReport, null, 2));
+            flash('Fill report copied. Paste it to whoever is fixing autofill.', 'var(--success)');
+        } catch (e) {
+            flash(`Couldn't copy: ${e.message}`, 'var(--danger)');
+        }
+    });
+
     // Live status from content script (side panel stays open, so we can show this)
     chrome.runtime.onMessage.addListener((msg) => {
         if (msg.action === 'fill_complete') {
+            if (msg.report) renderFillReport(msg.report);
             // Don't cover a "Tracked … Undo" message from an earlier page of the same form.
             if (!statusCtx.querySelector('button')) flash('Autofill complete ✓', 'var(--success)', 5000);
             if (msg.job) trackApplication(msg.job);

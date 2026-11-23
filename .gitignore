@@ -15,3 +15,6 @@ desktop.ini
 .obsidian/workspace*.json
 .obsidian/cache
 .trash/
+
+# Raw Workday page snapshots (structure only, but keep them private anyway)
+tools/captures/private/
