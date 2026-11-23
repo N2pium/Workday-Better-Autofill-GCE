@@ -107,6 +107,7 @@ async function scanAndFill() {
         const linkedinUrl = userProfile.personalInfo.linkedinUrl;
         const websiteUrl = userProfile.personalInfo.websiteUrl;
         fillFieldByFuzzyLabel(['linkedin'], linkedinUrl);
+        fillByFieldId(/linked-?in/i, linkedinUrl); // Social Network URLs, when the label isn't tied to the input
         fillFieldByFuzzyLabel(['personal website', 'portfolio', 'website'], websiteUrl || linkedinUrl);
 
         // Websites (Dynamic Section) - Phase 3. Takes both links now, and adds a
@@ -254,19 +255,41 @@ function findWorkPanels() {
     return panels;
 }
 
-function findAddWorkButton() {
-    const direct = document.querySelector('button[aria-label*="Add Work Experience" i], button[aria-label*="Add Another Work Experience" i]');
-    if (direct) return direct;
+// Headings of the My Experience sections. Used to stop a search at the edge of
+// its own section, so one section's Add button is never clicked for another.
+const SECTION_TITLE = /^\s*(work experience|education|websites?|social network urls?|languages?|skills|certifications?|resume\/?cv|links)\s*$/i;
+const ADD_BUTTON = (b) => b.getAttribute('data-automation-id') === 'add-button'
+    || b.getAttribute('data-automation-id') === 'Add'
+    || /^\s*add( another)?\s*$/i.test(b.innerText || b.textContent || '');
+
+/**
+ * The Add button of the section titled `titleRe` ("Websites", "Work Experience").
+ * Workday marks every section's Add button the same way (data-automation-id
+ * "add-button", text "Add"), so the button has to be found inside that
+ * section: walk up from the heading, but never into a container that also
+ * holds another section's heading.
+ */
+function findSectionAddButton(titleRe, ariaLabels = []) {
+    for (const label of ariaLabels) {
+        const direct = document.querySelector(`button[aria-label*="${label}" i]`);
+        if (direct) return direct;
+    }
     for (const h of document.querySelectorAll('h2, h3, h4, [role="heading"]')) {
-        if (!/^\s*work experience\s*$/i.test(h.innerText || '')) continue;
+        if (!titleRe.test(h.innerText || h.textContent || '')) continue;
         let sec = h.parentElement;
-        for (let hops = 0; sec && hops < 4; hops++, sec = sec.parentElement) {
-            const btn = Array.from(sec.querySelectorAll('button')).find(b =>
-                b.getAttribute('data-automation-id') === 'add-button' || /^\s*add( another)?\s*$/i.test(b.innerText || ''));
+        for (let hops = 0; sec && hops < 5; hops++, sec = sec.parentElement) {
+            const others = Array.from(sec.querySelectorAll('h2, h3, h4, [role="heading"]'))
+                .some(x => x !== h && SECTION_TITLE.test(x.innerText || x.textContent || '') && !titleRe.test(x.innerText || x.textContent || ''));
+            if (others) break; // walked out of this section
+            const btn = Array.from(sec.querySelectorAll('button')).find(ADD_BUTTON);
             if (btn) return btn;
         }
     }
     return null;
+}
+
+function findAddWorkButton() {
+    return findSectionAddButton(/^\s*work experience\s*$/i, ['Add Work Experience', 'Add Another Work Experience']);
 }
 
 async function fillWorkPanel(work, root) {
@@ -824,6 +847,26 @@ function fillFieldByFuzzyLabel(keys, value, root = document) {
     }
 }
 
+/**
+ * Fallback for fields whose visible label isn't linked to the input: match
+ * Workday's own field name instead (data-automation-id="formField-linkedInAccount",
+ * or an input id/name such as "socialNetworkAccounts--linkedInAccount").
+ * Fills only visible, empty text inputs, so it never overwrites anything.
+ */
+function fillByFieldId(re, value) {
+    if (!value) return 0;
+    let n = 0;
+    document.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])').forEach(input => {
+        if (input.value || input.offsetParent === null) return;
+        const field = input.closest('[data-automation-id]');
+        const names = [input.id, input.name, input.getAttribute('data-automation-id'), field && field.getAttribute('data-automation-id')];
+        if (!names.some(x => x && re.test(x))) return;
+        setNativeValue(input, value);
+        n++;
+    });
+    return n;
+}
+
 function matchesAny(text, keys) {
     if (!text) return false;
     const t = text.toLowerCase();
@@ -930,17 +973,9 @@ function findWebsiteUrlInputs() {
 }
 
 function findAddWebsiteButton() {
-    const direct = document.querySelector('button[aria-label*="Add Website"], button[aria-label*="Add Link"]');
-    if (direct) return direct;
-
-    for (const section of document.querySelectorAll('div, section')) {
-        const header = section.querySelector('h2, h3, h4');
-        if (header && /websites|links/i.test(header.innerText)) {
-            const btn = section.querySelector('button[data-automation-id="Add"], button[title="Add"]');
-            if (btn) return btn;
-        }
-    }
-    return null;
+    // Workday's current markup: <h3>Websites</h3> ... <button data-automation-id="add-button">Add</button>.
+    // The old lookup only knew data-automation-id="Add", so it never found it.
+    return findSectionAddButton(/^\s*(websites?|links)\s*$/i, ['Add Website', 'Add Link']);
 }
 
 async function handleWebsitesSection(urls) {
