@@ -6,6 +6,8 @@
  * and press Enter. It downloads workday-<step>-<time>.html: the form's
  * STRUCTURE only. Then, optionally, run  await __wdOptions()  to add each
  * dropdown's option list (it opens and closes each dropdown, choosing nothing).
+ * For a search-box menu (e.g. How did you hear about us), open it yourself and
+ * run  __wdPopup()  to save just that open menu.
  *
  * What is kept: tags, roles, aria-* names, data-automation-id, id/name/for/type,
  * and the text of headings, labels, legends, questions, buttons and options.
@@ -26,7 +28,8 @@
   const CHOSEN = '[chosen]';
   let nodes = 0;
 
-  const isChosenPill = (el) => el.closest('[data-automation-id="selectedItem"], [data-automation-id="selectedItemList"]');
+  // promptAriaInstruction reads "1 item selected, <your answer>" for screen readers.
+  const isChosenPill = (el) => el.closest('[data-automation-id="selectedItem"], [data-automation-id="selectedItemList"], [data-automation-id="promptAriaInstruction"], [data-automation-id="promptSelectionLabel"]');
   const isDropdownButton = (el) => el.tagName === 'BUTTON' && el.getAttribute('aria-haspopup') === 'listbox';
   const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const escAttr = (t) => esc(t).replace(/"/g, '&quot;');
@@ -98,6 +101,18 @@
     }
     save(`<ul id="dropdown-options">\n${lists.join('\n')}\n</ul>`, '-options');
     return `Saved options for ${lists.length} dropdowns. Check every dropdown still shows what you had chosen.`;
+  };
+
+  // The OPEN popup (search-box suggestion lists, nested "Recruiting Source >"
+  // menus). Workday portals these to <body>, outside the form the main
+  // snapshot walks. Open the menu yourself, then run  __wdPopup().
+  window.__wdPopup = () => {
+    const pops = [...document.querySelectorAll('[data-popper-placement], [data-automation-id="activeListContainer"], [visibility="opened"]')]
+      .filter(p => p.getBoundingClientRect().height > 0 && !pops_has_parent(p));
+    function pops_has_parent(p) { return p.parentElement && p.parentElement.closest('[data-popper-placement], [data-automation-id="activeListContainer"], [visibility="opened"]'); }
+    if (!pops.length) return 'No open menu found: click the field so its list is showing, then run __wdPopup() again.';
+    save(pops.map(p => walk(p, 0)).join('\n<hr>\n'), '-popup');
+    return `Saved ${pops.length} open menu(s), values removed.`;
   };
 
   save(body);
