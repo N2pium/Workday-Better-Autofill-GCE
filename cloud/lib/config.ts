@@ -14,6 +14,11 @@ export interface AppConfig {
   readonly googleClientId?: string;
   /** Secrets Manager secret holding the Google OAuth client secret (plain string). */
   readonly googleSecretName: string;
+  /**
+   * Where CloudWatch alarms are emailed. Pass at deploy time (-c alarmEmail=...)
+   * rather than committing it: the repo is public. Empty = alarms not emailed.
+   */
+  readonly alarmEmail?: string;
 }
 
 const EXTENSION_ID = /^[a-p]{32}$/;
@@ -55,7 +60,13 @@ export function loadConfig(app: App): AppConfig {
     app.node.tryGetContext('googleSecretName') ?? 'easyapply/google-oauth-client-secret',
   );
 
+  const alarmEmail = String(app.node.tryGetContext('alarmEmail') ?? '').trim() || undefined;
+  if (alarmEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alarmEmail)) {
+    throw new Error(`Not an email address: "${alarmEmail}"`);
+  }
+
   return {
+    alarmEmail,
     extensionIds,
     dashboardUrls: dashboardUrls.map((u) => new URL(u).origin),
     domainPrefix,

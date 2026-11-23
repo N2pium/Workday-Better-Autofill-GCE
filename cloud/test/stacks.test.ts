@@ -5,6 +5,7 @@ import { ApiStack } from '../lib/api-stack';
 import { AuthStack } from '../lib/auth-stack';
 import { loadConfig } from '../lib/config';
 import { DataStack } from '../lib/data-stack';
+import { WebStack } from '../lib/web-stack';
 
 const EXT = 'abcdefghijklmnopabcdefghijklmnop';
 
@@ -154,5 +155,47 @@ describe('ApiStack', () => {
     const text = JSON.stringify(api.findResources('AWS::IAM::Policy'));
     expect(text).not.toContain('dynamodb:Scan');
     expect(text).not.toContain('dynamodb:*');
+  });
+});
+
+describe('alarms', () => {
+  it('sends every alarm to the SNS topic, and emails only when alarmEmail is set', () => {
+    const { api } = synth();
+    const alarms = Object.values(api.findResources('AWS::CloudWatch::Alarm'));
+    expect(alarms.length).toBeGreaterThanOrEqual(7);
+    for (const a of alarms) expect(a.Properties.AlarmActions).toHaveLength(1);
+    api.resourceCountIs('AWS::SNS::Subscription', 0);
+
+    const withEmail = synth({ alarmEmail: 'ops@example.com' }).api;
+    withEmail.hasResourceProperties('AWS::SNS::Subscription', { Protocol: 'email', Endpoint: 'ops@example.com' });
+  });
+  it('rejects a malformed alarm email', () => {
+    expect(() => synth({ alarmEmail: 'nope' })).toThrow(/Not an email/);
+  });
+});
+
+describe('WebStack', () => {
+  const app = new App({ context: { 'aws:cdk:bundling-stacks': [] } });
+  const web = Template.fromStack(new WebStack(app, 'Web', { env: { account: '111111111111', region: 'us-east-2' } }));
+
+  it('keeps the bucket private behind CloudFront OAC', () => {
+    web.hasResourceProperties('AWS::S3::Bucket', {
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true },
+    });
+    web.resourceCountIs('AWS::CloudFront::OriginAccessControl', 1);
+  });
+  it('sends a strict CSP and HTTPS only', () => {
+    web.hasResourceProperties('AWS::CloudFront::ResponseHeadersPolicy', {
+      ResponseHeadersPolicyConfig: Match.objectLike({
+        SecurityHeadersConfig: Match.objectLike({
+          ContentSecurityPolicy: Match.objectLike({ ContentSecurityPolicy: Match.stringLikeRegexp("script-src 'self'") }),
+        }),
+      }),
+    });
+    web.hasResourceProperties('AWS::CloudFront::Distribution', {
+      DistributionConfig: Match.objectLike({
+        DefaultCacheBehavior: Match.objectLike({ ViewerProtocolPolicy: 'redirect-to-https' }),
+      }),
+    });
   });
 });

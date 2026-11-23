@@ -4,6 +4,7 @@ import { ApiStack } from '../lib/api-stack';
 import { AuthStack } from '../lib/auth-stack';
 import { loadConfig, REGION } from '../lib/config';
 import { DataStack } from '../lib/data-stack';
+import { WebContentStack, WebStack } from '../lib/web-stack';
 
 const app = new App();
 const config = loadConfig(app);
@@ -11,14 +12,26 @@ const config = loadConfig(app);
 const env = { account: process.env.CDK_DEFAULT_ACCOUNT, region: REGION };
 
 const data = new DataStack(app, 'EasyApply-Data', { env, terminationProtection: true });
-const auth = new AuthStack(app, 'EasyApply-Auth', { env, terminationProtection: true, config });
-new ApiStack(app, 'EasyApply-Api', {
+const web = new WebStack(app, 'EasyApply-Web', { env });
+const auth = new AuthStack(app, 'EasyApply-Auth', {
+  env, terminationProtection: true, config, dashboardOrigins: [web.origin],
+});
+const api = new ApiStack(app, 'EasyApply-Api', {
   env,
   config,
   table: data.table,
   key: data.key,
   userPool: auth.userPool,
   clients: [auth.extensionClient, auth.dashboardClient],
+  dashboardOrigins: [web.origin],
+});
+new WebContentStack(app, 'EasyApply-WebContent', {
+  env,
+  bucket: web.bucket,
+  distribution: web.distribution,
+  apiUrl: api.api.apiEndpoint,
+  authDomain: auth.loginDomain,
+  clientId: auth.dashboardClient.userPoolClientId,
 });
 
 Tags.of(app).add('project', 'easyapply');

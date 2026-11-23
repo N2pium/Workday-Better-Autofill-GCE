@@ -11,7 +11,9 @@ Everything Regional is in **us-east-2** (fixed in `lib/config.ts`).
 |---|---|---|
 | `EasyApply-Data` | KMS key, DynamoDB single table | Termination protection, `RETAIN`, PITR 35 days |
 | `EasyApply-Auth` | Cognito user pool, managed login, extension + dashboard clients, optional Google | Public PKCE clients, no secrets |
-| `EasyApply-Api` | HTTP API (JWT on every route), 3 Lambdas, access logs, alarms | 20 req/s, burst 40; logs 14 days |
+| `EasyApply-Web` | Private S3 bucket + CloudFront (OAC, strict CSP) for the dashboard | No WAF yet (fixed monthly cost) |
+| `EasyApply-Api` | HTTP API (JWT on every route), 4 Lambdas, access logs, alarms → SNS topic | 20 req/s, burst 40; logs 14 days |
+| `EasyApply-WebContent` | Uploads `../dashboard/` + generated `config.json`, invalidates CloudFront | Deploy order: Web → Auth → Api → WebContent |
 
 ## API (all routes need `Authorization: <Cognito access token>`)
 
@@ -26,10 +28,11 @@ Everything Regional is in **us-east-2** (fixed in `lib/config.ts`).
 | Key | Meaning |
 |---|---|
 | `extensionIds` | **Required.** Chrome extension IDs allowed to sign in. Currently only the **unpacked dev build** (`jhndpohagnfomchdcfnfecdhmdaepgcd` = `C:\Users\Schoo\EasyApply`; unpacked IDs come from the folder path). **Add the published Web Store ID before release**, then `npx cdk deploy EasyApply-Auth`. |
-| `dashboardUrls` | Dashboard origins for redirects/CORS. Default `http://localhost:5173`. |
+| `dashboardUrls` | Extra dashboard origins for redirects/CORS (local dev). The CloudFront URL is added automatically. |
 | `domainPrefix` | Managed-login domain: `<prefix>.auth.us-east-2.amazoncognito.com` |
 | `googleClientId` | Empty = Google off, Cognito email sign-in (dev only). Set it to make Google the only provider. |
 | `googleSecretName` | Secrets Manager secret holding the Google client secret (plain string). |
+| `alarmEmail` | Where alarms are emailed. **Pass on the command line, don't commit it** (public repo): `npx cdk deploy EasyApply-Api -c alarmEmail=you@example.com`. Confirm the SNS email that arrives. Omit on later deploys and the subscription is removed, so always pass it. |
 
 ## Commands
 

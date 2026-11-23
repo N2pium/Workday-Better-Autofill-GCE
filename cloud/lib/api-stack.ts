@@ -11,6 +11,9 @@ import type * as kms from 'aws-cdk-lib/aws-kms';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
+import * as cwActions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import type { Construct } from 'constructs';
 import type { AppConfig } from './config';
 
@@ -20,6 +23,8 @@ export interface ApiStackProps extends StackProps {
   readonly key: kms.IKey;
   readonly userPool: cognito.IUserPool;
   readonly clients: cognito.IUserPoolClient[];
+  /** Dashboard origins known only at deploy time (the CloudFront URL), allowed by CORS. */
+  readonly dashboardOrigins?: string[];
 }
 
 /** PRIVACY_POLICY.md: service logs are kept for 14 days. */
@@ -35,6 +40,7 @@ const ITEM_READ_WRITE = [
 
 export class ApiStack extends Stack {
   readonly api: apigw.HttpApi;
+  readonly alarmTopic: sns.Topic;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
@@ -115,7 +121,7 @@ export class ApiStack extends Stack {
     this.api = new apigw.HttpApi(this, 'HttpApi', {
       apiName: 'easyapply-api',
       corsPreflight: {
-        allowOrigins: config.dashboardUrls,
+        allowOrigins: [...config.dashboardUrls, ...(props.dashboardOrigins ?? [])],
         allowMethods: [
           apigw.CorsHttpMethod.GET,
           apigw.CorsHttpMethod.POST,
@@ -169,23 +175,54 @@ export class ApiStack extends Stack {
     };
 
     // ---------------------------------------------------------------- alarms
-    // No notification target yet; they show in the CloudWatch console. Wire an
-    // SNS topic here once there is an address to page.
+    // Emailed through SNS. Alarm messages carry metric names and counts only, no
+    // user data, so the topic uses SNS's default encryption at rest.
+    this.alarmTopic = new sns.Topic(this, 'AlarmTopic', { displayName: 'EasyApply alarms' });
+    this.alarmTopic.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'DenyInsecureTransport',
+        effect: iam.Effect.DENY,
+        principals: [new iam.AnyPrincipal()],
+        actions: ['sns:Publish'],
+        resources: [this.alarmTopic.topicArn],
+        conditions: { Bool: { 'aws:SecureTransport': 'false' } },
+      }),
+    );
+    if (config.alarmEmail) this.alarmTopic.addSubscription(new subs.EmailSubscription(config.alarmEmail));
+    const notify = new cwActions.SnsAction(this.alarmTopic);
+    const alarm = (id: string, props: Omit<cloudwatch.AlarmProps, 'evaluationPeriods'>) => {
+      const a = new cloudwatch.Alarm(this, id, {
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+        evaluationPeriods: 1,
+        ...props,
+      });
+      a.addAlarmAction(notify);
+      a.addOkAction(notify);
+      return a;
+    };
+
     for (const f of [profiles, applications, account, resumes]) {
-      new cloudwatch.Alarm(this, `${f.node.id}Errors`, {
+      alarm(`${f.node.id}Errors`, {
         metric: f.metricErrors({ period: Duration.minutes(5) }),
         threshold: 1,
-        evaluationPeriods: 1,
-        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
         alarmDescription: `${f.node.id} returned errors`,
       });
     }
-    new cloudwatch.Alarm(this, 'Api5xx', {
+    alarm('Api5xx', {
       metric: this.api.metricServerError({ period: Duration.minutes(5) }),
       threshold: 5,
-      evaluationPeriods: 1,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
       alarmDescription: 'API returned 5xx responses',
+    });
+    // A surge of resume reads is the one thing here that costs real money (Bedrock).
+    alarm('ResumeParseSurge', {
+      metric: resumes.metricInvocations({ period: Duration.hours(1) }),
+      threshold: 200,
+      alarmDescription: 'More than 200 resume reads in an hour (Bedrock cost)',
+    });
+    alarm('ResumeParseThrottled', {
+      metric: resumes.metricThrottles({ period: Duration.minutes(5) }),
+      threshold: 1,
+      alarmDescription: 'Resume function throttled',
     });
 
     new CfnOutput(this, 'ApiUrl', { value: this.api.apiEndpoint });

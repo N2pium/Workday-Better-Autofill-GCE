@@ -5,6 +5,8 @@ import type { AppConfig } from './config';
 
 export interface AuthStackProps extends StackProps {
   readonly config: AppConfig;
+  /** Dashboard origins known only at deploy time (the CloudFront URL from EasyApply-Web). */
+  readonly dashboardOrigins?: string[];
 }
 
 /**
@@ -23,10 +25,13 @@ export class AuthStack extends Stack {
   readonly userPool: cognito.UserPool;
   readonly extensionClient: cognito.UserPoolClient;
   readonly dashboardClient: cognito.UserPoolClient;
+  /** https://<prefix>.auth.<region>.amazoncognito.com */
+  readonly loginDomain: string;
 
   constructor(scope: Construct, id: string, props: AuthStackProps) {
     super(scope, id, props);
     const { config } = props;
+    const dashboardOrigins = [...config.dashboardUrls, ...(props.dashboardOrigins ?? [])];
 
     this.userPool = new cognito.UserPool(this, 'UserPool', {
       userPoolName: 'easyapply-users',
@@ -53,6 +58,8 @@ export class AuthStack extends Stack {
       cognitoDomain: { domainPrefix: config.domainPrefix },
       managedLoginVersion: cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
     });
+
+    this.loginDomain = domain.baseUrl();
 
     let google: cognito.UserPoolIdentityProviderGoogle | undefined;
     if (config.googleClientId) {
@@ -103,8 +110,8 @@ export class AuthStack extends Stack {
     this.extensionClient = addClient('ExtensionClient', extUrls, extUrls);
     this.dashboardClient = addClient(
       'DashboardClient',
-      config.dashboardUrls.map((o) => `${o}/auth/callback`),
-      config.dashboardUrls.map((o) => `${o}/`),
+      dashboardOrigins.map((o) => `${o}/auth/callback`),
+      dashboardOrigins.map((o) => `${o}/`),
     );
 
     new CfnOutput(this, 'UserPoolId', { value: this.userPool.userPoolId });

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Better Autofill - Dashboard</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="bar">
+    <span class="brand">Better Autofill</span>
+    <span id="who" class="muted"></span>
+    <button id="signout" class="ghost" hidden>Sign out</button>
+  </header>
+
+  <main>
+    <section id="signedout" hidden class="card center">
+      <h1>Your applications, in one place</h1>
+      <p class="muted">Sign in with the same account you use in the extension.</p>
+      <button id="signin" class="primary">Sign in</button>
+    </section>
+
+    <section id="app" hidden>
+      <div id="stats" class="stats"></div>
+
+      <div class="toolbar">
+        <h2>Applications</h2>
+        <input id="search" type="search" placeholder="Search company or role" aria-label="Search">
+        <select id="filter" aria-label="Filter by status"><option value="">All statuses</option></select>
+      </div>
+
+      <div class="card table-wrap">
+        <table>
+          <thead><tr><th>Company</th><th>Role</th><th>Applied</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <p id="empty" class="muted center" hidden>No applications yet. Autofill a job form while signed in and it shows up here.</p>
+      </div>
+      <button id="more" class="ghost" hidden>Load more</button>
+
+      <section class="card" id="profile">
+        <h2>Synced profile</h2>
+        <div id="profileBody" class="muted">Loading...</div>
+      </section>
+    </section>
+
+    <p id="error" class="error" role="alert" hidden></p>
+  </main>
+</body>
+</html>
