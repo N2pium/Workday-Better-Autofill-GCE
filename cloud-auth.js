@@ -127,7 +127,12 @@
     }
 
     /** Opens Cognito's sign-in page, or its "Create an account" page with { signUp: true }. */
-    async function signIn({ signUp = false } = {}) {
+    // The first Google sign-in after Cognito links it to an existing email account
+    // can fail once with "Already found an entry for username ..."; the second
+    // attempt signs in to the linked account. See cloud/src/functions/link.
+    const LINKED_RETRY = /already found an entry for username/i;
+
+    async function signIn({ signUp = false, retried = false } = {}) {
         const verifier = randomString(48);
         const state = randomString(16);
         const challenge = await pkceChallenge(verifier);
@@ -143,7 +148,11 @@
         }
 
         const params = new URL(responseUrl).searchParams;
-        if (params.get('error')) throw new Error(params.get('error_description') || params.get('error'));
+        if (params.get('error')) {
+            const msg = params.get('error_description') || params.get('error');
+            if (!retried && LINKED_RETRY.test(msg)) return signIn({ signUp: false, retried: true });
+            throw new Error(msg);
+        }
         if (params.get('state') !== state) throw new Error('Sign-in response did not match this request. Please try again.');
         const code = params.get('code');
         if (!code) throw new Error('Sign-in did not return an authorization code.');

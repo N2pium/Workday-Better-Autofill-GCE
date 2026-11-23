@@ -67,7 +67,18 @@
     const saved = JSON.parse(sessionStorage.getItem(PKCE) || 'null');
     sessionStorage.removeItem(PKCE);
     history.replaceState(null, '', '/');
-    if (q.get('error')) throw new Error(q.get('error_description') || q.get('error'));
+    if (q.get('error')) {
+      const msg = q.get('error_description') || q.get('error');
+      // First Google sign-in after account linking can fail once; the retry works.
+      // (cloud/src/functions/link). The flag stops a loop.
+      if (/already found an entry for username/i.test(msg) && !sessionStorage.getItem('ba.retried')) {
+        sessionStorage.setItem('ba.retried', '1');
+        await signIn();
+        return new Promise(() => {}); // navigating away
+      }
+      throw new Error(msg);
+    }
+    sessionStorage.removeItem('ba.retried');
     if (!saved || !q.get('code') || q.get('state') !== saved.state) throw new Error('Sign-in did not complete. Try again.');
     saveTokens(await tokenRequest({
       grant_type: 'authorization_code', code: q.get('code'), redirect_uri: redirectUri(), code_verifier: saved.verifier,

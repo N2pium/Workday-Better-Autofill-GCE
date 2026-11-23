@@ -22,7 +22,7 @@ You can switch back to local-only mode, or delete your cloud account, at any tim
 ## Cloud account (optional)
 
 ### Signing in
-You sign in with your Google account through Amazon Cognito, our sign-in provider. We receive your **email address, name, and a Google account identifier**. We never see or store your Google password.
+You sign in through Amazon Cognito, our sign-in provider, either with your email address and a password or with your Google account. With email, Cognito stores your email address and a protected (hashed) form of your password; we never see the password. With Google, we receive your **email address, name, and a Google account identifier**, and never see your Google password. If you use both with the same verified email address, they are joined into one account.
 
 ### What we store when you are signed in
 - **Profiles** you choose to sync (name, contact details, address, work history, education, skills, languages, job preferences).

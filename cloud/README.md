@@ -30,9 +30,9 @@ Everything Regional is in **us-east-2** (fixed in `lib/config.ts`).
 | `extensionIds` | **Required.** Chrome extension IDs allowed to sign in. Currently only the **unpacked dev build** (`jhndpohagnfomchdcfnfecdhmdaepgcd` = `C:\Users\Schoo\EasyApply`; unpacked IDs come from the folder path). **Add the published Web Store ID before release**, then `npx cdk deploy EasyApply-Auth`. |
 | `dashboardUrls` | Extra dashboard origins for redirects/CORS (local dev). The CloudFront URL is added automatically. |
 | `domainPrefix` | Managed-login domain: `<prefix>.auth.us-east-2.amazoncognito.com` |
-| `googleClientId` | Empty = Google off, Cognito email sign-in (dev only). Set it to make Google the only provider. |
+| `googleClientId` | Empty = email sign-in only. Set it to add **Continue with Google** next to email. A pre sign-up trigger links a Google sign-in to an existing account with the same verified email. |
 | `googleSecretName` | Secrets Manager secret holding the Google client secret (plain string). |
-| `alarmEmail` | Where alarms are emailed. **Pass on the command line, don't commit it** (public repo): `npx cdk deploy EasyApply-Api -c alarmEmail=you@example.com`. Confirm the SNS email that arrives. Omit on later deploys and the subscription is removed, so always pass it. |
+| `alarmEmail` | Where alarms are emailed. **Never commit it** (public repo): put it in your user-level `~/.cdk.json` (`{"context":{"alarmEmail":"..."}}`) so every deploy keeps it. Without it the email subscription is removed. Confirm the SNS email that arrives. |
 
 ## Commands
 

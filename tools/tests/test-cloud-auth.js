@@ -90,6 +90,27 @@ function makeWorld() {
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
 
+test('first Google sign-in after account linking is retried once, then succeeds', async () => {
+  const w = makeWorld();
+  let n = 0;
+  w.authResponse = (url) => {
+    const p = new URL(url).searchParams;
+    return ++n === 1
+      ? `${REDIRECT}?error=invalid_request&error_description=${encodeURIComponent('Already found an entry for username google_123 ')}&state=${p.get('state')}`
+      : `${REDIRECT}?code=CODE123&state=${p.get('state')}`;
+  };
+  const s = await w.Cloud.signIn();
+  assert.equal(s.signedIn, true);
+  assert.equal(w.log.authFlows.length, 2);
+});
+
+test('the linking retry happens only once', async () => {
+  const w = makeWorld();
+  w.authResponse = (url) => `${REDIRECT}?error=invalid_request&error_description=Already%20found%20an%20entry%20for%20username%20x&state=${new URL(url).searchParams.get('state')}`;
+  await assert.rejects(() => w.Cloud.signIn(), /Already found an entry/);
+  assert.equal(w.log.authFlows.length, 2);
+});
+
 test('sign-in uses code + PKCE (S256) with the extension redirect, and stores tokens in the right places', async () => {
   const w = makeWorld();
   const s = await w.Cloud.signIn();

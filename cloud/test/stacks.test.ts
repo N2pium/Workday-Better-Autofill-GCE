@@ -80,14 +80,17 @@ describe('AuthStack', () => {
     auth.resourceCountIs('AWS::Cognito::ManagedLoginBranding', 2);
   });
 
-  it('makes Google the only provider once configured', () => {
+  it('offers email AND Google once configured, with the account-linking trigger', () => {
     const { auth } = synth({ googleClientId: 'abc.apps.googleusercontent.com' });
     auth.resourceCountIs('AWS::Cognito::UserPoolIdentityProvider', 1);
     const clients = auth.findResources('AWS::Cognito::UserPoolClient');
     for (const c of Object.values(clients)) {
-      expect(c.Properties.SupportedIdentityProviders).toEqual(['Google']);
+      expect(c.Properties.SupportedIdentityProviders).toEqual(['COGNITO', 'Google']);
       expect(c.DependsOn).toEqual(expect.arrayContaining([expect.stringMatching(/^Google/)]));
     }
+    auth.hasResourceProperties('AWS::Cognito::UserPool', {
+      LambdaConfig: { PreSignUp: Match.anyValue() },
+    });
     // The secret is a dynamic reference, never plaintext in the template.
     expect(JSON.stringify(auth.toJSON())).toContain('{{resolve:secretsmanager:');
   });

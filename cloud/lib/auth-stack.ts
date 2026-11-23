@@ -1,5 +1,10 @@
 import { CfnOutput, Duration, RemovalPolicy, SecretValue, Stack, type StackProps } from 'aws-cdk-lib';
+import * as path from 'node:path';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import type { Construct } from 'constructs';
 import type { AppConfig } from './config';
 
@@ -16,10 +21,9 @@ export interface AuthStackProps extends StackProps {
  * PKCE. The extension signs in through chrome.identity.launchWebAuthFlow, which
  * redirects to https://<extension-id>.chromiumapp.org/.
  *
- * Sign-in method: PRIVACY_POLICY.md says users sign in with Google, so once a
- * Google client ID is configured Google is the ONLY provider on both clients.
- * Without one (early development) the clients fall back to Cognito's own
- * email sign-in so the stack is usable before the Google OAuth app exists.
+ * Sign-in methods: email/password always, plus Google once a Google client ID
+ * is configured. The pre sign-up trigger (src/functions/link) keeps it to ONE
+ * account per verified email, so Google and email reach the same data.
  */
 export class AuthStack extends Stack {
   readonly userPool: cognito.UserPool;
@@ -54,6 +58,30 @@ export class AuthStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
+    const linkFn = new NodejsFunction(this, 'LinkAccountsFn', {
+      entry: path.join(__dirname, '..', 'src', 'functions', 'link', 'handler.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 256,
+      timeout: Duration.seconds(5), // Cognito waits at most 5 s for a trigger
+      logGroup: new logs.LogGroup(this, 'LinkAccountsFnLogs', {
+        retention: logs.RetentionDays.TWO_WEEKS,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+      loggingFormat: lambda.LoggingFormat.JSON,
+      bundling: { minify: true, sourceMap: true, target: 'node22' },
+    });
+    // Pool ARN by pattern: referencing the pool here would be a cycle (the pool
+    // references this function as its trigger).
+    linkFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminLinkProviderForUser'],
+        resources: [Stack.of(this).formatArn({ service: 'cognito-idp', resource: 'userpool', resourceName: '*' })],
+      }),
+    );
+    this.userPool.addTrigger(cognito.UserPoolOperation.PRE_SIGN_UP, linkFn);
+
     const domain = this.userPool.addDomain('Domain', {
       cognitoDomain: { domainPrefix: config.domainPrefix },
       managedLoginVersion: cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
@@ -77,7 +105,7 @@ export class AuthStack extends Stack {
       });
     }
     const providers = google
-      ? [cognito.UserPoolClientIdentityProvider.GOOGLE]
+      ? [cognito.UserPoolClientIdentityProvider.COGNITO, cognito.UserPoolClientIdentityProvider.GOOGLE]
       : [cognito.UserPoolClientIdentityProvider.COGNITO];
 
     const addClient = (name: string, callbackUrls: string[], logoutUrls: string[]) => {
@@ -118,6 +146,6 @@ export class AuthStack extends Stack {
     new CfnOutput(this, 'ExtensionClientId', { value: this.extensionClient.userPoolClientId });
     new CfnOutput(this, 'DashboardClientId', { value: this.dashboardClient.userPoolClientId });
     new CfnOutput(this, 'LoginDomain', { value: domain.baseUrl() });
-    new CfnOutput(this, 'SignInProvider', { value: google ? 'Google' : 'Cognito (dev only)' });
+    new CfnOutput(this, 'SignInProvider', { value: google ? 'Email + Google' : 'Email only' });
   }
 }
