@@ -15,7 +15,7 @@
     "dashboardUrls": [
       "http://localhost:5173"
     ],
-    "googleClientId": "",
+    "googleClientId": "59217077885-648gea68r9uh76pm0d1at8uaouoegpj8.apps.googleusercontent.com",
     "googleSecretName": "easyapply/google-oauth-client-secret",
     "@aws-cdk/aws-signer:signingProfileNamePassedToCfn": true,
     "@aws-cdk/core:newStyleStackSynthesis": true,
