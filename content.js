@@ -133,39 +133,9 @@ async function scanAndFill() {
         }
     }
 
-    // 2. Work Experience (Complex Date Handling)
+    // 2. Work Experience. Every job in the profile, one Workday panel each.
     if (userProfile.workExperience && userProfile.workExperience.length > 0) {
-        const work = userProfile.workExperience[0];
-        fillFieldByFuzzyLabel(['company', 'employer'], work.company);
-        fillFieldByFuzzyLabel(['job title', 'title', 'role'], work.title || work['job title']);
-        fillFieldByFuzzyLabel(['location'], work.location);
-        fillFieldByFuzzyLabel(['role description', 'description', 'summary'], work.description || work['role description']);
-
-        // Before the dates, not after. Ticking "I currently work here" is what
-        // makes Workday hide the To widget, so filling To first and then hiding
-        // it leaves behind a value the user can neither see nor correct.
-        //
-        // Set in BOTH directions. This used to run only when isCurrentRole was
-        // true, and nothing in the extension ever cleared a checkbox, so a box
-        // ticked by anything else stayed ticked against a profile that said
-        // otherwise. Making the form match the profile is the whole job.
-        //
-        // 'present' is gone from the keys on purpose: it is a substring of
-        // "represent" and "presented", which is wording Workday consent text
-        // uses constantly, and it never matched "I currently work here" anyway.
-        if (setCheckbox(['i currently work here', 'current job'], !!work.isCurrentRole)) {
-            await new Promise(r => setTimeout(r, 200));
-        }
-
-        // Date Logic. fillDate takes the whole key list and stops at the first
-        // one that resolves, so the two calls per date are gone — and with them
-        // the trailing fillFieldByFuzzyLabel passes, whose 'to' key matched any
-        // label merely containing "to" and wrote "MM/YYYY" into it.
-        if (work.startDate) await fillDate(['from', 'start date'], work.startDate);
-
-        // Skipped for a current role: the To widget is not rendered, and the old
-        // unscoped lookup then wrote the end date into the From widget instead.
-        if (work.endDate && !work.isCurrentRole) await fillDate(['to', 'end date'], work.endDate);
+        await handleWorkExperience(userProfile.workExperience);
     }
 
     // 3. Education
@@ -254,6 +224,107 @@ function workdayJobInfo() {
         company: ((logo && logo.alt) || '').trim().slice(0, 200),
         pageTitle: (document.title || '').slice(0, 300)
     };
+}
+
+/**
+ * WORK EXPERIENCE
+ *
+ * Workday renders one panel per job ("Work Experience 1", "Work Experience 2",
+ * ...) plus an Add button. This used to fill only workExperience[0], and with
+ * unscoped label lookups, so every panel on the page got the FIRST job's company,
+ * title, location and description, and the other jobs never appeared.
+ * Reported 2026-11-22. Now each job fills its own panel, adding panels as needed.
+ */
+const WORK_PANEL_HEADING = /^\s*work experience\s*\d+\s*$/i;
+
+function findWorkPanels() {
+    const panels = [];
+    for (const h of document.querySelectorAll('h2, h3, h4, h5, h6, [role="heading"], legend')) {
+        if (!WORK_PANEL_HEADING.test(h.innerText || '')) continue;
+        // The panel is the closest ancestor that holds inputs but no OTHER panel
+        // heading; past that we would be scoping to the whole section.
+        let el = h.closest('div[role="group"], fieldset') || h.parentElement;
+        while (el && !el.querySelector('input, textarea') && el.parentElement) el = el.parentElement;
+        if (!el) continue;
+        const headings = Array.from(el.querySelectorAll('h2, h3, h4, h5, h6, [role="heading"], legend'))
+            .filter(x => WORK_PANEL_HEADING.test(x.innerText || ''));
+        if (headings.length > 1) el = h.parentElement;
+        if (el && el.offsetParent !== null && !panels.includes(el)) panels.push(el);
+    }
+    return panels;
+}
+
+function findAddWorkButton() {
+    const direct = document.querySelector('button[aria-label*="Add Work Experience" i], button[aria-label*="Add Another Work Experience" i]');
+    if (direct) return direct;
+    for (const h of document.querySelectorAll('h2, h3, h4, [role="heading"]')) {
+        if (!/^\s*work experience\s*$/i.test(h.innerText || '')) continue;
+        let sec = h.parentElement;
+        for (let hops = 0; sec && hops < 4; hops++, sec = sec.parentElement) {
+            const btn = Array.from(sec.querySelectorAll('button')).find(b =>
+                b.getAttribute('data-automation-id') === 'add-button' || /^\s*add( another)?\s*$/i.test(b.innerText || ''));
+            if (btn) return btn;
+        }
+    }
+    return null;
+}
+
+async function fillWorkPanel(work, root) {
+    fillFieldByFuzzyLabel(['company', 'employer'], work.company, root);
+    fillFieldByFuzzyLabel(['job title', 'title', 'role'], work.title || work['job title'], root);
+    fillFieldByFuzzyLabel(['location'], work.location, root);
+    fillFieldByFuzzyLabel(['role description', 'description', 'summary'], work.description || work['role description'], root);
+
+    // Before the dates: ticking "I currently work here" hides the To widget, so
+    // filling To first would leave a value the user can neither see nor fix.
+    // Set in BOTH directions so the form matches the profile. ('present' is not a
+    // key: it is a substring of "represent", common in consent text.)
+    if (setCheckbox(['i currently work here', 'current job'], !!work.isCurrentRole, root)) {
+        await new Promise(r => setTimeout(r, 200));
+    }
+
+    if (work.startDate) await fillDate(['from', 'start date'], work.startDate, root);
+    // Skipped for a current role: the To widget is not rendered.
+    if (work.endDate && !work.isCurrentRole) await fillDate(['to', 'end date'], work.endDate, root);
+}
+
+async function handleWorkExperience(jobs) {
+    jobs = (jobs || []).filter(j => j && (j.company || j.title || j['job title']));
+    if (!jobs.length) return;
+
+    // No numbered panels: a single-entry form (or a tenant we have not seen).
+    // Keep the old page-wide fill for the first job.
+    if (!findWorkPanels().length) {
+        const addBtn = findAddWorkButton();
+        if (addBtn) {
+            addBtn.click();
+            await waitForCondition(() => findWorkPanels().length > 0, 2000);
+        }
+        if (!findWorkPanels().length) {
+            await fillWorkPanel(jobs[0], document);
+            return;
+        }
+    }
+
+    for (let i = 0; i < jobs.length; i++) {
+        let panels = findWorkPanels();
+        if (!panels[i]) {
+            const addBtn = findAddWorkButton();
+            if (!addBtn) {
+                console.log(`Workday Autoplay: no Add button for work experience ${i + 1}; stopping.`);
+                break;
+            }
+            const before = panels.length;
+            addBtn.click();
+            if (!await waitForCondition(() => findWorkPanels().length > before, 2000)) {
+                console.warn(`Workday Autoplay: Add did not open work experience ${i + 1}.`);
+                break;
+            }
+            panels = findWorkPanels();
+        }
+        console.log(`Workday Autoplay: filling work experience ${i + 1}`, panels[i]);
+        await fillWorkPanel(jobs[i], panels[i]);
+    }
 }
 
 function formatDateString(dateObj) {
@@ -541,11 +612,11 @@ function controlContainerFor(label) {
     return el && el.querySelector(CONTROL) ? el : null;
 }
 
-function findDateContainer(key) {
+function findDateContainer(key, root = document) {
     let best = null;
     let bestScore = 0;
 
-    for (const label of document.querySelectorAll('label, legend')) {
+    for (const label of root.querySelectorAll('label, legend')) {
         const score = labelMatchScore(label.innerText, key);
         if (!score || score <= bestScore) continue;
 
@@ -651,7 +722,7 @@ function fillSingleDateInput(container, dateObj) {
  * Fill the date field named by any of `labelKeys` with { month, year }.
  * Returns whether anything was written.
  */
-async function fillDate(labelKeys, dateObj) {
+async function fillDate(labelKeys, dateObj, root = document) {
     if (!dateObj) return false;
     const { month, year } = dateObj;
     if (!month && !year) return false;
@@ -659,7 +730,7 @@ async function fillDate(labelKeys, dateObj) {
     const keys = Array.isArray(labelKeys) ? labelKeys : [labelKeys];
 
     for (const key of keys) {
-        const container = findDateContainer(key);
+        const container = findDateContainer(key, root);
         if (!container) continue;
 
         console.log(`Workday Autoplay: date field "${key}" resolved to`, container);
@@ -721,11 +792,11 @@ function normalizeLabel(text) {
     return text.toLowerCase().replace(/\*/g, '').replace(/\(required\)/g, '').replace(/\s+/g, ' ').trim();
 }
 
-function fillFieldByFuzzyLabel(keys, value) {
+function fillFieldByFuzzyLabel(keys, value, root = document) {
     if (!value) return;
 
     const candidates = [];
-    document.querySelectorAll('input:not([type="hidden"]), textarea').forEach(input => {
+    root.querySelectorAll('input:not([type="hidden"]), textarea').forEach(input => {
         if (input.value && input.value === value) return;
         const texts = collectLabelTexts(input);
         if (texts.length) candidates.push({ input, texts });
@@ -789,10 +860,10 @@ function checkboxLabelTexts(input) {
  * used to exist here — it stayed ticked, the To date became unreachable, and the
  * entry claimed a job the user had already left. Reported 2026-08-24.
  */
-function setCheckbox(keys, desired) {
+function setCheckbox(keys, desired, root = document) {
     let changed = false;
 
-    document.querySelectorAll('input[type="checkbox"]').forEach(input => {
+    root.querySelectorAll('input[type="checkbox"]').forEach(input => {
         const texts = checkboxLabelTexts(input);
         if (!texts.some(t => matchesAny(t, keys))) return;
         if (input.checked === desired) return;
