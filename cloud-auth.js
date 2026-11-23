@@ -22,6 +22,8 @@
     const AUTH_KEY = 'cloudAuth';
     const EXPIRY_SKEW_MS = 60 * 1000; // refresh a minute early
     const ORIGINS = [`${CFG.apiUrl}/*`, `${CFG.authDomain}/*`];
+    // Separate, so people signed in before the vault existed are asked only when they use it.
+    const VAULT_ORIGINS = CFG.resumeBucketHost ? [`https://${CFG.resumeBucketHost}/*`] : [];
 
     // ------------------------------------------------------------ helpers
 
@@ -112,7 +114,7 @@
     // different account signs in, nothing from this one may flow into it.
     async function clearCredentials() {
         await chrome.storage.session.remove(SESSION_KEY);
-        await chrome.storage.local.remove([AUTH_KEY, 'cloudSync', 'cloudTracked']);
+        await chrome.storage.local.remove([AUTH_KEY, 'cloudSync', 'cloudTracked', 'cloudVaultActive']);
     }
 
     // ------------------------------------------------------------ public API
@@ -120,6 +122,7 @@
     /** Host access to the API and sign-in domains. Must be requested from a click. */
     const hasPermission = () => chrome.permissions.contains({ origins: ORIGINS });
     const requestPermission = () => chrome.permissions.request({ origins: ORIGINS });
+    const requestVaultPermission = () => chrome.permissions.request({ origins: VAULT_ORIGINS });
 
     async function status() {
         const { [AUTH_KEY]: auth } = await chrome.storage.local.get(AUTH_KEY);
@@ -253,6 +256,7 @@
     global.EasyApplyCloud = Object.freeze({
         hasPermission,
         requestPermission,
+        requestVaultPermission,
         status,
         signIn,
         signOut,

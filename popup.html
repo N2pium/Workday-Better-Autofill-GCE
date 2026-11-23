@@ -39,6 +39,20 @@
           <button id="autofillBtn" class="autofill-btn">Autofill this page</button>
         </div>
 
+        <div class="panel-card" id="matchCard" hidden>
+          <div class="card-head">
+            <p class="kicker">Match score</p>
+          </div>
+          <p class="helper" id="matchHelp">How well your profile fits the job on this page, with what to highlight and what is missing.</p>
+          <div class="match-result" id="matchResult" hidden>
+            <p class="match-score"><b id="matchScore">0</b><span>/100</span></p>
+            <p class="helper" id="matchSummary"></p>
+            <p class="kicker small">Strengths</p><ul class="match-list" id="matchStrengths"></ul>
+            <p class="kicker small">Gaps</p><ul class="match-list" id="matchGaps"></ul>
+          </div>
+          <button type="button" id="matchBtn" class="secondary-btn">Check my match</button>
+        </div>
+
         <div class="panel-card">
           <div class="card-head">
             <p class="kicker">Your profile</p>
@@ -67,6 +81,29 @@
           <input type="file" id="resumeImportFile" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
           <button type="button" id="resumeImportBtn" class="autofill-btn">Upload resume</button>
           <p class="helper import-status" id="resumeImportStatus" aria-live="polite"></p>
+        </div>
+
+        <div class="panel-card" id="vaultCard" hidden>
+          <div class="card-head">
+            <p class="kicker">Resume versions</p>
+            <span class="count-badge" id="vaultCount"></span>
+          </div>
+          <p class="helper">Keep a resume per kind of job (up to 10) in your account, encrypted. Pick one with
+            "Use for autofill" before you apply. Delete removes the file from your account.</p>
+          <ul class="app-list" id="vaultList"></ul>
+          <input type="file" id="vaultFile" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
+          <button type="button" id="vaultAddBtn" class="secondary-btn">Add a resume version</button>
+          <p class="helper import-status" id="vaultStatus" aria-live="polite"></p>
+        </div>
+
+        <div class="panel-card" id="answersCard" hidden>
+          <div class="card-head">
+            <p class="kicker">Saved answers</p>
+            <span class="count-badge" id="answersCount"></span>
+          </div>
+          <p class="helper" id="answersHelp">Answers you save from the &#10022; Draft button on job forms. They are offered first
+            next time, for free. <code>{company}</code> and <code>{role}</code> are filled in for each job.</p>
+          <ul class="app-list" id="answersList"></ul>
         </div>
 
         <form id="profileForm">
@@ -354,6 +391,11 @@
           </div>
           <p class="helper">Syncs personal info, address, education, work experience, skills, languages and job
             preferences when you press Save. Self-identification answers and your resume file stay on this device.</p>
+          <div class="input-group checkbox-group">
+            <input type="checkbox" id="aiAssistToggle" checked />
+            <label for="aiAssistToggle">Show &#10022; Draft buttons on job forms</label>
+          </div>
+          <p class="helper">Saved answers and AI drafts for free-text questions. Nothing is sent until you press a button in them.</p>
           <div class="row">
             <button type="button" id="cloudSignOutBtn" class="add-btn half">Sign out</button>
             <button type="button" id="cloudDeleteBtn" class="add-btn half cloud-danger">Delete cloud account</button>
@@ -526,6 +568,8 @@
   <script src="cloud-auth.js"></script>
   <script src="cloud-sync.js"></script>
   <script src="cloud-tracker.js"></script>
+  <script src="cloud-library.js"></script>
+  <script src="cloud-vault.js"></script>
   <script src="popup.js"></script>
 </body>
 

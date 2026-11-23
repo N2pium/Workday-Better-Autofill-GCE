@@ -26,7 +26,7 @@ You sign in through Amazon Cognito, our sign-in provider, either with your email
 
 ### What we store when you are signed in
 - **Profiles** you choose to sync (name, contact details, address, work history, education, skills, languages, job preferences).
-- **Resume files** you upload, and their file names.
+- **Resume versions** you choose to keep (up to 10): the files, the names you give them, and their file names. Stored only if you add them, encrypted, and deleted when you delete them or your account.
 - **Application records** created when you autofill or add an application: company, job title, job posting URL, date, and the status you set.
 - **Saved answers** you choose to keep in your answer library: the application question and the final text you approved, so you can reuse it on later applications.
 - **Reminder settings** for applications you want follow-up reminders on.
@@ -34,14 +34,14 @@ You sign in through Amazon Cognito, our sign-in provider, either with your email
 
 ### What we never store in the cloud
 - **Voluntary self-identification answers** (gender, race/ethnicity, veteran status, disability status) are **never synced or uploaded**. They stay in your browser on each device and are used only to fill the matching voluntary questions at your request.
-- We do not collect your browsing history, the content of pages you visit, or form fields other than the profile data you entered yourself.
+- We do not collect your browsing history, the content of pages you visit, or form fields other than the profile data you entered yourself. On supported job sites the extension reads the job's title, company and description so AI features can use them; this stays on your device and is sent only as part of an AI request you make.
 
 ### AI features (optional, used only when you ask)
-When you use an AI feature — parsing a resume into your profile, drafting an answer to an application question, writing a cover letter, or scoring how well your profile matches a job description — the relevant parts of your profile or resume, plus the question or job description you selected, are sent to **Amazon Bedrock** to generate the result.
+When you use an AI feature — parsing a resume into your profile, drafting an answer to an application question, writing a cover letter, or scoring how well your profile matches a job description — the relevant parts of your profile (your work history, education and skills; never your contact details) or the resume you chose, plus the question and the job's title, company and description, are sent to **Amazon Bedrock** to generate the result. To suggest one of your saved answers, the question's text may be sent on its own to sort it into a category.
 - Self-identification answers are **never** included.
 - AI requests are processed by Amazon Bedrock **within the United States** (AWS Regions us-east-1, us-east-2 and us-west-2). Amazon Bedrock does not store your inputs or outputs, does not use them to train AI models, and does not share them with model providers.
 - AI results are suggestions. Nothing is entered into a form or saved to your profile until you review and accept it.
-- A resume you upload to fill in your profile is read once to produce that suggestion and is **not stored** by us or by Amazon Bedrock.
+- A resume you upload to fill in your profile is read once to produce that suggestion and is **not stored** by us or by Amazon Bedrock, unless you also add it as a resume version.
 
 ### Follow-up reminders (optional)
 If you turn on reminders, we email you at your sign-in address (sent through Amazon Simple Email Service) when an application has had no status change for a set number of days. You can turn reminders off for one application or for all of them, and every reminder email includes a way to stop them.

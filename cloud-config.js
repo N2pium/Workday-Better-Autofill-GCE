@@ -9,5 +9,7 @@ self.EASYAPPLY_CLOUD_CONFIG = Object.freeze({
     apiUrl: 'https://cfswo4fym6.execute-api.us-east-2.amazonaws.com',
     authDomain: 'https://better-autofill.auth.us-east-2.amazoncognito.com',
     clientId: '43qdd554clva7dugdetl1evlea',
+    // Resume Vault bucket (EasyApply-Api.ResumeBucketHost). Asked for only when the vault is used.
+    resumeBucketHost: 'easyapply-data-resumesb6263180-1qd2ewprnfb4.s3.us-east-2.amazonaws.com',
     scopes: ['openid', 'email', 'profile']
 });

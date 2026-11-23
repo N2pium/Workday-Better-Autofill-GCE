@@ -710,7 +710,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     cloudUi.deleteBtn.addEventListener('click', async () => {
         const ok = confirm(
-            'Delete your cloud account and everything stored in it (synced profiles and tracked applications)?\n\n' +
+            'Delete your cloud account and everything stored in it (synced profile, tracked applications, saved answers and resume versions)?\n\n' +
             'Your data on this device is not affected. This cannot be undone.'
         );
         if (!ok) return;
@@ -744,6 +744,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try { sessionStorage.setItem('tab', name); } catch (e) { /* remembering the tab is optional */ } // survives the reload after a sync download
         if (name === 'home') renderHome();
         if (name === 'apps') renderApps();
+        if (name === 'profile') { renderVault(); renderAnswers(); }
     }
     tabButtons.forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab)));
     document.addEventListener('click', (e) => {
@@ -808,6 +809,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function renderHome() {
         renderJobCard();
+        matchUi.card.hidden = !signedInNow;
         renderHomeProfile();
         if (!signedInNow) {
             homeUi.list.replaceChildren();
@@ -939,6 +941,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function refreshTrackedViews() {
         if (!document.getElementById('tab-home').hidden) renderHome();
         if (!document.getElementById('tab-apps').hidden) renderApps();
+        if (!document.getElementById('tab-profile').hidden) { renderVault(); renderAnswers(); }
     }
 
     // ---------------------------------------------------------------- resume -> profile
@@ -1031,6 +1034,242 @@ document.addEventListener('DOMContentLoaded', () => {
             importUi.btn.disabled = false;
         }
     });
+
+    // ---------------------------------------------------------------- phase 2: match score (F04)
+    const Lib = window.EasyApplyLibrary;
+    const Vault = window.EasyApplyVault;
+    const matchUi = {
+        card: document.getElementById('matchCard'),
+        help: document.getElementById('matchHelp'),
+        result: document.getElementById('matchResult'),
+        score: document.getElementById('matchScore'),
+        summary: document.getElementById('matchSummary'),
+        strengths: document.getElementById('matchStrengths'),
+        gaps: document.getElementById('matchGaps'),
+        btn: document.getElementById('matchBtn')
+    };
+    const MATCH_HELP = matchUi.help.textContent;
+
+    // What the AI may see: work, education, skills. Never contact details or self-ID.
+    function profileForAi(d) {
+        const arr = (v) => (Array.isArray(v) ? v : []);
+        const skills = Array.isArray(d.skills) ? d.skills : String(d.skills || '').split(',').map((s) => s.trim()).filter(Boolean);
+        return { workExperience: arr(d.workExperience).slice(0, 30), education: arr(d.education).slice(0, 20), skills: skills.slice(0, 200) };
+    }
+
+    function jobOnActiveTab() {
+        return new Promise(async (resolve) => {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (!tab || !tab.id) return resolve(null);
+            chrome.tabs.sendMessage(tab.id, { action: 'get_job_context' }, (res) => {
+                void chrome.runtime.lastError; // no content script on this page
+                resolve(res || null);
+            });
+        });
+    }
+
+    matchUi.btn.addEventListener('click', async () => {
+        matchUi.btn.disabled = true;
+        matchUi.help.textContent = 'Comparing your profile with this job…';
+        try {
+            const job = await jobOnActiveTab();
+            if (!job || !job.description) {
+                matchUi.result.hidden = true;
+                matchUi.help.textContent = 'Open the job posting (the page with the full description) on Workday or Greenhouse, ' +
+                    'then try again. It is remembered for that job\'s application pages.';
+                return;
+            }
+            const d = await chrome.storage.local.get(['workExperience', 'education', 'skills']);
+            const r = await Cloud.api('/ai/match', { method: 'POST', body: { job, profile: profileForAi(d) } });
+            matchUi.score.textContent = String(r.score);
+            matchUi.score.parentElement.className = `match-score ${r.score >= 70 ? 'good' : r.score < 40 ? 'weak' : ''}`;
+            matchUi.summary.textContent = r.summary;
+            matchUi.strengths.replaceChildren(...r.strengths.map((s) => el('li', '', s)));
+            matchUi.gaps.replaceChildren(...(r.gaps.length ? r.gaps : ['None spotted']).map((s) => el('li', '', s)));
+            matchUi.result.hidden = false;
+            matchUi.help.textContent = [job.role, job.company].filter(Boolean).join(' · ') || MATCH_HELP;
+        } catch (e) {
+            matchUi.help.textContent = e.notSignedIn ? e.message : e.status === 429 ? e.message : `Couldn't score this job: ${e.message}`;
+        } finally {
+            matchUi.btn.disabled = false;
+        }
+    });
+
+    // On-page Draft buttons (ai-assist.js) can be switched off; it watches this key.
+    const aiToggle = document.getElementById('aiAssistToggle');
+    chrome.storage.local.get('aiAssistOff').then((r) => { aiToggle.checked = !r.aiAssistOff; });
+    aiToggle.addEventListener('change', () => chrome.storage.local.set({ aiAssistOff: !aiToggle.checked }));
+
+    // ---------------------------------------------------------------- phase 2: resume versions (F02)
+    const vaultUi = {
+        card: document.getElementById('vaultCard'),
+        list: document.getElementById('vaultList'),
+        count: document.getElementById('vaultCount'),
+        add: document.getElementById('vaultAddBtn'),
+        file: document.getElementById('vaultFile'),
+        status: document.getElementById('vaultStatus')
+    };
+    let vaultAllowed = false; // host access to the resume bucket, asked for on first use
+
+    const kb = (n) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+    // chrome.permissions.request must be the first await inside the click.
+    async function ensureVaultPermission() {
+        if (vaultAllowed) return true;
+        vaultAllowed = await Cloud.requestVaultPermission();
+        if (!vaultAllowed) vaultUi.status.textContent = 'Chrome permission declined. Nothing was uploaded.';
+        return vaultAllowed;
+    }
+
+    function vaultItem(item, active) {
+        const li = el('li', 'app-item vault-item');
+        const main = el('div');
+        main.append(el('div', 'app-company', item.name), el('div', 'app-role', `${item.fileName} · ${kb(item.size || 0)} · ${shortDate(item.createdAt)}`));
+        li.append(main, active ? el('span', 'vault-active', '● in use') : el('span'));
+
+        const actions = el('div', 'app-actions');
+        const use = Object.assign(el('button', '', 'Use for autofill'), { type: 'button' });
+        use.addEventListener('click', async () => {
+            if (!(await ensureVaultPermission())) return;
+            use.disabled = true;
+            vaultUi.status.textContent = `Loading ${item.name}…`;
+            try {
+                await Vault.use(Cloud, item);
+                document.getElementById('resumeStatus').textContent = `Stored: ${item.fileName} (from "${item.name}")`;
+                vaultUi.status.textContent = `Autofill now attaches "${item.name}".`;
+                renderVault();
+            } catch (e) {
+                vaultUi.status.textContent = `Couldn't load it: ${e.message}`;
+            } finally { use.disabled = false; }
+        });
+        const rename = Object.assign(el('button', '', 'Rename'), { type: 'button' });
+        rename.addEventListener('click', async () => {
+            const name = prompt('Name this resume version', item.name);
+            if (!name || !name.trim() || name.trim() === item.name) return;
+            try {
+                await Cloud.api(`/resumes/${item.id}`, { method: 'PATCH', body: { name: name.trim().slice(0, 100) } });
+                renderVault();
+            } catch (e) { vaultUi.status.textContent = `Couldn't rename it: ${e.message}`; }
+        });
+        const remove = Object.assign(el('button', '', 'Delete'), { type: 'button' });
+        remove.addEventListener('click', async () => {
+            if (!confirm(`Delete "${item.name}" from your account? The copy autofill uses on this device stays until you replace it.`)) return;
+            try {
+                await Vault.remove(Cloud, item);
+                vaultUi.status.textContent = 'Deleted.';
+                renderVault();
+            } catch (e) { vaultUi.status.textContent = `Couldn't delete it: ${e.message}`; }
+        });
+        actions.append(use, rename, remove);
+        li.append(actions);
+        return li;
+    }
+
+    async function renderVault() {
+        vaultUi.card.hidden = !signedInNow;
+        if (!signedInNow) return;
+        try {
+            vaultAllowed = await chrome.permissions.contains({ origins: [`https://${window.EASYAPPLY_CLOUD_CONFIG.resumeBucketHost}/*`] });
+            const [items, active] = await Promise.all([Vault.list(Cloud), Vault.active()]);
+            vaultUi.list.replaceChildren(...items.map((i) => vaultItem(i, active && active.id === i.id)));
+            vaultUi.count.textContent = items.length ? `${items.length}/10` : '';
+            vaultUi.add.disabled = items.length >= 10;
+            if (!items.length && !vaultUi.status.textContent) vaultUi.status.textContent = 'No versions yet.';
+        } catch (e) {
+            vaultUi.status.textContent = e.notSignedIn ? e.message : `Couldn't load your resumes: ${e.message}`;
+        }
+    }
+
+    vaultUi.add.addEventListener('click', async () => {
+        if (vaultAllowed) { vaultUi.file.click(); return; } // synchronous: keeps the click's user activation
+        if (await ensureVaultPermission()) vaultUi.status.textContent = 'Thanks. Now press "Add a resume version" again to pick the file.';
+    });
+
+    vaultUi.file.addEventListener('change', async () => {
+        const file = vaultUi.file.files[0];
+        vaultUi.file.value = '';
+        if (!file) return;
+        const suggested = file.name.replace(/\.(pdf|docx)$/i, '');
+        const name = prompt('Name this version, e.g. "Data Analyst" or "Software Engineer"', suggested);
+        if (name === null) return;
+        vaultUi.add.disabled = true;
+        vaultUi.status.textContent = `Uploading ${file.name}…`;
+        try {
+            await Vault.add(Cloud, file, name.trim() || suggested);
+            vaultUi.status.textContent = `Saved "${name.trim() || suggested}". Press "Use for autofill" to attach it to applications.`;
+        } catch (e) {
+            vaultUi.status.textContent = e.notSignedIn ? e.message : `Couldn't save it: ${e.message}`;
+        } finally {
+            vaultUi.add.disabled = false;
+            renderVault();
+        }
+    });
+
+    // ---------------------------------------------------------------- phase 2: saved answers (F11)
+    const answersUi = {
+        card: document.getElementById('answersCard'),
+        list: document.getElementById('answersList'),
+        count: document.getElementById('answersCount'),
+        help: document.getElementById('answersHelp')
+    };
+
+    function answerItem(a) {
+        const li = el('li', 'app-item answer-item');
+        const body = el('div');
+        const head = el('p', 'kicker', `${Lib.LABELS[a.category] || a.category} · used ${a.uses || 0}×`);
+        const text = el('p', 'answer-text', a.text.length > 300 ? `${a.text.slice(0, 300)}…` : a.text);
+        body.append(head, el('div', 'answer-q', a.question), text);
+        li.append(body);
+
+        const actions = el('div', 'app-actions');
+        const edit = Object.assign(el('button', '', 'Edit'), { type: 'button' });
+        const del = Object.assign(el('button', '', 'Delete'), { type: 'button' });
+        edit.addEventListener('click', () => {
+            const box = Object.assign(document.createElement('textarea'), { value: a.text, maxLength: 5000 });
+            box.setAttribute('aria-label', 'Saved answer text');
+            const cat = document.createElement('select');
+            cat.setAttribute('aria-label', 'Kind of question');
+            for (const c of Lib.CATEGORIES) cat.append(Object.assign(el('option', '', Lib.LABELS[c]), { value: c }));
+            cat.value = a.category;
+            const save = Object.assign(el('button', '', 'Save'), { type: 'button' });
+            const cancel = Object.assign(el('button', '', 'Cancel'), { type: 'button' });
+            save.addEventListener('click', async () => {
+                const value = box.value.trim();
+                if (!value) return;
+                try {
+                    Object.assign(a, await Cloud.api(`/answers/${a.id}`, { method: 'PATCH', body: { text: value, category: cat.value } }));
+                    li.replaceWith(answerItem(a));
+                } catch (e) { flash(`Couldn't save it: ${e.message}`, 'var(--danger)', 6000); }
+            });
+            cancel.addEventListener('click', () => li.replaceWith(answerItem(a)));
+            text.replaceWith(box);
+            actions.replaceChildren(cat, save, cancel);
+            box.focus();
+        });
+        del.addEventListener('click', async () => {
+            if (!confirm('Delete this saved answer?')) return;
+            try {
+                await Cloud.api(`/answers/${a.id}`, { method: 'DELETE' });
+                li.remove();
+                answersUi.count.textContent = String(answersUi.list.children.length || '');
+            } catch (e) { flash(`Couldn't delete it: ${e.message}`, 'var(--danger)', 6000); }
+        });
+        actions.append(edit, del);
+        li.append(actions);
+        return li;
+    }
+
+    async function renderAnswers() {
+        answersUi.card.hidden = !signedInNow;
+        if (!signedInNow) return;
+        try {
+            const { items } = await Cloud.api('/answers?limit=300');
+            answersUi.list.replaceChildren(...items.map(answerItem));
+            answersUi.count.textContent = items.length ? String(items.length) : '';
+        } catch (e) {
+            answersUi.list.replaceChildren(el('li', 'helper', e.notSignedIn ? e.message : `Couldn't load saved answers: ${e.message}`));
+        }
+    }
 
     // ---------------------------------------------------------------- top bar + start
     async function renderChip() {

@@ -1010,3 +1010,44 @@ body.show-welcome .container { display: none; }
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--primary); border-top-color: var(--primary); }
 .tab:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+
+/* ---------------------------------------------------------------- phase 2: match, vault, saved answers */
+.secondary-btn {
+  width: 100%;
+  margin-top: var(--space-xs);
+  padding: 10px;
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: var(--step--1);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.secondary-btn:hover { background: var(--ring); }
+.secondary-btn:disabled { opacity: 0.55; cursor: wait; }
+.secondary-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+.count-badge { font-family: var(--mono); font-size: var(--step--2); color: var(--text-muted); }
+.kicker.small { margin-top: var(--space-xs); font-size: 0.625rem; }
+
+.match-score { margin: var(--space-xs) 0 0; font-variant-numeric: tabular-nums; }
+.match-score b { font-size: 2rem; color: var(--primary); }
+.match-score span { color: var(--text-muted); margin-left: 2px; }
+.match-score.good b { color: var(--success); }
+.match-score.weak b { color: var(--danger); }
+.match-list { margin: 4px 0 0; padding-left: 1.1em; font-size: var(--step--1); color: var(--text); }
+.match-list li { margin: 2px 0; }
+
+.vault-item .vault-active { color: var(--success); font-family: var(--mono); font-size: var(--step--2); }
+.answer-item .answer-q { font-size: var(--step--1); color: var(--text-muted); }
+.answer-item .answer-text { white-space: pre-wrap; font-size: var(--step--1); margin: 4px 0; }
+.answer-item textarea {
+  width: 100%; min-height: 110px; margin: 4px 0; padding: 6px; resize: vertical;
+  background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); border-radius: 4px;
+  font: inherit; font-size: var(--step--1);
+}
+.answer-item select { max-width: 100%; }
