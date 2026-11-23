@@ -8,6 +8,7 @@ import type * as cognito from 'aws-cdk-lib/aws-cognito';
 import type * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import type * as kms from 'aws-cdk-lib/aws-kms';
+import type * as s3 from 'aws-cdk-lib/aws-s3';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -21,6 +22,7 @@ export interface ApiStackProps extends StackProps {
   readonly config: AppConfig;
   readonly table: dynamodb.ITableV2;
   readonly key: kms.IKey;
+  readonly resumeBucket: s3.IBucket;
   readonly userPool: cognito.IUserPool;
   readonly clients: cognito.IUserPoolClient[];
   /** Dashboard origins known only at deploy time (the CloudFront URL), allowed by CORS. */
@@ -44,7 +46,7 @@ export class ApiStack extends Stack {
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
-    const { config, table, key, userPool, clients } = props;
+    const { config, table, key, userPool, clients, resumeBucket } = props;
 
     // ---------------------------------------------------------------- functions
     const fn = (
@@ -100,18 +102,54 @@ export class ApiStack extends Stack {
       timeout: Duration.seconds(29), // API Gateway's integration limit is 30 s
       memorySize: 512,
     });
+    const invokeModel = new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel'],
+      resources: [
+        `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/${MODEL_ID}`,
+        ...['us-east-1', 'us-east-2', 'us-west-2'].map(
+          (r) => `arn:aws:bedrock:${r}::foundation-model/${BASE_MODEL}`,
+        ),
+      ],
+    });
     resumes.addEnvironment('MODEL_ID', MODEL_ID);
     resumes.addEnvironment('AI_DAILY_LIMIT', '20');
-    resumes.addToRolePolicy(
+    resumes.addToRolePolicy(invokeModel);
+
+    // Phase 2: AI answers / adapt / match / categorise (F04, F11). Same model and
+    // the same shared daily quota as resume reading.
+    const ai = fn('AiFn', 'ai/handler.ts', ['dynamodb:UpdateItem'], {
+      timeout: Duration.seconds(29),
+      memorySize: 512,
+    });
+    ai.addEnvironment('MODEL_ID', MODEL_ID);
+    ai.addEnvironment('AI_DAILY_LIMIT', '20');
+    ai.addEnvironment('CATEGORISE_DAILY_LIMIT', '100');
+    ai.addToRolePolicy(invokeModel);
+
+    // Answer Library (F11): plain CRUD on ANSWER# items.
+    const answersFn = fn('AnswersFn', 'answers/handler.ts', ITEM_READ_WRITE);
+
+    // Resume Vault (F02): presigned upload/download; objects only under users/<sub>/.
+    const vault = fn('VaultFn', 'vault/handler.ts', ITEM_READ_WRITE);
+    vault.addEnvironment('RESUME_BUCKET', resumeBucket.bucketName);
+    vault.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ['bedrock:InvokeModel'],
-        resources: [
-          `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/${MODEL_ID}`,
-          ...['us-east-1', 'us-east-2', 'us-west-2'].map(
-            (r) => `arn:aws:bedrock:${r}::foundation-model/${BASE_MODEL}`,
-          ),
-        ],
+        actions: ['s3:PutObject', 's3:GetObject', 's3:DeleteObject'],
+        resources: [resumeBucket.arnForObjects('users/*')],
       }),
+    );
+
+    // Account deletion also wipes the user's vault files.
+    account.addEnvironment('RESUME_BUCKET', resumeBucket.bucketName);
+    account.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:ListBucket'],
+        resources: [resumeBucket.bucketArn],
+        conditions: { StringLike: { 's3:prefix': ['users/*'] } },
+      }),
+    );
+    account.addToRolePolicy(
+      new iam.PolicyStatement({ actions: ['s3:DeleteObject'], resources: [resumeBucket.arnForObjects('users/*')] }),
     );
 
     // ---------------------------------------------------------------- API
@@ -154,6 +192,21 @@ export class ApiStack extends Stack {
     route(DELETE, '/applications/{id}', applications, 'DeleteApplication');
     route(DELETE, '/account', account, 'DeleteAccount');
     route(POST, '/resumes/parse', resumes, 'ParseResume');
+    route(GET, '/resumes', vault, 'ListResumes');
+    route(POST, '/resumes', vault, 'CreateResume');
+    route(POST, '/resumes/{id}/confirm', vault, 'ConfirmResume');
+    route(GET, '/resumes/{id}/download', vault, 'DownloadResume');
+    route(PATCH, '/resumes/{id}', vault, 'RenameResume');
+    route(DELETE, '/resumes/{id}', vault, 'DeleteResume');
+    route(GET, '/answers', answersFn, 'ListAnswers');
+    route(POST, '/answers', answersFn, 'CreateAnswer');
+    route(PATCH, '/answers/{id}', answersFn, 'UpdateAnswer');
+    route(POST, '/answers/{id}/use', answersFn, 'UseAnswer');
+    route(DELETE, '/answers/{id}', answersFn, 'DeleteAnswer');
+    route(POST, '/ai/answer', ai, 'AiAnswer');
+    route(POST, '/ai/adapt', ai, 'AiAdapt');
+    route(POST, '/ai/match', ai, 'AiMatch');
+    route(POST, '/ai/categorise', ai, 'AiCategorise');
 
     // Throttling protects the bill; access logs record authorizer decisions (no bodies).
     const accessLogs = new logs.LogGroup(this, 'ApiAccessLogs', {
@@ -201,7 +254,7 @@ export class ApiStack extends Stack {
       return a;
     };
 
-    for (const f of [profiles, applications, account, resumes]) {
+    for (const f of [profiles, applications, account, resumes, ai, answersFn, vault]) {
       alarm(`${f.node.id}Errors`, {
         metric: f.metricErrors({ period: Duration.minutes(5) }),
         threshold: 1,
@@ -219,6 +272,11 @@ export class ApiStack extends Stack {
       threshold: 200,
       alarmDescription: 'More than 200 resume reads in an hour (Bedrock cost)',
     });
+    alarm('AiSurge', {
+      metric: ai.metricInvocations({ period: Duration.hours(1) }),
+      threshold: 500,
+      alarmDescription: 'More than 500 AI calls in an hour (Bedrock cost)',
+    });
     alarm('ResumeParseThrottled', {
       metric: resumes.metricThrottles({ period: Duration.minutes(5) }),
       threshold: 1,
@@ -226,5 +284,7 @@ export class ApiStack extends Stack {
     });
 
     new CfnOutput(this, 'ApiUrl', { value: this.api.apiEndpoint });
+    // The extension lists this host in optional_host_permissions to upload/download.
+    new CfnOutput(this, 'ResumeBucketHost', { value: `${resumeBucket.bucketName}.s3.${this.region}.amazonaws.com` });
   }
 }

@@ -118,3 +118,94 @@ export const updateApplicationBody = z
 export const applicationId = z.string().regex(/^\d{8}T\d{6}Z-[0-9a-f]{8}$/, 'Invalid application id');
 
 export const deleteAccountBody = z.object({ confirm: z.literal('DELETE') }).strict();
+
+// ------------------------------------------------------------------ Answer Library (F11)
+
+export const ANSWER_CATEGORIES = [
+  'why-company', 'why-role', 'challenge', 'leadership', 'teamwork', 'conflict',
+  'strength', 'weakness', 'career-goals', 'custom',
+] as const;
+
+const answerFields = {
+  category: z.enum(ANSWER_CATEGORIES),
+  question: z.string().trim().min(1).max(1000),
+  text: z.string().trim().min(1).max(5000),
+  tags: z.array(z.string().trim().min(1).max(40)).max(10),
+};
+
+export const createAnswerBody = z
+  .object({ ...answerFields, tags: answerFields.tags.default([]) })
+  .strict();
+
+export const updateAnswerBody = z
+  .object(answerFields)
+  .partial()
+  .strict()
+  .refine((b) => Object.keys(b).length > 0, 'Send at least one field to change');
+
+export const answerId = z.string().regex(/^\d{8}T\d{6}Z-[0-9a-f]{8}$/, 'Invalid answer id');
+
+// ------------------------------------------------------------------ AI (F04)
+
+/** What the model may see of the profile: work, education, skills. No contact details, no self-ID. */
+export const aiProfile = profileData.pick({ workExperience: true, education: true, skills: true }).partial();
+
+const job = z
+  .object({
+    company: z.string().trim().max(200).optional(),
+    role: z.string().trim().max(200).optional(),
+    description: z.string().max(15000).optional(),
+  })
+  .strict();
+
+const maxChars = z.number().int().min(50).max(5000).default(1500);
+
+export const aiAnswerBody = z
+  .object({ question: z.string().trim().min(3).max(1000), maxChars, job: job.default({}), profile: aiProfile.default({}) })
+  .strict();
+
+export const aiAdaptBody = z
+  .object({
+    question: z.string().trim().min(3).max(1000),
+    savedAnswer: z.string().trim().min(1).max(5000),
+    maxChars,
+    job: job.default({}),
+  })
+  .strict();
+
+export const aiMatchBody = z
+  .object({ job: job.extend({ description: z.string().min(50).max(15000) }), profile: aiProfile })
+  .strict();
+
+export const aiCategoriseBody = z.object({ question: z.string().trim().min(3).max(1000) }).strict();
+
+// ------------------------------------------------------------------ Resume Vault (F02)
+
+export const RESUME_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+] as const;
+export const MAX_RESUME_BYTES = 5 * 1024 * 1024;
+export const MAX_RESUMES = 10;
+
+export const createResumeBody = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    fileName: z.string().trim().min(1).max(255),
+    contentType: z.enum(RESUME_TYPES),
+    size: z.number().int().min(1).max(MAX_RESUME_BYTES),
+  })
+  .strict();
+
+export const renameResumeBody = z.object({ name: z.string().trim().min(1).max(100) }).strict();
+
+export const resumeId = z.string().regex(/^\d{8}T\d{6}Z-[0-9a-f]{8}$/, 'Invalid resume id');
+
+/** Drops self-ID keys anywhere in the value. Used before anything reaches a model. */
+export function stripSelfId(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripSelfId);
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).filter(([k]) => !SELF_ID_KEY.test(k)).map(([k, v]) => [k, stripSelfId(v)]),
+  );
+}

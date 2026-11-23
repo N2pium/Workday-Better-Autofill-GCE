@@ -3,12 +3,33 @@ import {
   CognitoIdentityProviderClient,
   UserNotFoundException,
 } from '@aws-sdk/client-cognito-identity-provider';
+import { DeleteObjectsCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import { BatchWriteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { ddb, tableName, userPk } from '../../shared/db';
 import { callerSub, callerUsername, type Event, handle, HttpError, json, logger, parseBody } from '../../shared/http';
 import { deleteAccountBody } from '../../shared/schemas';
 
 const cognito = new CognitoIdentityProviderClient({});
+const s3 = new S3Client({});
+
+/** Deletes every object under users/<sub>/ in the resume bucket. Returns how many. */
+export async function deleteAllUserFiles(sub: string): Promise<number> {
+  const Bucket = process.env.RESUME_BUCKET;
+  if (!Bucket) return 0;
+  let deleted = 0;
+  let token: string | undefined;
+  do {
+    const page = await s3.send(new ListObjectsV2Command({ Bucket, Prefix: `users/${sub}/`, ContinuationToken: token }));
+    const objects = (page.Contents ?? []).map(({ Key }) => ({ Key }));
+    if (objects.length) {
+      const out = await s3.send(new DeleteObjectsCommand({ Bucket, Delete: { Objects: objects, Quiet: true } }));
+      if (out.Errors?.length) throw new Error(`S3 refused ${out.Errors.length} deletes`);
+      deleted += objects.length;
+    }
+    token = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (token);
+  return deleted;
+}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Deletes every item under the user's partition. Returns how many were deleted. */
@@ -48,8 +69,8 @@ export async function deleteAllUserItems(pk: string): Promise<number> {
  * Order matters: data first, then the Cognito user. If anything fails the call
  * returns 500 and is safe to retry, because each step is idempotent.
  *
+ * Files first (resume vault, s3://<resumes>/users/<sub>/), then items, then the user.
  * Later phases must extend this (see plan/Flows/Flow - Delete account.md):
- *   phase 2: delete s3://<resumes>/users/<sub>/
  *   phase 4: delete the user's EventBridge Scheduler schedules
  */
 export const handler = handle(async (event: Event) => {
@@ -58,6 +79,7 @@ export const handler = handle(async (event: Event) => {
 
   const sub = callerSub(event);
   const username = callerUsername(event);
+  const filesDeleted = await deleteAllUserFiles(sub);
   const deleted = await deleteAllUserItems(userPk(sub));
 
   try {
@@ -66,6 +88,6 @@ export const handler = handle(async (event: Event) => {
     if (!(err instanceof UserNotFoundException)) throw err;
   }
 
-  logger.info('Account deleted', { itemsDeleted: deleted }); // no identifiers logged
-  return json(200, { deleted: true, itemsDeleted: deleted });
+  logger.info('Account deleted', { itemsDeleted: deleted, filesDeleted }); // no identifiers logged
+  return json(200, { deleted: true, itemsDeleted: deleted, filesDeleted });
 });

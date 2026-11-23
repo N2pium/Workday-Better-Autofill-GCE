@@ -1,13 +1,13 @@
 import {
-  BedrockRuntimeClient,
   ConverseCommand,
   type DocumentFormat,
   type ToolInputSchema,
 } from '@aws-sdk/client-bedrock-runtime';
 import { z } from 'zod';
+import { callModel as callBedrock, MODEL_ID } from '../../shared/bedrock';
 import { callerSub, type Event, handle, HttpError, json, logger, parseBody } from '../../shared/http';
 import { useAiQuota } from '../../shared/quota';
-import { findSelfIdKeys, profileData, SELF_ID_KEY } from '../../shared/schemas';
+import { findSelfIdKeys, profileData, stripSelfId } from '../../shared/schemas';
 
 /*
  * POST /resumes/parse   { fileName, contentType, data: <base64> }
@@ -19,8 +19,6 @@ import { findSelfIdKeys, profileData, SELF_ID_KEY } from '../../shared/schemas';
  * schema as PUT /profiles. Self-identification fields are stripped.
  */
 
-const bedrock = new BedrockRuntimeClient({});
-const MODEL_ID = process.env.MODEL_ID ?? 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 export const MAX_FILE_BYTES = 3 * 1024 * 1024; // same limit as the extension's resume field
 const MAX_BODY = Math.ceil((MAX_FILE_BYTES * 4) / 3) + 4096; // base64 + JSON envelope
@@ -113,15 +111,6 @@ const SYSTEM = [
   'Never include gender, race, ethnicity, veteran, disability or any other self-identification information.',
 ].join(' ');
 
-/** Drops self-ID keys anywhere in the value (the model is told not to produce them; this enforces it). */
-function stripSelfId(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stripSelfId);
-  if (value === null || typeof value !== 'object') return value;
-  return Object.fromEntries(
-    Object.entries(value).filter(([k]) => !SELF_ID_KEY.test(k)).map(([k, v]) => [k, stripSelfId(v)]),
-  );
-}
-
 const SECTIONS = ['personalInfo', 'address', 'education', 'workExperience', 'skills', 'language'] as const;
 
 export function toDraftProfile(raw: unknown) {
@@ -137,28 +126,13 @@ export function toDraftProfile(raw: unknown) {
   return parsed.data;
 }
 
-/**
- * Bedrock failures the user can't fix get a plain message instead of "Internal error".
- * The full error still goes to the logs (metadata only) so the operator can.
- */
+/** Resume-specific wording for Bedrock failures; see shared/bedrock.ts. */
 export async function callModel(command: ConverseCommand) {
   try {
-    return await bedrock.send(command);
+    return await callBedrock(command, 'Resume reading', 'Reading that resume took too long. Try a shorter PDF.');
   } catch (err) {
-    const name = (err as { name?: string }).name ?? 'Error';
-    logger.error('Bedrock call failed', { errorName: name, error: err as Error });
-    if (name === 'ThrottlingException' || name === 'ServiceUnavailableException') {
-      throw new HttpError(503, 'Resume reading is busy right now. Try again in a minute.');
-    }
-    if (name === 'ModelTimeoutException') {
-      throw new HttpError(504, 'Reading that resume took too long. Try a shorter PDF.');
-    }
-    if (name === 'ValidationException') {
+    if (err instanceof HttpError && err.status === 422) {
       throw new HttpError(422, "Couldn't open that file. Try exporting it again as a PDF.");
-    }
-    if (name === 'AccessDeniedException' || name === 'ResourceNotFoundException') {
-      // e.g. the Bedrock model agreement / use-case form isn't complete for this AWS account.
-      throw new HttpError(503, "Resume reading isn't switched on yet. Please try again later.");
     }
     throw err;
   }

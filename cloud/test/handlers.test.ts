@@ -153,7 +153,7 @@ describe('account deletion', () => {
 
     const res = await account(event('DELETE /account', { body: { confirm: 'DELETE' } }));
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body!)).toEqual({ deleted: true, itemsDeleted: 30 });
+    expect(JSON.parse(res.body!)).toEqual({ deleted: true, itemsDeleted: 30, filesDeleted: 0 });
     expect(ddb.commandCalls(QueryCommand)[0].args[0].input.ExpressionAttributeValues).toEqual({ ':pk': 'USER#user-1' });
     expect(ddb.commandCalls(BatchWriteCommand)).toHaveLength(3); // 25, retry of 1, then 5
     expect(cognito.commandCalls(AdminDeleteUserCommand)[0].args[0].input).toEqual({

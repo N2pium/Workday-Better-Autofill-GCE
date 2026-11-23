@@ -21,6 +21,7 @@ const api = new ApiStack(app, 'EasyApply-Api', {
   config,
   table: data.table,
   key: data.key,
+  resumeBucket: data.resumes,
   userPool: auth.userPool,
   clients: [auth.extensionClient, auth.dashboardClient],
   dashboardOrigins: [web.origin],

@@ -1,16 +1,12 @@
-import { randomBytes } from 'node:crypto';
 import { DeleteCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ddb, decodeCursor, encodeCursor, isConditionalFailure, tableName, userPk } from '../../shared/db';
 import { callerSub, type Event, handle, HttpError, json, parseBody } from '../../shared/http';
+import { newSortableId } from '../../shared/ids';
 import { applicationId, createApplicationBody, updateApplicationBody } from '../../shared/schemas';
 
 const SK = 'APP#';
 
-/** 2026-11-22T15:30:00.123Z -> 20261122T153000Z-<8 hex>. Sorts by time, newest-first with ScanIndexForward=false. */
-export function newApplicationId(now: Date): string {
-  const ts = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  return `${ts}-${randomBytes(4).toString('hex')}`;
-}
+export const newApplicationId = newSortableId;
 
 const view = (item: Record<string, unknown>) => {
   const { pk: _pk, sk: _sk, type: _type, ...rest } = item;

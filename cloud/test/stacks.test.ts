@@ -24,7 +24,7 @@ function synth(extra: Record<string, unknown> = {}) {
   const data = new DataStack(app, 'Data', { env });
   const auth = new AuthStack(app, 'Auth', { env, config });
   const api = new ApiStack(app, 'Api', {
-    env, config, table: data.table, key: data.key, userPool: auth.userPool,
+    env, config, table: data.table, key: data.key, resumeBucket: data.resumes, userPool: auth.userPool,
     clients: [auth.extensionClient, auth.dashboardClient],
   });
   return {
@@ -101,7 +101,7 @@ describe('ApiStack', () => {
 
   it('requires the JWT authorizer on every route', () => {
     const routes = api.findResources('AWS::ApiGatewayV2::Route');
-    expect(Object.keys(routes)).toHaveLength(10);
+    expect(Object.keys(routes)).toHaveLength(25);
     for (const r of Object.values(routes)) expect(r.Properties.AuthorizationType).toBe('JWT');
   });
 
@@ -126,7 +126,7 @@ describe('ApiStack', () => {
 
   it('runs functions on arm64 Node.js 22 with tracing, outside any VPC', () => {
     const fns = api.findResources('AWS::Lambda::Function');
-    expect(Object.keys(fns)).toHaveLength(4);
+    expect(Object.keys(fns)).toHaveLength(7);
     for (const f of Object.values(fns)) {
       expect(f.Properties.Runtime).toBe('nodejs22.x');
       expect(f.Properties.Architectures).toEqual(['arm64']);
@@ -135,17 +135,33 @@ describe('ApiStack', () => {
     }
   });
 
-  it('lets only the resume function call Bedrock, and only the one Haiku model via the US profile', () => {
+  it('lets only the resume and AI functions call Bedrock, and only the one Haiku model via the US profile', () => {
     const policies = Object.values(api.findResources('AWS::IAM::Policy'));
     const withBedrock = policies.filter((p) => JSON.stringify(p).includes('bedrock:'));
-    expect(withBedrock).toHaveLength(1);
-    const text = JSON.stringify(withBedrock[0]);
+    expect(withBedrock).toHaveLength(2);
+    for (const p of withBedrock) {
+    const text = JSON.stringify(p);
     expect(text).toContain('inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0');
     for (const r of ['us-east-1', 'us-east-2', 'us-west-2']) {
       expect(text).toContain(`arn:aws:bedrock:${r}::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0`);
     }
     expect(text).not.toContain('bedrock:*');
     expect(text).not.toMatch(/foundation-model\/\*/);
+    }
+  });
+
+  it('limits resume-bucket object access to users/* and never grants s3:*', () => {
+    const policies = Object.values(api.findResources('AWS::IAM::Policy'));
+    const text = JSON.stringify(policies);
+    expect(text).not.toContain('"s3:*"');
+    for (const p of policies) {
+      for (const st of p.Properties.PolicyDocument.Statement) {
+        const actions = [].concat(st.Action);
+        if (actions.some((a: string) => /^s3:(Put|Get|Delete)Object$/.test(a))) {
+          expect(JSON.stringify(st.Resource)).toContain('/users/*');
+        }
+      }
+    }
   });
 
   it('gives the resume function room for a model call but stays under the API limit', () => {
