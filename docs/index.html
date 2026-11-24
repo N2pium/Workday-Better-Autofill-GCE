@@ -43,33 +43,92 @@
 <body>
 <main>
 <h1>Privacy Policy</h1>
-<p><strong>Effective Date:</strong> 2026-08-17</p>
+<p><strong>Effective Date:</strong> on release of version 2.0. Version 1.4 and earlier are covered by the policy dated 2026-08-17.</p>
 <h2>Overview</h2>
-<p>This extension ("Workday: Better Autofill") autofills job application forms on supported job portals (Workday and, optionally, Greenhouse). It is designed to operate <strong>entirely locally on your device</strong>.</p>
-<h2>Data Collection &amp; Storage</h2>
+<p>This extension ("Workday: Better Autofill") autofills job application forms on supported job portals (Workday and, optionally, Greenhouse and other supported sites).</p>
+<p>You can use it in one of two ways:</p>
 <ol>
-<li><strong>What is stored</strong>: Only the profile information you type into the extension yourself — name, contact details, address, work history, education, skills, languages, job preferences, an optional resume file, and optional voluntary self-identification answers (gender, race/ethnicity, veteran status, disability status). Job preferences include a single checkbox confirming you are 18 years of age or older; no date of birth or age is stored, and leaving it unticked means the question is left for you to answer rather than answered as "no".</li>
-<li><strong>Where it is stored</strong>: All data is stored locally in your browser using the Chrome Storage API (<code>chrome.storage.local</code>). It is never synced, uploaded, or backed up by us.</li>
-<li><strong>No remote servers</strong>: We do not operate any backend servers, analytics, or tracking. Your data is <strong>never</strong> transmitted to us or to any third party. It leaves your browser only when <strong>you</strong> explicitly click the autofill button, which enters your data into the job application form you are viewing — exactly as if you had typed it yourself.</li>
-<li><strong>Sensitive data</strong>: The voluntary self-identification fields (race, gender, veteran status, disability) are entirely optional, are used solely to fill the corresponding voluntary questions on application forms at your request, and are stored locally like all other data. Leaving them blank means those questions are left untouched (unless you enable the "Decline All Disclosures" option, which selects the decline/prefer-not-to-answer choice).</li>
+<li><strong>Local-only mode (the default).</strong> Everything stays in your browser, exactly as in earlier versions. No account, no servers, nothing transmitted to us.</li>
+<li><strong>Cloud account (optional).</strong> If you choose to sign in, the extension can sync your profiles across devices, store resume versions, track your applications in a web dashboard, and offer AI-assisted features. Each cloud feature is described below, along with exactly what it sends.</li>
 </ol>
+<p>You can switch back to local-only mode, or delete your cloud account, at any time.</p>
+<h2>Local-only mode</h2>
+<ol>
+<li><strong>What is stored</strong>: Only the profile information you type into the extension yourself — name, contact details, address, work history, education, skills, languages, job preferences, an optional resume file, and optional voluntary self-identification answers (gender, race/ethnicity, veteran status, disability status). Job preferences include a single checkbox confirming you are 18 years of age or older; no date of birth or age is stored.</li>
+<li><strong>Where it is stored</strong>: In your browser using the Chrome Storage API (<code>chrome.storage.local</code>). It is never synced, uploaded, or backed up by us.</li>
+<li><strong>When it leaves your browser</strong>: Only when <strong>you</strong> click the autofill button, which enters your data into the job application form you are viewing — exactly as if you had typed it yourself.</li>
+</ol>
+<h2>Cloud account (optional)</h2>
+<h3>Signing in</h3>
+<p>You sign in through Amazon Cognito, our sign-in provider, either with your email address and a password or with your Google account. With email, Cognito stores your email address and a protected (hashed) form of your password; we never see the password. With Google, we receive your <strong>email address, name, and a Google account identifier</strong>, and never see your Google password. If you use both with the same verified email address, they are joined into one account.</p>
+<h3>What we store when you are signed in</h3>
+<ul>
+<li><strong>Profiles</strong> you choose to sync (name, contact details, address, work history, education, skills, languages, job preferences).</li>
+<li><strong>Resume versions</strong> you choose to keep (up to 10): the files, the names you give them, and their file names. Stored only if you add them, encrypted, and deleted when you delete them or your account.</li>
+<li><strong>Application records</strong> created when you autofill or add an application: company, job title, job posting URL, date, and the status you set.</li>
+<li><strong>Saved answers</strong> you choose to keep in your answer library: the application question and the final text you approved, so you can reuse it on later applications.</li>
+<li><strong>Usage counters</strong> for AI features, used only to enforce daily limits.</li>
+</ul>
+<h3>What we never store in the cloud</h3>
+<ul>
+<li><strong>Voluntary self-identification answers</strong> (gender, race/ethnicity, veteran status, disability status) are <strong>never synced or uploaded</strong>. They stay in your browser on each device and are used only to fill the matching voluntary questions at your request.</li>
+<li>We do not collect your browsing history, the content of pages you visit, or form fields other than the profile data you entered yourself. On supported job sites the extension reads the job's title, company and description so AI features can use them; this stays on your device and is sent only as part of an AI request you make.</li>
+</ul>
+<h3>AI features (optional, used only when you ask)</h3>
+<p>When you use an AI feature — parsing a resume into your profile, drafting an answer to an application question, or scoring how well your profile matches a job description — the relevant parts of your profile (your work history, education and skills; never your contact details) or the resume you chose, plus the question and the job's title, company and description, are sent to <strong>Amazon Bedrock</strong> to generate the result. To suggest one of your saved answers, the question's text may be sent on its own to sort it into a category.</p>
+<ul>
+<li>Self-identification answers are <strong>never</strong> included.</li>
+<li>AI requests are processed by Amazon Bedrock <strong>within the United States</strong> (AWS Regions us-east-1, us-east-2 and us-west-2). Amazon Bedrock does not store your inputs or outputs, does not use them to train AI models, and does not share them with model providers.</li>
+<li>AI results are suggestions. Nothing is entered into a form or saved to your profile until you review and accept it.</li>
+<li>A resume you upload to fill in your profile is read once to produce that suggestion and is <strong>not stored</strong> by us or by Amazon Bedrock, unless you also add it as a resume version.</li>
+</ul>
+<h2>Where and how cloud data is stored</h2>
+<ul>
+<li>Cloud data is stored with <strong>Amazon Web Services (AWS) in the United States</strong> (us-east-2, Ohio).</li>
+<li>AI requests may be processed in another US AWS Region (us-east-1 or us-west-2) to keep responses fast; nothing is stored there, and no AI processing happens outside the United States.</li>
+<li>It is encrypted in transit (HTTPS/TLS) and at rest (AWS Key Management Service).</li>
+<li>Each account can access only its own data. Access by the developer is limited to operating, securing, and troubleshooting the service.</li>
+</ul>
+<h2>How long we keep it</h2>
+<ul>
+<li><strong>Account data</strong> (profiles, resumes, application records, saved answers) is kept until you delete it or delete your account.</li>
+<li><strong>Backups</strong> are kept for up to 35 days, after which deleted data is gone from backups as well.</li>
+<li><strong>Service logs</strong> (used to detect errors and abuse) are kept for 14 days.</li>
+</ul>
+<h2>Your choices and rights</h2>
+<ul>
+<li><strong>See and export your data</strong>: See your applications and synced profile in the dashboard, and your resume versions and saved answers in the extension. Export your profile as a JSON file at any time.</li>
+<li><strong>Correct your data</strong>: Edit any profile, application record or saved answer, and rename or delete any resume version.</li>
+<li><strong>Delete your data</strong>: Use <strong>"Delete All Data"</strong> in the extension to clear local data, or <strong>"Delete cloud account"</strong> in the extension's Settings to permanently delete your cloud account and all of its data (profiles, resumes, application records and saved answers). Deletion from live systems is immediate; backups expire within 35 days.</li>
+<li><strong>Stop syncing</strong>: Sign out or turn sync off to return to local-only mode. Data already in the cloud stays there until you delete it.</li>
+<li><strong>Withdraw consent</strong>: AI features run only when you ask for them; signing out stops all cloud features.</li>
+</ul>
 <h2>Permissions</h2>
 <ul>
 <li><strong>storage</strong> — saves your profile locally so you don't have to re-type it.</li>
 <li><strong>activeTab / scripting</strong> — lets the extension fill the job application form in the tab you are viewing when you click the autofill button.</li>
 <li><strong>sidePanel</strong> — displays the extension UI in the browser side panel.</li>
+<li><strong>identity</strong> — used only when you choose to sign in, to open the secure sign-in window.</li>
 <li><strong>Host permission <code>*://*.myworkdayjobs.com/*</code></strong> — required to autofill Workday application pages.</li>
-<li><strong>Optional host permissions <code>*://boards.greenhouse.io/*</code> and <code>*://job-boards.greenhouse.io/*</code></strong> — requested <strong>only if you enable Greenhouse support</strong> in the extension's "Supported Portals" settings. You can revoke this at any time by turning the toggle off or via Chrome's extension settings.</li>
+<li><strong>Optional host permissions for Greenhouse and other supported job sites</strong> — requested <strong>only if you enable that site</strong> in the extension's "Supported Portals" settings. You can revoke them at any time by turning the toggle off or via Chrome's extension settings.</li>
+<li><strong>Access to the extension's own service</strong> — used only for the cloud features above, and only when you are signed in.</li>
 </ul>
-<p>The extension runs only on the job portal domains listed above and has no access to any other website.</p>
-<h2>Data Deletion</h2>
-<p>You can delete all stored data at any time by clicking the <strong>"Delete All Data"</strong> button in the extension panel. This immediately and permanently clears all local storage associated with the extension. Uninstalling the extension also removes all stored data.</p>
-<h2>Data Sales &amp; Third Parties</h2>
-<p>We do not sell, share, transfer, or disclose your data to anyone. There are no third-party services, SDKs, or analytics in this extension.</p>
+<p>The extension runs only on the job portal domains listed above and on its own service, and has no access to any other website.</p>
+<h2>Service providers</h2>
+<p>We use these providers only to run the features described above:</p>
+<ul>
+<li><strong>Amazon Web Services</strong> — hosting, storage, sign-in (Amazon Cognito) and AI features (Amazon Bedrock).</li>
+<li><strong>Google</strong> — sign-in only.</li>
+</ul>
+<h2>Data sales and advertising</h2>
+<p>We do not sell, rent, or share your data for advertising or marketing. There are no third-party analytics, advertising SDKs, or trackers in the extension.</p>
+<p>The use of information received from Google APIs and the Chrome extension platform adheres to the Chrome Web Store User Data Policy, including the Limited Use requirements: your data is used only to provide the features you see in the extension, is not transferred to others except as needed to provide those features, to comply with law, or as part of a merger or acquisition with notice to you, and is never used for advertising, creditworthiness, or lending decisions.</p>
+<h2>Children</h2>
+<p>The extension is intended for job seekers aged 18 and over and is not directed to children.</p>
 <h2>Changes</h2>
-<p>If this policy changes, the updated version will be published at this same location with a new effective date.</p>
+<p>If this policy changes, the updated version will be published at this same location with a new effective date. Material changes to what is collected will also be shown in the extension before they apply to you.</p>
 <h2>Contact</h2>
-<p>If you have any questions, you can review the source code or contact the developer via the Chrome Web Store listing.</p>
+<p>If you have any questions or a data request (access, correction, export or deletion), email <strong>better-autofill@googlegroups.com</strong>. You can also review the source code or contact the developer via the Chrome Web Store listing.</p>
 <footer>
   Chrome extension &ldquo;Workday: Better Autofill&rdquo; &middot;
   <a href="https://github.com/N2pium/Workday-Better-Autofill-GCE">Source code on GitHub</a>
