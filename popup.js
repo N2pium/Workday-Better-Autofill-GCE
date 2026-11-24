@@ -407,7 +407,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusCtx.style.color = 'var(--success)';
                 if (resumeFile) document.getElementById('resumeStatus').textContent = `Stored: ${resumeFile.name}`;
                 refreshBlankHints();
-                syncAfterSave(); // no-op unless the user turned sync on
+                profileDirty = false;
+                syncAfterSave(); // signed in: always syncs; guests: nothing leaves the device
                 renderHomeProfile();
             }
             const shown = statusCtx.textContent;
@@ -532,7 +533,6 @@ document.addEventListener('DOMContentLoaded', () => {
         signedIn: document.getElementById('cloudSignedIn'),
         email: document.getElementById('cloudEmail'),
         connection: document.getElementById('cloudConnection'),
-        syncToggle: document.getElementById('cloudSyncToggle'),
         signInBtn: document.getElementById('cloudSignInBtn'),
         signOutBtn: document.getElementById('cloudSignOutBtn'),
         deleteBtn: document.getElementById('cloudDeleteBtn')
@@ -572,9 +572,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function showSyncStatus() {
         const s = await CloudSync.state();
-        cloudUi.syncToggle.checked = s.enabled;
         cloudUi.connection.textContent = !s.enabled
-            ? 'Connected · sync is off'
+            ? 'Connected · sync waiting for your choice'
             : s.pending
                 ? 'Connected · changes waiting to sync'
                 : `Connected · synced ${when(s.lastSyncedAt)}`;
@@ -587,7 +586,6 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const result = await CloudSync.onOpen(Cloud, syncAsk);
             if (result === 'downloaded') { location.reload(); return; } // show the synced profile
-            if (result === 'off') await Cloud.api('/profiles'); // still confirm the connection works
             await showSyncStatus();
         } catch (e) {
             if (e.notSignedIn) {
@@ -641,7 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             showTab('settings');
             cloudUi.section.classList.remove('collapsed');
-            flash('Signed in. Turn on "Sync my profile" to back it up to your account.', 'var(--success)', 7000);
+            flash('Signed in. Your profile now syncs across your devices.', 'var(--success)', 7000);
         }
     }
 
@@ -666,32 +664,11 @@ document.addEventListener('DOMContentLoaded', () => {
         else flash(result.message, 'var(--danger)', 6000);
     });
 
-    cloudUi.syncToggle.addEventListener('change', async () => {
-        const toggle = cloudUi.syncToggle;
-        toggle.disabled = true;
-        try {
-            if (toggle.checked) {
-                const result = await CloudSync.enable(Cloud, syncAsk);
-                if (result === 'downloaded') { location.reload(); return; }
-                if (result === 'cancelled') flash('Sync stays off.', 'var(--text-muted)');
-                else flash('Sync on. Your profile is backed up to your account.', 'var(--success)');
-            } else {
-                await CloudSync.disable();
-                flash('Sync off on this device. Your synced copy stays in your account.', 'var(--text-muted)', 5000);
-            }
-        } catch (e) {
-            flash(`Sync failed: ${e.message}`, 'var(--danger)', 6000);
-        } finally {
-            toggle.disabled = false;
-            await showSyncStatus();
-        }
-    });
-
     // Called by the Save handler after the profile is stored on this device.
     async function syncAfterSave() {
+        if (!signedInNow) return;
         try {
             const result = await CloudSync.afterLocalSave(Cloud, syncAsk);
-            if (result === 'off') return;
             if (result === 'downloaded') { location.reload(); return; }
             if (result === 'uploaded') flash('Profile saved and synced ✓', 'var(--success)');
             else if (result === 'pending') flash('Saved on this device. It will sync next time you open the panel online.', 'var(--primary)', 6000);
@@ -702,6 +679,28 @@ document.addEventListener('DOMContentLoaded', () => {
             flash(e.notSignedIn ? e.message : `Saved on this device, but sync failed: ${e.message}`, 'var(--danger)', 7000);
         }
     }
+
+    // Another device's changes, pulled by background.js while this panel is open:
+    // show them, unless that would throw away edits not saved yet.
+    let profileDirty = false;
+    form.addEventListener('input', () => { profileDirty = true; });
+    form.addEventListener('change', () => { profileDirty = true; });
+    chrome.storage.onChanged.addListener((changes, area) => {
+        const c = area === 'local' && changes.cloudSync;
+        if (!c || !c.newValue || !c.newValue.downloadedAt) return;
+        if (c.newValue.downloadedAt === (c.oldValue && c.oldValue.downloadedAt)) return;
+        if (!profileDirty) { location.reload(); return; }
+        flash('Your profile changed on another device. Save to keep your edits here, or reopen the panel to see the synced copy.', 'var(--primary)', 10000);
+    });
+
+    // Coming back to the panel: check for changes made elsewhere (at most every 30 s).
+    let lastFocusCheck = Date.now();
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible' || !signedInNow || profileDirty) return;
+        if (Date.now() - lastFocusCheck < 30000) return;
+        lastFocusCheck = Date.now();
+        refreshCloud();
+    });
 
     cloudUi.signOutBtn.addEventListener('click', async () => {
         cloudUi.signOutBtn.disabled = true;
@@ -1281,8 +1280,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!signedInNow) { chip.hidden = true; return; }
         const s = await CloudSync.state();
         chip.hidden = false;
-        chip.className = `chip ${s.enabled ? (s.pending ? 'warn' : 'ok') : ''}`;
-        chip.textContent = s.enabled ? (s.pending ? '● Sync pending' : '● Synced') : 'Signed in';
+        chip.className = `chip ${s.enabled && !s.pending ? 'ok' : 'warn'}`;
+        chip.textContent = s.enabled && !s.pending ? '● Synced' : '● Sync pending';
     }
 
     // Called by renderCloud() whenever the account state may have changed.

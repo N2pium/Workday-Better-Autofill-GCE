@@ -1,5 +1,7 @@
 /*
- * Opt-in profile sync (plan/Features/F01 Accounts and Profile Sync.md).
+ * Profile sync (plan/Features/F01 Accounts and Profile Sync.md). Always on
+ * while signed in: the first open/save after sign-in turns it on, and signing
+ * out (cloud-auth.js clearCredentials) is the only way to stop it.
  *
  * One synced profile per account for now ("default"). The server keeps a
  * version number; every write sends the version this device last saw, so two
@@ -15,7 +17,7 @@
 (function (global) {
     'use strict';
 
-    const SYNC_KEY = 'cloudSync'; // { enabled, version, pending, lastSyncedAt } — a cloud* key: never exported
+    const SYNC_KEY = 'cloudSync'; // { enabled, version, pending, lastSyncedAt, downloadedAt? } — a cloud* key: never exported
     const PROFILE_ID = 'default';
     const PROFILE_NAME = 'My profile';
     const SYNCED_KEYS = ['personalInfo', 'address', 'education', 'workExperience', 'skills', 'language', 'jobPreferences'];
@@ -68,7 +70,8 @@
     }
 
     const saveState = (s) => chrome.storage.local.set({ [SYNC_KEY]: s });
-    const synced = (version) => saveState({ enabled: true, version, pending: false, lastSyncedAt: new Date().toISOString() });
+    // downloadedAt tells an open panel that the profile on this device was replaced (popup.js).
+    const synced = (version, extra) => saveState({ enabled: true, version, pending: false, lastSyncedAt: new Date().toISOString(), ...extra });
 
     async function fetchRemote(Cloud) {
         try {
@@ -89,7 +92,7 @@
 
     async function download(remote) {
         await writeLocalProfile(remote.data);
-        await synced(remote.version);
+        await synced(remote.version, { downloadedAt: new Date().toISOString() });
         return 'downloaded';
     }
 
@@ -128,25 +131,36 @@
         return result;
     }
 
-    /** Turn sync off on this device. The synced copy stays in the account. */
-    const disable = () => chrome.storage.local.remove(SYNC_KEY);
-
-    /** After "Save Profile". Returns 'off' | 'uploaded' | 'downloaded' | 'pending' | 'cancelled'. */
+    /** After "Save Profile". Returns 'uploaded' | 'downloaded' | 'pending' | 'cancelled'. */
     async function afterLocalSave(Cloud, ask) {
         const s = await state();
-        if (!s.enabled) return 'off';
+        if (!s.enabled) return enable(Cloud, ask);
         return pushOrResolve(Cloud, ask, s);
     }
 
-    /** When the panel opens. Returns 'off' | 'up-to-date' | 'uploaded' | 'downloaded' | 'pending' | 'cancelled'. */
+    /** When the panel opens. Returns 'up-to-date' | 'uploaded' | 'downloaded' | 'pending' | 'cancelled'. */
     async function onOpen(Cloud, ask) {
         const s = await state();
-        if (!s.enabled) return 'off';
+        if (!s.enabled) return enable(Cloud, ask);
         if (s.pending) return pushOrResolve(Cloud, ask, s);
         const remote = await fetchRemote(Cloud);
         if (!remote) return upload(Cloud);
         if (remote.version > (s.version || 0)) return download(remote);
         return 'up-to-date';
+    }
+
+    /**
+     * Background check (background.js alarm): download a newer synced profile.
+     * Never asks and never uploads, so it can't overwrite anything: it skips
+     * when sync isn't on yet or this device has changes waiting to go up.
+     * Returns 'skipped' | 'up-to-date' | 'downloaded'.
+     */
+    async function pullIfNewer(Cloud) {
+        const s = await state();
+        if (!s.enabled || s.pending) return 'skipped';
+        const remote = await fetchRemote(Cloud);
+        if (!remote || !(remote.version > (s.version || 0))) return 'up-to-date';
+        return download(remote);
     }
 
     /** Local data changed outside "Save Profile" (e.g. Import): push it next time. */
@@ -156,7 +170,7 @@
     }
 
     global.EasyApplyCloudSync = Object.freeze({
-        SYNCED_KEYS, state, enable, disable, afterLocalSave, onOpen, markPending,
+        SYNCED_KEYS, state, enable, afterLocalSave, onOpen, pullIfNewer, markPending,
         _test: { readLocalProfile, hasContent }
     });
 })(self);

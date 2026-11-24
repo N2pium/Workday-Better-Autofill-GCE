@@ -129,12 +129,6 @@ test('save pushes with the last-seen version', async () => {
   assert.equal((await w.Sync.state()).version, 2);
 });
 
-test('save does nothing when sync is off', async () => {
-  const w = makeWorld({ local: LOCAL_PROFILE });
-  assert.equal(await w.Sync.afterLocalSave(w.Cloud, w.ask), 'off');
-  assert.equal(w.server.puts.length, 0);
-});
-
 test('save after another device changed the profile asks instead of overwriting', async () => {
   const w = makeWorld({ local: LOCAL_PROFILE });
   await w.Sync.enable(w.Cloud, w.ask);
@@ -200,6 +194,44 @@ test('import marks pending only when sync is on', async () => {
   await w.Sync.enable(w.Cloud, w.ask);
   await w.Sync.markPending();
   assert.equal((await w.Sync.state()).pending, true);
+});
+
+test('sync is always on: the first open after sign-in turns it on without a toggle', async () => {
+  const w = makeWorld({ local: LOCAL_PROFILE });
+  assert.equal(await w.Sync.onOpen(w.Cloud, w.ask), 'uploaded');
+  assert.equal((await w.Sync.state()).enabled, true);
+});
+
+test('sync is always on: saving before any open turns it on too', async () => {
+  const w = makeWorld({ local: {}, remote: { id: 'default', data: { personalInfo: { firstName: 'Laptop' } }, version: 3 } });
+  assert.equal(await w.Sync.afterLocalSave(w.Cloud, w.ask), 'downloaded');
+  assert.equal(w.store.get('personalInfo').firstName, 'Laptop');
+  assert.equal(typeof w.Sync.disable, 'undefined', 'no way to switch sync off while signed in');
+});
+
+test('background pull downloads a newer profile and stamps downloadedAt', async () => {
+  const w = makeWorld({ local: LOCAL_PROFILE });
+  await w.Sync.enable(w.Cloud, w.ask);
+  assert.equal(await w.Sync.pullIfNewer(w.Cloud), 'up-to-date');
+  assert.equal((await w.Sync.state()).downloadedAt, undefined);
+  w.server.profile = { ...w.server.profile, data: { personalInfo: { firstName: 'Phone' } }, version: 9 };
+  assert.equal(await w.Sync.pullIfNewer(w.Cloud), 'downloaded');
+  assert.equal(w.store.get('personalInfo').firstName, 'Phone');
+  assert.ok((await w.Sync.state()).downloadedAt);
+  assert.equal(w.store.get('demographics').gender, 'female', 'self-ID stays local');
+});
+
+test('background pull never uploads, asks, or overwrites unsynced changes', async () => {
+  const w = makeWorld({ local: LOCAL_PROFILE });
+  assert.equal(await w.Sync.pullIfNewer(w.Cloud), 'skipped', 'sync not on yet');
+  await w.Sync.enable(w.Cloud, w.ask);
+  await w.Sync.markPending();
+  w.server.profile = { ...w.server.profile, data: { personalInfo: { firstName: 'Phone' } }, version: 9 };
+  const puts = w.server.puts.length;
+  assert.equal(await w.Sync.pullIfNewer(w.Cloud), 'skipped');
+  assert.equal(w.store.get('personalInfo').firstName, 'Ada');
+  assert.equal(w.server.puts.length, puts);
+  assert.equal(w.asks.length, 0);
 });
 
 (async () => {

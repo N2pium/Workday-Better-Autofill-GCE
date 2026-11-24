@@ -114,7 +114,7 @@ chrome.permissions.onRemoved.addListener(syncGreenhouseRegistration);
  * below. The profile sent to the AI is read here from storage (work, education,
  * skills only) rather than taken from the page.
  */
-importScripts('cloud-config.js', 'cloud-auth.js');
+importScripts('cloud-config.js', 'cloud-auth.js', 'cloud-sync.js');
 
 const ID_RE = /^\d{8}T\d{6}Z-[0-9a-f]{8}$/;
 
@@ -157,3 +157,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true; // async response
 });
 
+/**
+ * PROFILE SYNC in the background (cloud-sync.js pullIfNewer).
+ *
+ * Saving pushes at once (popup.js). This pulls another device's changes every
+ * few minutes and at browser start, so autofill uses the latest profile even
+ * when the side panel isn't open. Download-only: it never asks or uploads.
+ * Signed out or no permission: nothing is sent.
+ */
+const SYNC_ALARM = 'profile-sync';
+const SYNC_EVERY_MINUTES = 2;
+
+async function backgroundPull() {
+    try {
+        const s = await EasyApplyCloud.status();
+        if (!s.signedIn || !(await EasyApplyCloud.hasPermission())) return;
+        await EasyApplyCloudSync.pullIfNewer(EasyApplyCloud);
+    } catch (e) {
+        // Offline or signed out mid-way: the next alarm or panel open tries again.
+    }
+}
+
+async function ensureSyncAlarm() {
+    if (!(await chrome.alarms.get(SYNC_ALARM))) {
+        await chrome.alarms.create(SYNC_ALARM, { periodInMinutes: SYNC_EVERY_MINUTES });
+    }
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === SYNC_ALARM) backgroundPull(); });
+chrome.runtime.onStartup.addListener(backgroundPull);
+ensureSyncAlarm();

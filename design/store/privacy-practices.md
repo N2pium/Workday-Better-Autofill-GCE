@@ -19,6 +19,7 @@ starts handling something new.
 | `scripting` | Injects the autofill script into a supported job page when the user clicks Autofill, and into Greenhouse pages only after the user turns Greenhouse on. |
 | `sidePanel` | Shows the extension's interface in the side panel so it stays open while the user works through a multi-page form. |
 | `identity` | Opens the secure sign-in window (Amazon Cognito, email or Google) when the user chooses to sign in. Not used otherwise. |
+| `alarms` | While the user is signed in, checks every few minutes for profile changes made on their other devices, so autofill uses the latest profile. Does nothing when signed out. |
 | Host `*://*.myworkdayjobs.com/*` | Workday application pages are where the extension fills forms, reads the job title, company and description for the tracker and AI features, and shows the Draft button. |
 | Optional host: Greenhouse domains | Requested only when the user turns on Greenhouse under Supported Portals, to fill Greenhouse forms. Revoked when they turn it off. |
 | Optional host: extension's API, sign-in domain and resume storage (`execute-api…`, `…amazoncognito.com`, `…s3…amazonaws.com`) | The extension's own backend. API and sign-in access are requested when the user signs in; resume storage access is requested the first time they add a resume version. Used for sync, application tracking, resume versions and AI features. |

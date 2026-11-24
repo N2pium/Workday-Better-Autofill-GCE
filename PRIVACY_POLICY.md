@@ -8,7 +8,7 @@ This extension ("Workday: Better Autofill") autofills job application forms on s
 You can use it in one of two ways:
 
 1. **Local-only mode (the default).** Everything stays in your browser, exactly as in earlier versions. No account, no servers, nothing transmitted to us.
-2. **Cloud account (optional).** If you choose to sign in, the extension can sync your profiles across devices, store resume versions, track your applications in a web dashboard, and offer AI-assisted features. Each cloud feature is described below, along with exactly what it sends.
+2. **Cloud account (optional).** If you choose to sign in, the extension syncs your profile across the devices you sign in on, store resume versions, track your applications in a web dashboard, and offer AI-assisted features. Each cloud feature is described below, along with exactly what it sends.
 
 You can switch back to local-only mode, or delete your cloud account, at any time.
 
@@ -23,7 +23,7 @@ You can switch back to local-only mode, or delete your cloud account, at any tim
 You sign in through Amazon Cognito, our sign-in provider, either with your email address and a password or with your Google account. With email, Cognito stores your email address and a protected (hashed) form of your password; we never see the password. With Google, we receive your **email address, name, and a Google account identifier**, and never see your Google password. If you use both with the same verified email address, they are joined into one account.
 
 ### What we store when you are signed in
-- **Profiles** you choose to sync (name, contact details, address, work history, education, skills, languages, job preferences).
+- **Your profile**, synced automatically while you are signed in (name, contact details, address, work history, education, skills, languages, job preferences).
 - **Resume versions** you choose to keep (up to 10): the files, the names you give them, and their file names. Stored only if you add them, encrypted, and deleted when you delete them or your account.
 - **Application records** created when you autofill or add an application: company, job title, job posting URL, date, the status you set and the statuses it has had before (so the dashboard can show where an application stopped), and an industry label if you add one.
 - **Saved answers** you choose to keep in your answer library: the application question and the final text you approved, so you can reuse it on later applications.
@@ -58,7 +58,7 @@ When you use an AI feature — parsing a resume into your profile, drafting an a
 - **See and export your data**: See your applications and synced profile in the dashboard, and your resume versions and saved answers in the extension. Export your profile as a JSON file at any time.
 - **Correct your data**: Edit any profile, application record or saved answer, and rename or delete any resume version.
 - **Delete your data**: Use **"Delete All Data"** in the extension to clear local data, or **"Delete cloud account"** in the extension's Settings to permanently delete your cloud account and all of its data (profiles, resumes, application records and saved answers). Deletion from live systems is immediate; backups expire within 35 days.
-- **Stop syncing**: Sign out or turn sync off to return to local-only mode. Data already in the cloud stays there until you delete it.
+- **Stop syncing**: Sign out to return to local-only mode. Data already in the cloud stays there until you delete it.
 - **Withdraw consent**: AI features run only when you ask for them; signing out stops all cloud features.
 
 ## Permissions
