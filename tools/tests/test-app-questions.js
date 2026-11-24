@@ -216,6 +216,46 @@ const PROFILE = {
   check('veteran: decline maps to the tenant decline option', await vetRun('I do not wish to answer'), 'I do not wish to self-identify');
   check('veteran: nothing saved leaves it alone', await vetRun(''), 'Select One');
 
+  // ------------------------------------------------ Disability (CC-305) as checkboxes + signature name (AI Intern report, 2026-11-24)
+  const DIS_OPTS = ['Yes, I have a disability, or have had one in the past', 'No, I do not have a disability and have not had one in the past', 'I do not want to answer'];
+  const cc305 = (nameValue = '') => `
+    <div data-automation-id="formField-name"><label for="nm">Name<abbr>*</abbr></label><input type="text" id="nm" value="${nameValue}"></div>
+    <div data-automation-id="formField-employeeId"><label for="eid">Employee ID (if applicable)</label><input type="text" id="eid"></div>
+    <div data-automation-id="formField-disabilityStatus"><fieldset><legend>Please check one of the boxes below:<abbr>*</abbr></legend>
+      ${DIS_OPTS.map((t, i) => `<div><input type="checkbox" id="d${i}"><label for="d${i}">${t}</label></div>`).join('')}</fieldset></div>`;
+  const disRun = async (demo, { nameValue = '', personalInfo = { firstName: 'Ada', lastName: 'Lovelace' }, pre = null } = {}) => {
+    const w = boot(cc305(nameValue));
+    if (pre !== null) w.document.getElementById(`d${pre}`).checked = true;
+    await w.eval(`__set({ personalInfo: ${JSON.stringify(personalInfo)}, jobPreferences: ${JSON.stringify(demo.prefs || {})}, demographics: ${JSON.stringify(demo)} }); fillDisclosures()`);
+    const d = w.document;
+    return { ticked: [0, 1, 2].filter(i => d.getElementById(`d${i}`).checked), name: d.getElementById('nm').value, eid: d.getElementById('eid').value,
+      trace: JSON.parse(w.eval('__trace()')).filter(x => /Disability|Signature/.test(x.field)).map(x => `${x.field}:${x.status}`) };
+  };
+  let dr = await disRun({ disabilityStatus: 'No' });
+  check('disability checkboxes: "No" ticks only the No box', dr.ticked, [1]);
+  check('signature Name typed from first + last name; Employee ID left blank', [dr.name, dr.eid], ['Ada Lovelace', '']);
+  check('report lists disability and signature as filled', dr.trace, ['Disability:filled', 'Signature name:filled']);
+  check('disability "Yes" ticks the Yes box', (await disRun({ disabilityStatus: 'Yes' })).ticked, [0]);
+  check('disability decline ticks "I do not want to answer"', (await disRun({ disabilityStatus: 'I do not wish to answer' })).ticked, [2]);
+  check('Decline All with nothing saved also declines on checkbox forms', (await disRun({ prefs: { autoDisclosures: true } })).ticked, [2]);
+  check('another box already ticked is cleared (one answer only)', (await disRun({ disabilityStatus: 'No' }, { pre: 0 })).ticked, [1]);
+  dr = await disRun({});
+  check('nothing saved: no box ticked, reported skipped', [dr.ticked, dr.trace[0]], [[], 'Disability:skipped']);
+  check('a name already in the signature box is kept', (await disRun({ disabilityStatus: 'No' }, { nameValue: 'A. Lovelace' })).name, 'A. Lovelace');
+
+  // A bare "Name" box on a page without the disability form is never given the user's name.
+  w = boot(`<div data-automation-id="formField-name"><label for="nm">Name</label><input type="text" id="nm"></div>`);
+  await w.eval(`__set({ personalInfo: { firstName: 'Ada', lastName: 'Lovelace' }, jobPreferences: {}, demographics: {} }); fillDisclosures()`);
+  check('"Name" outside the disability form is left alone', w.document.getElementById('nm').value, '');
+
+  // ------------------------------------------------ Self-ID question worded as a legal paragraph (HUB International report, 2026-11-24)
+  {
+    const hub = boot(legendDropdown('gender', 'HUB International is a Government contractor or subcontractor subject to certain government recordkeeping and reporting requirements. In order to comply, we invite you to self-identify:'));
+    wireOpts(hub, 'gender', ['Male', 'Female', 'I do not wish to self-identify']);
+    await hub.eval(`__set({ jobPreferences: {}, demographics: { gender: 'Female' } }); fillDisclosures()`);
+    check('gender found by its field id when the question never says "gender"', hub.document.getElementById('gender').textContent, 'Female');
+  }
+
   // ------------------------------------------------ My Experience still fills (gate does not over-block)
   w = boot(`<div role="group"><h3>Work Experience</h3>
     <div data-automation-id="formField-c"><label for="c">Company</label><input id="c"></div></div>`);

@@ -49,7 +49,7 @@ let answeredQuestions = new WeakSet();
  * never the values written. Sent to the side panel with fill_complete.
  */
 // Bump with every change to fill logic: the fill report carries it.
-const FILL_BUILD = '2026-11-24c';
+const FILL_BUILD = '2026-11-24d';
 let fillTrace = [];
 let traceSection = '';
 const ABSENT = null; // a step whose field isn't on this page: not reported
@@ -1737,17 +1737,89 @@ async function fillDisclosures() {
     };
     await ask('Veteran status', ['Veteran Status', 'Veteran'], demo.veteranStatus || (decline ? DECLINE : ''), veteranOption);
 
-    if (decline) {
-        // Disability is often a dropdown, sometimes radios/checkboxes (CC-305).
-        await ask('Disability', ['Disability'], DECLINE);
-        const disabilityKeywords = ['disability', 'disabled', 'handicapped'];
-        for (const choice of ['I do not wish to answer', 'I do not want to answer', 'I don’t wish to answer', "I don't wish to answer"]) {
-            if (await autoAnswerRadioExact(disabilityKeywords, choice)) break;
-        }
-    }
+    await step('Disability', () => fillDisability(demo.disabilityStatus || (decline ? DECLINE : ''), DECLINE));
+
+    // The CC-305 form is signed by typing your name.
+    await step('Signature name', () => fillSignatureName());
 
     // Auto-fill Date field in disclosure section with TODAY's date
     await fillDisclosureDate();
+}
+
+/**
+ * Disability (CC-305 "Voluntary Self-Identification of Disability").
+ * Workday shows it as mutually exclusive checkboxes (formField-disabilityStatus,
+ * report 2026-11-24), on some tenants as radios or a dropdown. `want` is the
+ * saved answer: 'Yes' | 'No' | the decline wording. Nothing saved: skipped.
+ */
+const DISABILITY_OPTION = {
+    yes: (t) => /^\s*yes\b/i.test(t),
+    no: (t) => /^\s*no\b/i.test(t),
+    decline: (t) => /\b(wish|want) to answer\b|\bdecline\b|\bnot to (answer|self-identify)\b/i.test(t)
+};
+const disabilityKind = (want) => (/^yes\b/i.test(want) ? 'yes' : /^no\b/i.test(want) ? 'no' : 'decline');
+
+function findDisabilityGroup() {
+    const direct = document.querySelector('[data-automation-id="formField-disabilityStatus"]');
+    if (direct && direct.offsetParent !== null) return direct;
+    // Elsewhere: the group around an option that says "...have a disability...".
+    for (const el of document.querySelectorAll('input[type="checkbox"], input[type="radio"], [role="checkbox"], [role="radio"]')) {
+        if (el.offsetParent === null) continue;
+        if (!checkboxLabelTexts(el).some(t => /\bhave (had )?a disability\b/i.test(t))) continue;
+        const g = el.closest('[data-automation-id^="formField"], fieldset, [role="group"], [role="radiogroup"]');
+        if (g) return g;
+    }
+    return null;
+}
+
+/** The option's own text: its label, never the question it sits under. */
+function optionText(el) {
+    const own = (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`)) || el.closest('label');
+    return ((own && own.innerText) || el.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
+}
+
+async function fillDisability(want, DECLINE) {
+    const group = findDisabilityGroup();
+    if (!group) {
+        if (!want) return findDropdownForQuestion('Disability') ? 'skipped' : ABSENT;
+        const kind = disabilityKind(want);
+        return selectWorkdayDropdown('Disability', kind === 'decline' ? DECLINE : want,
+            (opts) => opts.find(o => DISABILITY_OPTION[kind](o.innerText.replace(/\s+/g, ' ').trim())) || null);
+    }
+    if (!want) return 'skipped';
+    const kind = disabilityKind(want);
+    const options = Array.from(group.querySelectorAll('input[type="checkbox"], input[type="radio"], [role="checkbox"], [role="radio"]'))
+        .filter(el => !(el.getAttribute('role') && el.querySelector('input')));
+    const pick = options.find(el => DISABILITY_OPTION[kind](optionText(el)));
+    if (!pick) { console.warn('Workday Autoplay: no matching disability option on this form'); return false; }
+    // Checkboxes here are one-of: clear any other ticked option first.
+    for (const el of options) if (el !== pick && isChecked(el) && (el.type === 'checkbox' || el.getAttribute('role') === 'checkbox')) await toggleCheckbox(el, false);
+    if (pick.type === 'radio' || pick.getAttribute('role') === 'radio') {
+        const on = () => (pick.type === 'radio' ? pick.checked : pick.getAttribute('aria-checked') === 'true');
+        if (!on()) { pick.click(); pick.dispatchEvent(new Event('change', { bubbles: true })); }
+        if (await waitForCondition(on, 800)) return true;
+        console.warn('Workday Autoplay: clicked the disability answer but it did not change');
+        return false;
+    }
+    return toggleCheckbox(pick, true);
+}
+
+/**
+ * The signature on the disability form: a "Name" box. Only filled on that
+ * form, so a bare "Name" field elsewhere (a referrer's name) is never given
+ * the user's name. Left alone if it already has something in it.
+ */
+function fillSignatureName() {
+    if (!findDisabilityGroup()) return ABSENT;
+    const field = document.querySelector('[data-automation-id="formField-name"]');
+    const input = field && field.querySelector('input[type="text"], input:not([type])');
+    if (!input || input.offsetParent === null) return ABSENT;
+    if (input.value.trim()) return true;
+    const info = userProfile.personalInfo || {};
+    const name = [info.firstName, info.lastName].map(s => (s || '').trim()).filter(Boolean).join(' ');
+    if (!name) return 'skipped';
+    setNativeValue(input, name);
+    return true;
 }
 
 // Helper function to fill the disclosure date with today's date (MM/DD/YYYY format)
@@ -1909,7 +1981,28 @@ function chooseOption(options, desired, matcher = null) {
  * CURRENT ANSWER (" Yes Required", tools/LegallyAuthorized.png), so label- and
  * aria-label lookups never found these. Container first, whole-word match.
  */
+// Workday's own field ids for the self-ID questions. Some tenants word the
+// question as a legal paragraph that never names it (HUB International's gender
+// question, report 2026-11-24), so the label can't be matched; the id still can.
+const QUESTION_FIELD_IDS = {
+    gender: ['gender'], sex: ['gender'],
+    'hispanic or latino': ['hispanicOrLatino'], 'hispanic/latino': ['hispanicOrLatino'], hispanic: ['hispanicOrLatino'],
+    race: ['ethnicity', 'race'], ethnicity: ['ethnicity'],
+    'veteran status': ['veteranStatus'], veteran: ['veteranStatus'],
+    disability: ['disabilityStatus']
+};
+
 function findDropdownForQuestion(label) {
+    const found = findDropdownByLabel(label);
+    if (found) return found;
+    for (const id of QUESTION_FIELD_IDS[label.toLowerCase()] || []) {
+        const btn = SCOPE.querySelector(`[data-automation-id="formField-${id}"] button[aria-haspopup="listbox"]`);
+        if (btn && btn.offsetParent !== null) return btn;
+    }
+    return null;
+}
+
+function findDropdownByLabel(label) {
     const re = new RegExp(`(^|[^a-z0-9])${escapeRegExp(label.toLowerCase())}([^a-z0-9]|$)`);
     const textOf = (n) => (n ? (n.innerText || n.textContent || '').replace(/\s+/g, ' ').toLowerCase() : '');
     for (const sel of ['fieldset', 'div[data-automation-id^="formField"]']) {
@@ -2037,46 +2130,6 @@ async function selectByAriaLabel(ariaLabelKeyword, desiredValue) {
     }
 
     console.warn(`Workday Autoplay: Option '${desiredValue}' not found for ${ariaLabelKeyword} (via aria-label)`);
-    return false;
-}
-
-/**
- * Auto-answer radio buttons with exact text matching (for disability disclosures)
- */
-async function autoAnswerRadioExact(keywords, exactChoice) {
-    const labels = Array.from(document.querySelectorAll('label'));
-    const matches = labels.filter(label => matchesAny(label.innerText, keywords));
-
-    for (const label of matches) {
-        // Prefix match. closest() returns the NEAREST matching ancestor, so this
-        // makes the question's own formField-* wrapper win over an outer
-        // fieldset — tighter scoping, less chance of picking up a neighbouring
-        // question's radios.
-        const container = label.closest('div[data-automation-id^="formField"], fieldset, div[role="group"]');
-
-        if (container) {
-            const radios = container.querySelectorAll('input[type="radio"]');
-            for (const radio of radios) {
-                const id = radio.id;
-                const radioLabel = document.querySelector(`label[for="${CSS.escape(id)}"]`);
-
-                let radioText = "";
-                if (radioLabel) radioText = radioLabel.innerText;
-                else if (radio.getAttribute('aria-label')) radioText = radio.getAttribute('aria-label');
-
-                // Check for exact match (case-insensitive, but check for full phrase)
-                if (radioText.toLowerCase().includes(exactChoice.toLowerCase())) {
-                    if (!radio.checked) {
-                        console.log(`Workday Autoplay: Auto-answering "${label.innerText}" -> ${exactChoice}`);
-                        radio.click();
-                        radio.dispatchEvent(new Event('change', { bubbles: true }));
-                        await new Promise(r => setTimeout(r, 200));
-                        return true;
-                    }
-                }
-            }
-        }
-    }
     return false;
 }
 

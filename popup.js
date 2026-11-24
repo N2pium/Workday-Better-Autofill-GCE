@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'firstName', 'lastName', 'phone', 'email', 'linkedinUrl', 'websiteUrl',
         'street', 'city', 'state', 'zip', 'country',
         'skills', 'languageInput',
-        'gender', 'hispanicLatino', 'race', 'veteranStatus',
+        'gender', 'hispanicLatino', 'race', 'veteranStatus', 'disabilityStatus',
         'sourceReferral'
     ];
 
@@ -285,6 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('hispanicLatino').value = result.demographics.hispanicLatino || '';
             document.getElementById('race').value = result.demographics.race || '';
             document.getElementById('veteranStatus').value = result.demographics.veteranStatus || '';
+            document.getElementById('disabilityStatus').value = result.demographics.disabilityStatus || '';
         }
 
         // Must run last: everything above decides what counts as blank.
@@ -369,7 +370,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 gender: document.getElementById('gender').value,
                 hispanicLatino: document.getElementById('hispanicLatino').value,
                 race: document.getElementById('race').value,
-                veteranStatus: document.getElementById('veteranStatus').value
+                veteranStatus: document.getElementById('veteranStatus').value,
+                disabilityStatus: document.getElementById('disabilityStatus').value
             }
         };
 
