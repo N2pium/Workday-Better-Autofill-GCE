@@ -101,6 +101,26 @@ describe('AI', () => {
     expect(bedrock.commandCalls(ConverseCommand)).toHaveLength(0);
   });
 
+  it('counts every AI call against the service-wide daily cap too', async () => {
+    ddb.on(UpdateCommand).resolves({ Attributes: { count: 1 } });
+    toolReturns('report_match', { score: 50, strengths: [], gaps: [], summary: 'ok' });
+    await ai(event('POST /ai/match', { body: { job: { description: 'We need SQL and Python for analytics dashboards. '.repeat(3) }, profile } }));
+    const keys = ddb.commandCalls(UpdateCommand).map((c) => c.args[0].input.Key);
+    expect(keys[0]?.pk).toBe('USER#user-1');
+    expect(keys[1]).toEqual({ pk: 'SERVICE#QUOTA', sk: expect.stringMatching(/^QUOTA#AI#\d{4}-\d{2}-\d{2}$/) });
+  });
+
+  it('refuses with 429 when the service-wide cap is used up, even with the user under theirs', async () => {
+    ddb.on(UpdateCommand).callsFake((input) => {
+      if (input.Key.pk === 'SERVICE#QUOTA') throw Object.assign(new Error('x'), { name: 'ConditionalCheckFailedException' });
+      return { Attributes: { count: 1 } };
+    });
+    const res = await ai(event('POST /ai/adapt', { body: { question: 'Why us?', savedAnswer: 'Because.' } }));
+    expect(res.statusCode).toBe(429);
+    expect(body(res)).toMatchObject({ error: expect.stringMatching(/for everyone/) });
+    expect(bedrock.commandCalls(ConverseCommand)).toHaveLength(0);
+  });
+
   it('match: clamps the score and trims lists', async () => {
     ddb.on(UpdateCommand).resolves({ Attributes: { count: 1 } });
     toolReturns('report_match', { score: 140, strengths: Array(9).fill('SQL'), gaps: ['Python'], summary: 'Good fit.' });

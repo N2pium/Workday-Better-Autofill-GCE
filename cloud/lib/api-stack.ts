@@ -113,6 +113,7 @@ export class ApiStack extends Stack {
     });
     resumes.addEnvironment('MODEL_ID', MODEL_ID);
     resumes.addEnvironment('AI_DAILY_LIMIT', '20');
+    resumes.addEnvironment('GLOBAL_AI_DAILY_LIMIT', '300'); // all users together: bounds the daily Bedrock bill
     resumes.addToRolePolicy(invokeModel);
 
     // Phase 2: AI answers / adapt / match / categorise (F04, F11). Same model and
@@ -124,6 +125,8 @@ export class ApiStack extends Stack {
     ai.addEnvironment('MODEL_ID', MODEL_ID);
     ai.addEnvironment('AI_DAILY_LIMIT', '20');
     ai.addEnvironment('CATEGORISE_DAILY_LIMIT', '100');
+    ai.addEnvironment('GLOBAL_AI_DAILY_LIMIT', '300');
+    ai.addEnvironment('GLOBAL_CATEGORISE_DAILY_LIMIT', '2000');
     ai.addToRolePolicy(invokeModel);
 
     // Answer Library (F11): plain CRUD on ANSWER# items.
