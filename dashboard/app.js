@@ -142,23 +142,129 @@
   const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
   const label = (s) => s[0].toUpperCase() + s.slice(1);
 
-  function renderStats() {
-    const counts = Object.fromEntries(STATUSES.map((s) => [s, 0]));
-    for (const it of items) counts[it.status] = (counts[it.status] || 0) + 1;
-    const responded = items.filter((i) => ['screening', 'interview', 'offer'].includes(i.status)).length;
+  // ------------------------------------------------------------- insights
+  // Counts come from GET /insights (all applications, server-side), not from
+  // the pages loaded into the table. Bar sizes are set through element.style,
+  // which the CSP (style-src 'self') allows; style="" attributes it would not.
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const fmtWeek = (ymd) => {
+    const d = new Date(`${ymd}T00:00:00Z`);
+    return Number.isNaN(d.getTime()) ? String(ymd) : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  };
+  const fmtPct = (r) => (r === null || r === undefined || !Number.isFinite(Number(r)) ? '—' : `${Math.round(Number(r) * 100)}%`);
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+  function weeklyChart(weekly) {
+    const max = Math.max(1, ...weekly.map((w) => num(w.count)));
+    const total = weekly.reduce((a, w) => a + num(w.count), 0);
+    const cols = weekly.map((w) => {
+      const n = num(w.count);
+      const bar = el('div', { className: 'wbar' });
+      bar.style.height = `${(n / max) * 100}%`;
+      return el('div', { className: 'wcol', title: `Week of ${fmtWeek(w.weekStart)}: ${plural(n, 'application', 'applications')}` },
+        el('span', { className: 'wcount', textContent: n ? String(n) : '' }),
+        el('div', { className: 'wtrack' }, bar),
+        el('span', { className: 'wlabel', textContent: fmtWeek(w.weekStart) }));
+    });
+    const visual = el('div', { className: 'wchart' }, ...cols);
+    visual.setAttribute('aria-hidden', 'true');
+
+    const table = el('table', { className: 'sr-only' },
+      el('caption', { textContent: 'Applications per week, last 12 weeks' }),
+      el('thead', {}, el('tr', {}, el('th', { scope: 'col', textContent: 'Week of' }), el('th', { scope: 'col', textContent: 'Applications' }))),
+      el('tbody', {}, ...weekly.map((w) => el('tr', {}, el('td', { textContent: fmtWeek(w.weekStart) }), el('td', { textContent: String(num(w.count)) })))));
+
+    return el('figure', { className: 'card insight-chart' },
+      el('figcaption', {},
+        el('span', { textContent: 'Applications per week' }),
+        el('span', { className: 'muted', textContent: `${plural(total, 'application', 'applications')} in the last ${weekly.length} weeks` })),
+      visual, table);
+  }
+
+  function statusBreakdown(byStatus, total) {
+    const max = Math.max(1, ...STATUSES.map((s) => num(byStatus[s])));
+    return el('div', { className: 'card insight-status' },
+      el('h3', { textContent: 'By status' }),
+      el('ul', { className: 'sbars' }, ...STATUSES.map((s) => {
+        const n = num(byStatus[s]);
+        const fill = el('div', { className: `sfill s-${s}` });
+        fill.style.width = `${(n / max) * 100}%`;
+        const track = el('div', { className: 'strack' }, fill);
+        track.setAttribute('aria-hidden', 'true');
+        const pct = total ? ` (${Math.round((n / total) * 100)}%)` : '';
+        return el('li', {},
+          el('span', { className: 'slabel', textContent: label(s) }),
+          track,
+          el('span', { className: 'scount', textContent: String(n), title: `${label(s)}: ${n}${pct}` }));
+      })));
+  }
+
+  // Pure: builds the Insights view for one GET /insights payload into `root`.
+  function renderInsights(data, root = $('insightsBody'), meta = $('insightsMeta')) {
+    const d = data || {};
+    const byStatus = d.byStatus || {};
+    const weekly = Array.isArray(d.weekly) ? d.weekly : [];
+    const total = num(d.total);
+
     const tiles = [
-      ['Total', items.length],
-      ['Interviewing', counts.interview],
-      ['Offers', counts.offer],
-      ['Response rate', items.length ? `${Math.round((responded / items.length) * 100)}%` : '-'],
+      ['Total applications', String(total)],
+      ['Response rate', fmtPct(d.responseRate)],
+      ['Interviews', String(num(byStatus.interview))],
+      ['Offers', String(num(byStatus.offer))],
     ];
-    $('stats').replaceChildren(...tiles.map(([k, v]) => el('div', { className: 'stat' }, el('b', { textContent: String(v) }), el('span', { textContent: k }))));
+    const kids = [el('div', { className: 'stats' }, ...tiles.map(([k, v]) =>
+      el('div', { className: 'stat' }, el('b', { textContent: v }), el('span', { textContent: k }))))];
+
+    if (d.truncated) {
+      kids.push(el('p', { className: 'muted small note', textContent: 'Only your first 2,000 applications were counted, so these numbers may be lower than your real totals.' }));
+    }
+    if (total === 0) {
+      kids.push(el('p', { className: 'card muted center', textContent: 'No applications yet — they\'ll show up here once you track one.' }));
+    } else {
+      kids.push(el('div', { className: 'insight-grid' }, weeklyChart(weekly), statusBreakdown(byStatus, total)));
+    }
+    root.replaceChildren(...kids);
+    root.setAttribute('aria-busy', 'false');
+
+    if (meta) {
+      const at = d.generatedAt ? new Date(d.generatedAt) : null;
+      meta.textContent = at && !Number.isNaN(at.getTime())
+        ? `Updated ${at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : '';
+    }
+  }
+
+  let insightsSeq = 0;
+  let insightsTimer = null;
+  let insightsLoaded = false;
+
+  async function loadInsights() {
+    const seq = ++insightsSeq;
+    const root = $('insightsBody');
+    root.setAttribute('aria-busy', 'true');
+    if (!insightsLoaded) root.replaceChildren(el('p', { className: 'muted', textContent: 'Loading insights...' }));
+    try {
+      const data = await api('GET', '/insights');
+      if (seq !== insightsSeq) return; // a newer refresh is on its way
+      renderInsights(data);
+      insightsLoaded = true;
+    } catch (e) {
+      if (seq !== insightsSeq || e.message === 'Signed out') return;
+      root.setAttribute('aria-busy', 'false');
+      // Keep the last good numbers on a failed refresh; only replace the loading text.
+      if (!insightsLoaded) root.replaceChildren(el('p', { className: 'muted', textContent: `Insights could not be loaded: ${e.message}` }));
+    }
+  }
+
+  // Status changes can come in quick bursts from the table; refresh once.
+  function refreshInsights() {
+    clearTimeout(insightsTimer);
+    insightsTimer = setTimeout(() => { loadInsights(); }, 400);
   }
 
   async function patch(it, fields) {
     try {
       Object.assign(it, await api('PATCH', `/applications/${encodeURIComponent(it.id)}`, fields));
-      renderStats();
+      if ('status' in fields) refreshInsights();
       error('');
     } catch (e) { error(e.message); }
   }
@@ -178,6 +284,7 @@
         await api('DELETE', `/applications/${encodeURIComponent(it.id)}`);
         items = items.filter((x) => x !== it);
         render();
+        refreshInsights();
       } catch (e) { error(e.message); }
     });
 
@@ -202,7 +309,6 @@
     $('rows').replaceChildren(...shown.map(row));
     $('empty').hidden = shown.length > 0;
     $('more').hidden = !cursor;
-    renderStats();
   }
 
   async function loadApplications(more = false) {
@@ -248,7 +354,7 @@
     const t = JSON.parse(sessionStorage.getItem(TOKENS));
     $('who').textContent = claims(t.id).email || '';
     show('app');
-    await Promise.all([loadApplications(), loadProfile()]);
+    await Promise.all([loadApplications(), loadProfile(), loadInsights()]);
   }
 
   start().catch((e) => { if (e.message !== 'Signed out') error(e.message); });

@@ -101,7 +101,7 @@ describe('ApiStack', () => {
 
   it('requires the JWT authorizer on every route', () => {
     const routes = api.findResources('AWS::ApiGatewayV2::Route');
-    expect(Object.keys(routes)).toHaveLength(25);
+    expect(Object.keys(routes)).toHaveLength(26);
     for (const r of Object.values(routes)) expect(r.Properties.AuthorizationType).toBe('JWT');
   });
 

@@ -29,6 +29,9 @@ You sign in through Amazon Cognito, our sign-in provider, either with your email
 - **Saved answers** you choose to keep in your answer library: the application question and the final text you approved, so you can reuse it on later applications.
 - **Usage counters** for AI features, used only to enforce daily limits.
 
+### Insights
+The dashboard's **Insights** view shows a summary of your own application records: how many you have, how many are at each status, how many you added each week over the last 12 weeks, and your response rate. It is calculated when you open it, from the application records you already sync. Nothing new is collected or stored, nothing is sent to Amazon Bedrock, and it is visible only to you. Insights needs a cloud account (local-only mode has no dashboard) and is gone when you delete your account.
+
 ### What we never store in the cloud
 - **Voluntary self-identification answers** (gender, race/ethnicity, veteran status, disability status) are **never synced or uploaded**. They stay in your browser on each device and are used only to fill the matching voluntary questions at your request.
 - We do not collect your browsing history, the content of pages you visit, or form fields other than the profile data you entered yourself. On supported job sites the extension reads the job's title, company and description so AI features can use them; this stays on your device and is sent only as part of an AI request you make.

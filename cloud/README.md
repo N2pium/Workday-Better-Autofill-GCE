@@ -21,6 +21,7 @@ Everything Regional is in **us-east-2** (fixed in `lib/config.ts`).
 |---|---|
 | `GET /profiles` · `GET/PUT/DELETE /profiles/{id}` | profiles: optimistic locking via `expectedVersion`; rejects self-ID answers and resume blobs |
 | `GET/POST /applications` · `PATCH/DELETE /applications/{id}` | applications: newest first, cursor pagination bound to the caller |
+| `GET /insights` | applications: read-only summary computed on demand (no AI, nothing stored): `total`, `byStatus` (every status), `weekly` (12 UTC Monday-start weeks, oldest first), `responseRate` (screening/interview/offer/rejected ÷ non-withdrawn, 2 dp, `null` if none), `truncated` (over 2000 applications), `generatedAt` |
 | `DELETE /account` with `{"confirm":"DELETE"}` | account: deletes all items, then the Cognito user |
 
 ## Configuration (`cdk.json` → `context`, or `-c key=value`)

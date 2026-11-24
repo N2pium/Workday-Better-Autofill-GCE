@@ -193,6 +193,7 @@ export class ApiStack extends Stack {
     route(POST, '/applications', applications, 'CreateApplication');
     route(PATCH, '/applications/{id}', applications, 'UpdateApplication');
     route(DELETE, '/applications/{id}', applications, 'DeleteApplication');
+    route(GET, '/insights', applications, 'GetInsights');
     route(DELETE, '/account', account, 'DeleteAccount');
     route(POST, '/resumes/parse', resumes, 'ParseResume');
     route(GET, '/resumes', vault, 'ListResumes');

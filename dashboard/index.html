@@ -23,7 +23,15 @@
     </section>
 
     <section id="app" hidden>
-      <div id="stats" class="stats"></div>
+      <section id="insights" aria-labelledby="insightsTitle">
+        <div class="insights-head">
+          <h2 id="insightsTitle">Insights</h2>
+          <span id="insightsMeta" class="muted small"></span>
+        </div>
+        <div id="insightsBody" aria-live="polite" aria-busy="true">
+          <p class="muted">Loading insights...</p>
+        </div>
+      </section>
 
       <div class="toolbar">
         <h2>Applications</h2>
