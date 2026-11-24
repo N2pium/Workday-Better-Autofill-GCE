@@ -160,6 +160,25 @@ const PROFILE = {
   check('Ethnicity with no saved answer: left alone and reported skipped',
     [w.document.getElementById('ethnicity').textContent, JSON.parse(w.eval('__trace()')).filter(x => /Race/.test(x.field)).map(x => x.status)], ['Select One', ['skipped']]);
 
+  // ------------------------------------------------ stale menu (Camping World, 2026-11-24)
+  // Workday leaves the previous question's menu in the DOM and opens the next one a beat later.
+  w = boot(legendDropdown('auth', 'Are you legally authorized to work in the United States?') +
+           legendDropdown('spon', 'Will you now, or in the future, require sponsorship to work in the country where the job is located?'));
+  {
+    const doc = w.document;
+    doc.querySelectorAll('button[aria-haspopup="listbox"]').forEach(b => b.replaceWith(b.cloneNode(true)));
+    doc.querySelectorAll('button[aria-haspopup="listbox"]').forEach(btn => btn.addEventListener('click', () => setTimeout(() => {
+      const pop = doc.createElement('div');
+      pop.setAttribute('data-popper-placement', 'bottom');
+      pop.innerHTML = `<ul role="listbox">${['Yes', 'No'].map(t => `<li role="option"><div>${t}</div></li>`).join('')}</ul>`;
+      pop.querySelectorAll('li').forEach(li => li.addEventListener('click', () => { btn.textContent = li.textContent; })); // menu NOT removed
+      doc.body.appendChild(pop);
+    }, 150)));
+  }
+  await w.eval(`__set({ jobPreferences: { authorizedToWork: true, requiresSponsorship: false } }); handleJobPreferences()`);
+  check('a menu left open by the previous question is never clicked: both answers land on their own question',
+    [w.document.getElementById('auth').textContent, w.document.getElementById('spon').textContent], ['Yes', 'No']);
+
   // ------------------------------------------------ My Experience still fills (gate does not over-block)
   w = boot(`<div role="group"><h3>Work Experience</h3>
     <div data-automation-id="formField-c"><label for="c">Company</label><input id="c"></div></div>`);

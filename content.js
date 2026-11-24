@@ -49,7 +49,7 @@ let answeredQuestions = new WeakSet();
  * never the values written. Sent to the side panel with fill_complete.
  */
 // Bump with every change to fill logic: the fill report carries it.
-const FILL_BUILD = '2026-11-23g';
+const FILL_BUILD = '2026-11-24a';
 let fillTrace = [];
 let traceSection = '';
 const ABSENT = null; // a step whose field isn't on this page: not reported
@@ -1910,13 +1910,24 @@ async function pickFromDropdown(trigger, desiredValue, label, matcher = null) {
         if (chooseOption([probe], desiredValue, matcher)) return true; // already answered this way
     }
 
+    // Only options that appear AFTER this click count. Workday leaves the
+    // previous question's menu in the DOM, and the old "any open menu" wait
+    // resolved instantly on it: the click then landed on the PREVIOUS question
+    // (2026-11-24: sponsorship "chose an option but still shows Select One",
+    // straight after work authorization had been answered).
+    const stale = new Set(document.querySelectorAll(OPTION_SELECTOR));
+    const fresh = () => Array.from(document.querySelectorAll('ul[role="listbox"], div[role="listbox"]'))
+        .filter(l => l.getAttribute('data-automation-id') !== 'selectedItemList' && l.getBoundingClientRect().height > 0)
+        .flatMap(l => Array.from(l.querySelectorAll(OPTION_SELECTOR)))
+        .filter(o => !stale.has(o));
     scrollIntoViewIfNeeded(trigger);
     trigger.click();
-    if (!await waitForCondition(() => getOpenListboxOptions().length > 0, 3000)) {
+    if (!await waitForCondition(() => fresh().length > 0, 3000)) {
         console.warn(`Workday Autoplay: the ${label} dropdown did not open`);
+        closeOpenListbox(trigger);
         return false;
     }
-    const options = getOpenListboxOptions();
+    const options = fresh();
     const option = chooseOption(options, desiredValue, matcher);
     if (!option) {
         const sample = options.map(o => o.innerText.trim()).filter(Boolean).slice(0, 8).join(' | ');
