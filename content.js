@@ -49,7 +49,7 @@ let answeredQuestions = new WeakSet();
  * never the values written. Sent to the side panel with fill_complete.
  */
 // Bump with every change to fill logic: the fill report carries it.
-const FILL_BUILD = '2026-11-24d';
+const FILL_BUILD = '2026-11-24e';
 let fillTrace = [];
 let traceSection = '';
 const ABSENT = null; // a step whose field isn't on this page: not reported
@@ -401,7 +401,52 @@ async function handleWorkExperience(jobs) {
         console.log(`Workday Autoplay: filling work experience ${i + 1}`, panels[i]);
         await fillWorkPanel(jobs[i], panels[i]);
     }
+    if (ok) ok = await removeExtraWorkPanels(jobs.length);
     return ok;
+}
+
+/**
+ * Workday's own "Autofill with Resume" can add more Work Experience entries
+ * than the profile has, usually half-parsed with no Job Title (report
+ * 2026-11-24: two extra panels, required Job Title empty, page can't be
+ * submitted). After filling, an extra entry with an EMPTY Job Title is deleted:
+ * it can't be submitted as it is, so nothing the user wants is lost. An extra
+ * entry that has a title is kept and mentioned in the report.
+ */
+function panelTitleInput(panel) {
+    for (const input of panel.querySelectorAll('input[type="text"], input:not([type])')) {
+        if (collectLabelTexts(input).some(t => /^\s*(job )?title\b/i.test(t || ''))) return input;
+    }
+    return null;
+}
+
+function panelDeleteButton(panel) {
+    const btns = Array.from(panel.querySelectorAll('button'));
+    return btns.find(b => b.getAttribute('data-automation-id') === 'panel-set-delete-button')
+        || btns.find(b => /^\s*delete\b/i.test(b.getAttribute('aria-label') || b.innerText || b.textContent || ''))
+        || null;
+}
+
+async function removeExtraWorkPanels(keep) {
+    let kept = 0;
+    for (let guard = 0; guard < 10; guard++) {
+        const panels = findWorkPanels();
+        // Last first, so earlier indexes don't shift under us.
+        const extra = panels.slice(keep).reverse().find(p => {
+            const t = panelTitleInput(p);
+            return t && !t.value.trim() && panelDeleteButton(p);
+        });
+        if (!extra) { kept = Math.max(0, findWorkPanels().length - keep); break; }
+        const before = panels.length;
+        console.log('Workday Autoplay: deleting an extra, untitled work experience entry', extra);
+        panelDeleteButton(extra).click();
+        if (!await waitForCondition(() => findWorkPanels().length < before, 2000)) {
+            console.warn('Workday Autoplay: could not delete an extra, empty work experience entry Workday added; delete it by hand');
+            return false;
+        }
+    }
+    if (kept) console.warn(`Workday Autoplay: ${kept} more work experience entr${kept === 1 ? 'y' : 'ies'} on the page than in your profile; check ${kept === 1 ? 'it' : 'them'}`);
+    return true;
 }
 
 /**
