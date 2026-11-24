@@ -304,6 +304,23 @@ const PROFILE = {
   await w.eval(`__set({ jobPreferences: {} }); handleJobPreferences()`);
   check('no saved source: reported skipped, not silently missing', JSON.parse(w.eval('__trace()')).filter(x => /hear about/i.test(x.field)).map(x => x.status), ['skipped']);
 
+  // Motorola (2026-11-24): the government-service questionnaire contains
+  // "employed by", which the former-employee rule claimed and answered No.
+  const motorola = `<div data-automation-id="applyFlowPage">
+    ${legendDropdown('fed6cbf7092f1001b39d3f18b2df0001', 'Conflict of Interest Questionnaire – US Government Service and DOD Anti-Felon Rule Present and former federal government employees, and the relatives of those employed by the U.S. Government, must disclose. Are you a present or former federal employee?')}
+    ${legendDropdown('fed6cbf7092f1001b39d3f18b2df0002', 'Have you previously worked for Motorola Solutions?')}
+    ${legendText('fed6cbf7092f1001b39d3fb294f70002', 'What is the best way to contact you?')}
+    ${legendText('fed6cbf7092f1001b39d3fb294f70001', 'When are you available to start a new position?')}
+  </div>`;
+  w = boot(motorola);
+  await w.eval(`__set({ personalInfo: { email: 'a@b.co', phone: '555-0100' }, jobPreferences: { formerEmployee: false } }); handleJobPreferences()`);
+  const btnText = (id) => w.document.getElementById(id).textContent.trim();
+  check('government-service question is left for the user', btnText('fed6cbf7092f1001b39d3f18b2df0001'), 'Select One');
+  check('the real former-employee question is still answered', btnText('fed6cbf7092f1001b39d3f18b2df0002'), 'No');
+  await w.eval('answerProfileQuestions()');
+  check('best way to contact: saved email and phone', w.document.getElementById('fed6cbf7092f1001b39d3fb294f70002').value, 'Email: a@b.co, Phone: 555-0100');
+  check('start availability is not invented', w.document.getElementById('fed6cbf7092f1001b39d3fb294f70001').value, '');
+
   console.log(failures ? `\n${failures} FAILED` : '\nall passed');
   process.exit(failures ? 1 : 0);
 })();

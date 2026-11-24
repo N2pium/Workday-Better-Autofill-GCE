@@ -49,7 +49,7 @@ let answeredQuestions = new WeakSet();
  * never the values written. Sent to the side panel with fill_complete.
  */
 // Bump with every change to fill logic: the fill report carries it.
-const FILL_BUILD = '2026-11-24b';
+const FILL_BUILD = '2026-11-24c';
 let fillTrace = [];
 let traceSection = '';
 const ABSENT = null; // a step whose field isn't on this page: not reported
@@ -2507,7 +2507,18 @@ async function handleJobPreferences() {
         'worked for',
         'previously worked'
     ];
-    await answerYesNo(formerKeywords, prefs.formerEmployee ? 'Yes' : 'No');
+    // Only questions about THIS employer. "employed by" / "worked for" also
+    // appear in government-service questions ("Present and former federal
+    // government employees ... employed by the U.S. Government"), which the
+    // former-employee checkbox says nothing about (Motorola, 2026-11-24).
+    const OTHER_EMPLOYER = /\b(government|federal|state or local|public (official|office|sector)|military|armed forces|DoD|department of defense|agency|another employer|non-?compete)\b/i;
+    for (const block of findQuestionBlocks(formerKeywords)) {
+        if (OTHER_EMPLOYER.test(block.text)) {
+            console.log(`Workday Autoplay: "${block.text.slice(0, 60)}" is about another employer, leaving it for the user.`);
+            continue;
+        }
+        if (await answerQuestionBlock(block, prefs.formerEmployee ? 'Yes' : 'No')) break;
+    }
 
     // Age has its OWN profile field, deliberately not folded into
     // authorizedToWork below: a user who unchecks work authorization must not
@@ -2817,9 +2828,17 @@ const PROFILE_TEXT_QUESTIONS = [
       value: (e, label) => graduationText(e.endDate, label) },
     { re: /\b(current|your|intended|declared)\s+(major|field of study|area of study|course of study)\b|\bwhat is your major\b/i,
       value: e => e.fieldOfStudy || '' },
+    { re: /\b(best|preferred) (way|method|means) (to|of) (contact|reach)(ing)? you\b|\bhow (should|can|may) we (best )?(contact|reach) you\b/i,
+      value: () => contactText() },
     { re: /\b(what|which|current)\s+(school|university|college)\b.*\b(attend|enrolled|study)|\bcurrent (school|university|college)\b|^\s*(school|university|college)( or (school|university|college))? name\b|\bname of (your )?(school|university|college)\b/i,
       value: e => e.school || '' }
 ];
+
+/** "What is the best way to contact you?": the saved email and phone, nothing invented. */
+function contactText() {
+    const p = (userProfile && userProfile.personalInfo) || {};
+    return [p.email && `Email: ${p.email}`, p.phone && `Phone: ${p.phone}`].filter(Boolean).join(', ');
+}
 
 /** "What languages do you speak? Rate 1 beginner to 10 fluent." A rating only for a native speaker. */
 function languagesText(label) {
