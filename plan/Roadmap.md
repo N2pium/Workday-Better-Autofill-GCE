@@ -3,7 +3,6 @@ type: plan
 tags:
   - easyapply
 ---
-befo
 # Roadmap
 
 Colours on the [[Architecture.canvas|board]]: green = phase 1, purple = 2, cyan = 3, yellow = 4.

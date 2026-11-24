@@ -104,9 +104,11 @@ You can revoke Greenhouse access at any time via the toggle or Chrome's extensio
 | `activeTab` | Lets the extension fill the current job application form |
 | `scripting` | Injects autofill logic into job application pages |
 | `sidePanel` | Displays the extension UI in the browser side panel |
+| `identity` | Opens the sign-in window when you choose to sign in to the optional cloud account |
 | `*://*.myworkdayjobs.com/*` | Required to autofill Workday applications |
 | `*://boards.greenhouse.io/*` (optional) | Allows Greenhouse legacy board autofill |
 | `*://job-boards.greenhouse.io/*` (optional) | Allows Greenhouse new board autofill |
+| Extension API, sign-in and resume storage hosts (optional) | The extension's own backend; requested only when you sign in (resume storage: when you first add a resume version) |
 
 ## Privacy & Data
 
@@ -168,11 +170,19 @@ Data is also deleted if you uninstall the extension.
 ## Technical Details
 
 ### Architecture
-- **popup.html/css/js** — Extension UI and user preferences
-- **content.js** — Workday autofill logic
+Extension:
+- **popup.html/css/js** — Side panel UI: profile, applications, settings
+- **content.js** — Workday autofill logic and the fill report
+- **ai-assist.js**, **cloud-library.js** — On-page Draft button and saved-answer suggestions (content scripts)
 - **greenhouse.js** — Greenhouse autofill (isolated world)
 - **greenhouse-main.js** — Greenhouse react-select interaction (main world)
-- **background.js** — Service worker for permissions management
+- **background.js** — Service worker: permissions, Greenhouse injection, sign-in
+- **cloud-config.js**, **cloud-auth.js** — Backend endpoints and Cognito sign-in (PKCE)
+- **cloud-sync.js**, **cloud-tracker.js**, **cloud-vault.js** — Profile sync, application tracking, resume versions
+
+Cloud (optional account):
+- **cloud/** — AWS CDK app (TypeScript): Cognito, API Gateway, Lambda, DynamoDB, S3, Bedrock. See [cloud/README.md](cloud/README.md)
+- **dashboard/** — Web dashboard: application flow (Sankey), Insights, application table
 
 ### For Developers
 The extension is built with:
@@ -209,6 +219,20 @@ node design/build-privacy.mjs
 Released under the [MIT License](LICENSE).
 
 ## Changelog
+
+### v2.0
+- Optional cloud account (email or Google): profile sync, application tracker, resume versions
+- AI features on request (Claude on Amazon Bedrock): resume to profile, Draft answers, match score, answer library
+- Web dashboard: application flow by industry / company / role, Insights, application table
+- Honest fill report: every field reported as filled, failed or skipped, with the reason
+- Workday: nested "How did you hear about us" menus, questions answered from the profile (graduation date, major, GPA, languages), Hispanic or Latino on combined race questions, veteran status
+- Never clicks a dropdown menu left open by the previous question
+
+### v1.4
+- Batch of Workday autofill fixes
+
+### v1.3
+- Chrome Web Store release with refreshed listing, screenshots and privacy policy
 
 ### v1.2
 - Added Greenhouse support (optional, privacy-first)
