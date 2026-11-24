@@ -10,7 +10,8 @@
   "context": {
     "domainPrefix": "better-autofill",
     "extensionIds": [
-      "jhndpohagnfomchdcfnfecdhmdaepgcd"
+      "jhndpohagnfomchdcfnfecdhmdaepgcd",
+      "ecakdhppcmlicpbkfihabojaklbdklff"
     ],
     "dashboardUrls": [
       "http://localhost:5173"
