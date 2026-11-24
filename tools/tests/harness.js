@@ -5,7 +5,7 @@ const { JSDOM } = require('jsdom');
 
 const SRC = path.resolve(__dirname, '..', '..', 'content.js');
 
-function load(bodyHtml) {
+function load(bodyHtml, extraSource = '') {
   const dom = new JSDOM(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
     runScripts: 'outside-only',
     pretendToBeVisual: true
@@ -50,7 +50,8 @@ function load(bodyHtml) {
     return { width: 100, height: 20, top: 10, bottom: 30, left: 0, right: 100, x: 0, y: 10 };
   };
 
-  w.eval(fs.readFileSync(SRC, 'utf8'));
+  // extraSource runs in the same eval, so it can reach content.js's let bindings.
+  w.eval(fs.readFileSync(SRC, 'utf8') + String.fromCharCode(10) + ';' + extraSource);
   return { dom, w };
 }
 

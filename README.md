@@ -26,10 +26,15 @@ A Chrome extension that automates filling job application forms on Workday and G
 - Export your profile to a JSON file
 - Import it on another computer
 
+✨ **Application Dashboard** (optional cloud account)
+- Track your applications and their status in a web dashboard
+- **Insights**: totals, count per status, applications per week (last 12 weeks) and response rate, computed on demand from your own application records (`GET /insights`); nothing new is collected or stored and nothing is sent to AI
+
 ✨ **Privacy-First**
-- All data stored locally — no cloud sync, no servers, no tracking
-- Zero third-party analytics or services
-- Full control over data deletion
+- Local-only by default: without an account, everything stays in your browser
+- The cloud account is optional; voluntary self-ID answers are never uploaded, even when signed in
+- Zero third-party analytics, ads or trackers
+- Full control over data deletion, locally and in the cloud
 - Open source code available on GitHub
 
 ## Installation
@@ -105,12 +110,17 @@ You can revoke Greenhouse access at any time via the toggle or Chrome's extensio
 
 ## Privacy & Data
 
-📌 **Your data stays on your device.** The extension:
-- Stores all information locally using Chrome's storage API
-- Does NOT transmit data to any server
+📌 **Local-only unless you sign in.** The extension:
+- Stores your profile locally using Chrome's storage API
+- Sends nothing to any server in local-only mode
+- With the optional cloud account, syncs your profiles, application records, saved answers and any resume versions you add to the extension's own backend on Amazon Web Services (us-east-2, Ohio), encrypted in transit and at rest
+- Never uploads voluntary self-identification answers (gender, race/ethnicity, veteran status, disability)
+- Sends data to Amazon Bedrock only when you use an AI feature (never your contact details or self-ID answers)
 - Does NOT use analytics or tracking
-- Does NOT share data with third parties
+- Does NOT sell or share data with third parties
 - Only sends data to job application forms when you click autofill
+
+See the full [Privacy Policy](https://n2pium.github.io/Workday-Better-Autofill-GCE/).
 
 See the full [Privacy Policy](PRIVACY_POLICY.md) for details. The published
 copy linked from the Chrome Web Store listing is served by GitHub Pages from

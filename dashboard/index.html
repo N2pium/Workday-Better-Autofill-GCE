@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Better Autofill - Dashboard</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="bar">
+    <span class="brand">Better Autofill</span>
+    <span id="who" class="muted"></span>
+    <button id="signout" class="ghost" hidden>Sign out</button>
+  </header>
+
+  <main>
+    <section id="signedout" hidden class="card center">
+      <h1>Your applications, in one place</h1>
+      <p class="muted">Sign in with the same account you use in the extension.</p>
+      <button id="signin" class="primary">Sign in</button>
+    </section>
+
+    <section id="app" hidden>
+      <section id="flow" class="card" aria-labelledby="flowTitle">
+        <div class="flow-head">
+          <h3 id="flowTitle">Application flow</h3>
+          <div id="flowDims" class="seg" role="group" aria-label="Group the flow by">
+            <button type="button" data-dim="industry" aria-pressed="true">Industry</button>
+            <button type="button" data-dim="company" aria-pressed="false">Company</button>
+            <button type="button" data-dim="role" aria-pressed="false">Role</button>
+          </div>
+        </div>
+        <div id="flowBody" aria-live="polite"><p class="muted">Loading...</p></div>
+      </section>
+
+      <section id="insights" aria-labelledby="insightsTitle">
+        <div class="insights-head">
+          <h2 id="insightsTitle">Insights</h2>
+          <span id="insightsMeta" class="muted small"></span>
+        </div>
+        <div id="insightsBody" aria-live="polite" aria-busy="true">
+          <p class="muted">Loading insights...</p>
+        </div>
+      </section>
+
+      <div class="toolbar">
+        <h2>Applications</h2>
+        <input id="search" type="search" placeholder="Search company or role" aria-label="Search">
+        <select id="filter" aria-label="Filter by status"><option value="">All statuses</option></select>
+      </div>
+
+      <datalist id="industryList">
+        <option value="Cloud & SaaS"></option>
+        <option value="Fintech"></option>
+        <option value="AI & data"></option>
+        <option value="Consumer tech"></option>
+        <option value="Enterprise software"></option>
+        <option value="Hardware & semiconductors"></option>
+        <option value="Telecom & networking"></option>
+        <option value="Financial services"></option>
+        <option value="Healthcare"></option>
+        <option value="Manufacturing & industrial"></option>
+        <option value="Retail & e-commerce"></option>
+        <option value="Government & defense"></option>
+      </datalist>
+
+      <div class="card table-wrap">
+        <table>
+          <thead><tr><th>Company</th><th>Role</th><th>Industry</th><th>Applied</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <p id="empty" class="muted center" hidden>No applications yet. Autofill a job form while signed in and it shows up here.</p>
+      </div>
+      <button id="more" class="ghost" hidden>Load more</button>
+
+      <section class="card" id="profile">
+        <h2>Synced profile</h2>
+        <div id="profileBody" class="muted">Loading...</div>
+      </section>
+    </section>
+
+    <p id="error" class="error" role="alert" hidden></p>
+  </main>
+</body>
+</html>
