@@ -49,7 +49,7 @@ let answeredQuestions = new WeakSet();
  * never the values written. Sent to the side panel with fill_complete.
  */
 // Bump with every change to fill logic: the fill report carries it.
-const FILL_BUILD = '2026-11-24a';
+const FILL_BUILD = '2026-11-24b';
 let fillTrace = [];
 let traceSection = '';
 const ABSENT = null; // a step whose field isn't on this page: not reported
@@ -1674,14 +1674,14 @@ async function fillDisclosures() {
         await step('18 or older', () => selectWorkdayDropdown('18 years of age or older', 'Yes'));
     }
 
-    const ask = async (name, labels, value) => {
+    const ask = async (name, labels, value, matcher = null) => {
         if (!value) {
             await step(name, () => labels.some(l => findDropdownForQuestion(l)) ? 'skipped' : ABSENT);
             return;
         }
         await step(name, async () => {
             for (const label of labels) {
-                const r = await selectWorkdayDropdown(label, value);
+                const r = await selectWorkdayDropdown(label, value, matcher);
                 if (r !== ABSENT) return r;
             }
             return ABSENT;
@@ -1690,8 +1690,52 @@ async function fillDisclosures() {
 
     await ask('Gender', ['Gender', 'Sex'], demo.gender || (decline ? DECLINE : ''));
     await ask('Hispanic or Latino', ['Hispanic or Latino', 'Hispanic/Latino', 'Hispanic'], demo.hispanicLatino || (decline ? DECLINE : ''));
-    await ask('Race / ethnicity', ['Race', 'Ethnicity'], demo.race || (decline ? DECLINE : ''));
-    await ask('Veteran status', ['Veteran Status', 'Veteran'], decline ? DECLINE : '');
+
+    // Race and ethnicity. Many forms ask it as ONE question whose options
+    // include "Hispanic or Latino" (the EEO-1 combined format, where Hispanic
+    // or Latino is chosen instead of a race). The profile keeps them apart, so
+    // a Yes to Hispanic or Latino picks that option when the list has it, and
+    // the saved race is used otherwise.
+    const hispanic = demo.hispanicLatino === 'Yes';
+    const hispanicOption = (opts) => opts.find(o => /\b(hispanic|latino|latina|latinx)\b/i.test(o.innerText) && !/\bnot\b/i.test(o.innerText)) || null;
+    await step('Race / ethnicity', async () => {
+        const value = demo.race || (decline ? DECLINE : '');
+        if (!value && !hispanic) return ['Race', 'Ethnicity'].some(l => findDropdownForQuestion(l)) ? 'skipped' : ABSENT;
+        for (const label of ['Race', 'Ethnicity']) {
+            const trigger = findDropdownForQuestion(label);
+            if (!trigger) continue;
+            if (hispanic) {
+                // Matcher only: "Hispanic or Latino" as the wanted text would
+                // also accept a plain-word match inside "Not Hispanic or Latino".
+                const r = await pickFromDropdown(trigger, '\u0000', `"${label}"`, hispanicOption);
+                if (r) return true;
+                if (!value) { console.warn('Workday Autoplay: this race question has no Hispanic or Latino option, and no race is saved'); return 'skipped'; }
+            }
+            return pickFromDropdown(trigger, value, `"${label}"`);
+        }
+        return ABSENT;
+    });
+
+    // Veteran status: the saved answer, mapped onto the tenant's wording.
+    const veteranOption = (opts, want) => {
+        const t = (o) => o.innerText.replace(/\s+/g, ' ').trim();
+        const declineish = (o) => /wish|decline|answer|self-identify/i.test(t(o));
+        if (/^i am not a veteran/i.test(want)) {
+            // A non-veteran is also "not a protected veteran"; never "a veteran, but not protected".
+            return opts.find(o => /\bnot a veteran\b/i.test(t(o)) && !declineish(o))
+                || opts.find(o => /^i am not a protected veteran/i.test(t(o))) || null;
+        }
+        if (/veteran, but not a protected/i.test(want)) {
+            return opts.find(o => /\bveteran\b.*\bnot a protected veteran/i.test(t(o)))
+                || opts.find(o => /^i am not a protected veteran/i.test(t(o))) || null;
+        }
+        if (/identify as one or more|protected veteran/i.test(want)) {
+            return opts.find(o => /identify as (one or more|a protected)|classifications of protected veteran/i.test(t(o)))
+                || opts.find(o => /\bprotected veteran/i.test(t(o)) && !/\bnot\b/i.test(t(o))) || null;
+        }
+        return null;
+    };
+    await ask('Veteran status', ['Veteran Status', 'Veteran'], demo.veteranStatus || (decline ? DECLINE : ''), veteranOption);
 
     if (decline) {
         // Disability is often a dropdown, sometimes radios/checkboxes (CC-305).

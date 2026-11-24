@@ -179,6 +179,43 @@ const PROFILE = {
   check('a menu left open by the previous question is never clicked: both answers land on their own question',
     [w.document.getElementById('auth').textContent, w.document.getElementById('spon').textContent], ['Yes', 'No']);
 
+  // ------------------------------------------------ race / Hispanic or Latino / veteran status (2026-11-24)
+  const wireOpts = (w, id, opts) => {
+    const b0 = w.document.getElementById(id); b0.replaceWith(b0.cloneNode(true));
+    const btn = w.document.getElementById(id);
+    btn.addEventListener('click', () => {
+      w.document.querySelectorAll('[data-popper-placement]').forEach(n => n.remove());
+      const pop = w.document.createElement('div'); pop.setAttribute('data-popper-placement', 'bottom');
+      pop.innerHTML = `<ul role="listbox">${['Select One', ...opts].map(t => `<li role="option"><div>${t}</div></li>`).join('')}</ul>`;
+      pop.querySelectorAll('li').forEach(li => li.addEventListener('click', () => { btn.textContent = li.textContent; pop.remove(); }));
+      w.document.body.appendChild(pop);
+    });
+  };
+  const RACE_COMBINED = ['American Indian or Alaska Native', 'Asian', 'Black or African American', 'Hispanic or Latino', 'White', 'Two or More Races', 'I do not wish to answer'];
+  const raceRun = async (demo, opts = RACE_COMBINED) => {
+    const w = boot(legendDropdown('race', 'Please select your race:'));
+    wireOpts(w, 'race', opts);
+    await w.eval(`__set({ jobPreferences: {}, demographics: ${JSON.stringify(demo)} }); fillDisclosures()`);
+    return w.document.getElementById('race').textContent;
+  };
+  check('combined race/ethnicity question + Hispanic or Latino: Yes picks "Hispanic or Latino"', await raceRun({ hispanicLatino: 'Yes', race: 'White' }), 'Hispanic or Latino');
+  check('Hispanic or Latino: No uses the saved race', await raceRun({ hispanicLatino: 'No', race: 'White' }), 'White');
+  check('"Not Hispanic or Latino" is never taken for Hispanic', await raceRun({ hispanicLatino: 'Yes', race: 'Asian' }, ['Not Hispanic or Latino', 'Asian', 'White']), 'Asian');
+  check('race-only list, Hispanic Yes and no race saved: left alone', await raceRun({ hispanicLatino: 'Yes' }, ['Asian', 'White']), 'Select One');
+
+  const VET = ['I am not a veteran', 'I identify as one or more of the classifications of protected veterans', 'I am a veteran but not a protected veteran', 'I do not wish to self-identify'];
+  const vetRun = async (veteranStatus) => {
+    const w = boot(legendDropdown('vet', 'Please confirm your veteran status:'));
+    wireOpts(w, 'vet', VET);
+    await w.eval(`__set({ jobPreferences: {}, demographics: ${JSON.stringify({ veteranStatus })} }); fillDisclosures()`);
+    return w.document.getElementById('vet').textContent;
+  };
+  check('veteran: "not a veteran" never becomes "a veteran but not protected"', await vetRun('I am not a veteran'), 'I am not a veteran');
+  check('veteran: "veteran, but not protected" maps to the tenant wording', await vetRun('I am a veteran, but not a protected veteran'), 'I am a veteran but not a protected veteran');
+  check('veteran: protected veteran maps to "identify as one or more..."', await vetRun('I identify as one or more of the classifications of protected veteran'), VET[1]);
+  check('veteran: decline maps to the tenant decline option', await vetRun('I do not wish to answer'), 'I do not wish to self-identify');
+  check('veteran: nothing saved leaves it alone', await vetRun(''), 'Select One');
+
   // ------------------------------------------------ My Experience still fills (gate does not over-block)
   w = boot(`<div role="group"><h3>Work Experience</h3>
     <div data-automation-id="formField-c"><label for="c">Company</label><input id="c"></div></div>`);
