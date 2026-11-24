@@ -101,6 +101,8 @@ export const createApplicationBody = z
     appliedAt: z.iso.datetime().optional(),
     profileId: profileId.optional(),
     notes: z.string().max(2000).optional(),
+    /** User-chosen label ("Fintech"), for the Insights flow chart. */
+    industry: z.string().trim().max(60).optional(),
   })
   .strict();
 
@@ -110,6 +112,8 @@ export const updateApplicationBody = z
     role: z.string().trim().min(1).max(200),
     status: z.enum(APPLICATION_STATUSES),
     notes: z.string().max(2000),
+    /** Empty string clears it. */
+    industry: z.string().trim().max(60),
   })
   .partial()
   .strict()

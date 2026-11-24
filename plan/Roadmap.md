@@ -18,7 +18,7 @@ Colours on the [[Architecture.canvas|board]]: green = phase 1, purple = 2, cyan 
 Backend code lives in `cloud/` (see `cloud/README.md`). Deployed to us-east-2 on 2026-11-22 and smoke-tested.
 - [x] CDK app skeleton (TypeScript) - [[CDK and CI-CD]] (code; 24 tests passing)
 - [x] [[Cognito]] user pool + extension redirect URI (deployed; dev email sign-in)
-- [ ] Google sign-in (needs the Google OAuth client - see `cloud/README.md`)
+- [x] Google sign-in, alongside email; same-email accounts are linked (2026-11-22)
 - [x] [[API Gateway]] HTTP API + JWT authorizer + throttling (deployed)
 - [x] [[DynamoDB]] single table, PITR on (deployed)
 - [x] [[profile-svc]] - [[F01 Accounts and Profile Sync]] (deployed)
@@ -30,16 +30,23 @@ Backend code lives in `cloud/` (see `cloud/README.md`). Deployed to us-east-2 on
 - [x] Extension: log application after autofill, with Undo - [[F05 Application Tracker]] (`cloud-tracker.js`)
 - [x] Side panel overhaul: Home / Profile / Applications / Settings tabs
 - [x] Resume -> profile (pulled forward from phase 2): `POST /resumes/parse`, Claude Haiku 4.5 reads the PDF/DOCX directly, file never stored - [[F03 Resume Parsing]]
-- [ ] Bedrock: submit the Anthropic use-case form, then live-test resume parsing
-- [ ] [[Web Dashboard]] on [[CloudFront]] + S3
+- [x] Bedrock: Anthropic use-case form submitted; resume parsing live-tested OK (2026-11-22)
+- [x] [[Web Dashboard]] on [[CloudFront]] + S3 (`dashboard/`, stacks EasyApply-Web + -WebContent)
 - [x] [[Flow - Delete account]] endpoint (deployed)
-- [ ] Alarms + dashboards - [[Observability]] (alarms in code, no notification target yet)
+- [x] Alarms - [[Observability]] (SNS topic; email via `-c alarmEmail=`; resume-surge + throttle alarms added)
 
 ## Phase 2 - AI
-- [ ] [[S3 Resumes]] + [[resume-svc]] - [[F02 Resume Vault]]
+- [x] [[S3 Resumes]] + [[resume-svc]] - [[F02 Resume Vault]] (`/resumes`, presigned POST, max 10, `cloud-vault.js`)
 - [~] ~~[[SQS]] + [[parse-worker]]~~ replaced by synchronous `POST /resumes/parse` (phase 1) - [[F03 Resume Parsing]]
-- [ ] [[ai-svc]] with per-user daily quota - [[F04 AI Answers and Match Score]] (no streaming at first - [[Key Decisions]] #8)
-- [ ] [[answers-svc]] + library UI in the extension - [[F11 Answer Library]]
+- [x] [[ai-svc]] with per-user daily quota - [[F04 AI Answers and Match Score]] (`/ai/*`; on-page Draft button `ai-assist.js`; match score on Home)
+- [x] [[answers-svc]] + library UI in the extension - [[F11 Answer Library]] (`/answers`, `cloud-library.js`, Saved answers card)
+- [x] Service-wide daily AI caps on top of the per-user ones (2026-11-24): 300 AI calls + 2000 categorisations/day across all users (`SERVICE#QUOTA`) - see [[Cost]]
+
+## Release 2.0 (2026-11-24)
+- [x] Manifest 2.0, privacy policy trimmed to what 2.0 does, live at the GitHub Pages URL (PR #3 merged)
+- [x] Store listing + privacy-practices answers (`design/store/`); `package.ps1` builds the zip from what the manifest loads
+- [x] Submitted to the Chrome Web Store (ID `ecakdhppcmlicpbkfihabojaklbdklff`, pending review); ID added to the [[Cognito]] extension client
+- [ ] After approval: test store-version sign-in (email + Google); ship 2.0.1 with the autofill fixes made since (build 2026-11-24c)
 
 ## Phase 3 - Adapters
 - [ ] Adapter pack JSON schema + interpreter in `content.js` - [[F06 Remote Adapter Packs]]
@@ -49,5 +56,9 @@ Backend code lives in `cloud/` (see `cloud/README.md`). Deployed to us-east-2 on
 
 ## Phase 4 - Engagement
 - [ ] [[EventBridge Scheduler]] + [[reminder-worker]] + [[SES]] - [[F08 Follow-up Reminders]]
-- [ ] [[F10 Insights]] on the dashboard
+- [x] [[F10 Insights]] on the dashboard (2026-11-24): `GET /insights`, stat tiles, weekly chart, status breakdown
+- [x] Application flow (Sankey) by industry / company / role, with per-application industry and status history (2026-11-24) - [[F10 Insights]]
 - [ ] Follow-up email drafts (via [[ai-svc]])
+
+## Later - Polish
+- [ ] Theme customization: user-picked accent colour in Settings (keep warm-dark as the default)

@@ -101,7 +101,7 @@ describe('computeInsights', () => {
 });
 
 describe('GET /insights', () => {
-  it('follows pagination, scoped to the caller, projecting only status and appliedAt', async () => {
+  it('follows pagination, scoped to the caller, projecting only the fields Insights uses', async () => {
     ddb
       .on(QueryCommand)
       .resolvesOnce({ Items: [{ status: 'applied' }, { status: 'offer' }], LastEvaluatedKey: { pk: 'USER#user-1', sk: 'APP#2' } })
@@ -117,8 +117,10 @@ describe('GET /insights', () => {
     expect(calls).toHaveLength(2);
     const first = calls[0].args[0].input;
     expect(first.ExpressionAttributeValues).toEqual({ ':pk': 'USER#user-1', ':sk': 'APP#' });
-    expect(first.ProjectionExpression).toBe('#st, #ap');
-    expect(first.ExpressionAttributeNames).toEqual({ '#st': 'status', '#ap': 'appliedAt' });
+    expect(first.ProjectionExpression).toBe('#st, #ap, #co, #ro, #in, #hi');
+    expect(first.ExpressionAttributeNames).toEqual({
+      '#st': 'status', '#ap': 'appliedAt', '#co': 'company', '#ro': 'role', '#in': 'industry', '#hi': 'statusHistory',
+    });
     expect(first.ExclusiveStartKey).toBeUndefined();
     expect(calls[1].args[0].input.ExclusiveStartKey).toEqual({ pk: 'USER#user-1', sk: 'APP#2' });
     expect(calls[1].args[0].input.ExpressionAttributeValues![':pk']).toBe('USER#user-1');

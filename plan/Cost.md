@@ -21,7 +21,12 @@ Approximate list prices for us-east-2; check the AWS Pricing Calculator before r
 | [[SES]] | ~$0 | ~$0.50 |
 | Fixed: [[KMS]] key $1, DNS zone $0.50, 1 secret $0.40 | ~$2 | ~$2 |
 | **Total** | **~$2-3/mo** | **~$6-10/mo** |
-| [[Bedrock]] tokens | usage-based | usage-based - **cap per user per day** |
+| [[Bedrock]] tokens | usage-based | usage-based - **capped per user and service-wide per day** |
+
+## Bedrock caps (live)
+- Per user: 20 AI calls/day (resume reads included) + 100 question categorisations/day.
+- Service-wide (all users): 300 AI calls/day + 2000 categorisations/day, so open sign-up can't multiply the bill. Worst case ~$5-7/day; lower `GLOBAL_AI_DAILY_LIMIT` in `cloud/lib/api-stack.ts` for a tighter ceiling.
+- Alarms: >200 resume reads/hour, >500 AI calls/hour; Budget `Monthly-Total` $10 + the AWS Settings spend limit.
 
 ## Avoid until truly needed
 - **NAT Gateway** (~$32/mo) - don't put Lambdas in a VPC.

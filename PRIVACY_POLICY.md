@@ -25,12 +25,12 @@ You sign in through Amazon Cognito, our sign-in provider, either with your email
 ### What we store when you are signed in
 - **Profiles** you choose to sync (name, contact details, address, work history, education, skills, languages, job preferences).
 - **Resume versions** you choose to keep (up to 10): the files, the names you give them, and their file names. Stored only if you add them, encrypted, and deleted when you delete them or your account.
-- **Application records** created when you autofill or add an application: company, job title, job posting URL, date, and the status you set.
+- **Application records** created when you autofill or add an application: company, job title, job posting URL, date, the status you set and the statuses it has had before (so the dashboard can show where an application stopped), and an industry label if you add one.
 - **Saved answers** you choose to keep in your answer library: the application question and the final text you approved, so you can reuse it on later applications.
 - **Usage counters** for AI features, used only to enforce daily limits.
 
 ### Insights
-The dashboard's **Insights** view shows a summary of your own application records: how many you have, how many are at each status, how many you added each week over the last 12 weeks, and your response rate. It is calculated when you open it, from the application records you already sync. Nothing new is collected or stored, nothing is sent to Amazon Bedrock, and it is visible only to you. Insights needs a cloud account (local-only mode has no dashboard) and is gone when you delete your account.
+The dashboard's **Insights** view shows a summary of your own application records: how many you have, how many are at each status, how many you added each week over the last 12 weeks, your response rate, and a flow chart of how your applications moved through each stage, grouped by industry, company or role. It is calculated when you open it, from the application records you already sync. Nothing new is collected or stored, nothing is sent to Amazon Bedrock, and it is visible only to you. Insights needs a cloud account (local-only mode has no dashboard) and is gone when you delete your account.
 
 ### What we never store in the cloud
 - **Voluntary self-identification answers** (gender, race/ethnicity, veteran status, disability status) are **never synced or uploaded**. They stay in your browser on each device and are used only to fill the matching voluntary questions at your request.

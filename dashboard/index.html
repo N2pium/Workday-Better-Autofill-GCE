@@ -39,9 +39,36 @@
         <select id="filter" aria-label="Filter by status"><option value="">All statuses</option></select>
       </div>
 
+      <section id="flow" class="card" aria-labelledby="flowTitle" hidden>
+        <div class="flow-head">
+          <h3 id="flowTitle">Application flow</h3>
+          <div id="flowDims" class="seg" role="group" aria-label="Group the flow by">
+            <button type="button" data-dim="industry" aria-pressed="true">Industry</button>
+            <button type="button" data-dim="company" aria-pressed="false">Company</button>
+            <button type="button" data-dim="role" aria-pressed="false">Role</button>
+          </div>
+        </div>
+        <div id="flowBody" aria-live="polite"></div>
+      </section>
+
+      <datalist id="industryList">
+        <option value="Cloud & SaaS"></option>
+        <option value="Fintech"></option>
+        <option value="AI & data"></option>
+        <option value="Consumer tech"></option>
+        <option value="Enterprise software"></option>
+        <option value="Hardware & semiconductors"></option>
+        <option value="Telecom & networking"></option>
+        <option value="Financial services"></option>
+        <option value="Healthcare"></option>
+        <option value="Manufacturing & industrial"></option>
+        <option value="Retail & e-commerce"></option>
+        <option value="Government & defense"></option>
+      </datalist>
+
       <div class="card table-wrap">
         <table>
-          <thead><tr><th>Company</th><th>Role</th><th>Applied</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+          <thead><tr><th>Company</th><th>Role</th><th>Industry</th><th>Applied</th><th>Status</th><th>Notes</th><th></th></tr></thead>
           <tbody id="rows"></tbody>
         </table>
         <p id="empty" class="muted center" hidden>No applications yet. Autofill a job form while signed in and it shows up here.</p>
