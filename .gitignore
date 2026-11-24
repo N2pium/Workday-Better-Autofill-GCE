@@ -18,3 +18,6 @@ desktop.ini
 
 # Raw Workday page snapshots (structure only, but keep them private anyway)
 tools/captures/private/
+
+# Dev tooling (extension tests)
+node_modules/

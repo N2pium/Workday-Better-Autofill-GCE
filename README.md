@@ -193,6 +193,15 @@ The extension is built with:
 
 See [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) for technical deep-dive.
 
+Run the extension tests (jsdom; dev only, nothing ships):
+
+```
+npm install
+npm test
+```
+
+Backend tests: `cd cloud && npm install && npm test`.
+
 ### Building the Web Store package
 
 ```powershell
