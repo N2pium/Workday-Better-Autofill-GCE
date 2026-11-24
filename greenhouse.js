@@ -65,10 +65,24 @@
         ghIsFilling = false;
 
         try {
-            chrome.runtime.sendMessage({ action: 'fill_complete' }, () => {
+            chrome.runtime.sendMessage({ action: 'fill_complete', job: ghJobInfo() }, () => {
                 void chrome.runtime.lastError;
             });
         } catch (e) { /* panel closed */ }
+    }
+
+    // What the page says about the job, for the application tracker (cloud-tracker.js).
+    function ghJobInfo() {
+        const text = (el) => (el && el.textContent ? el.textContent.replace(/\s+/g, ' ').trim() : '');
+        const heading = document.querySelector('.app-title, .job__title h1, .job-title, h1');
+        const company = document.querySelector('.company-name, .job__company, [class*="company-name"]');
+        return {
+            site: 'greenhouse',
+            url: location.href,
+            title: text(heading).slice(0, 200),
+            company: text(company).replace(/^at\s+/i, '').slice(0, 200),
+            pageTitle: (document.title || '').slice(0, 300)
+        };
     }
 
     /**
@@ -84,10 +98,12 @@
         ghFillTextField(['email'], ['email'], info.email);
         ghFillTextField(['phone'], ['phone'], info.phone);
 
-        if (info.linkedinUrl) {
-            ghFillTextField([], ['linkedin'], info.linkedinUrl);
-            ghFillTextField([], ['website', 'portfolio'], info.linkedinUrl);
-        }
+        // LinkedIn and the personal website are separate profile fields. The
+        // website box used to be given the LinkedIn URL unconditionally; the
+        // fallback below keeps that behaviour only when no website is stored.
+        if (info.linkedinUrl) ghFillTextField([], ['linkedin'], info.linkedinUrl);
+        const siteUrl = info.websiteUrl || info.linkedinUrl;
+        if (siteUrl) ghFillTextField([], ['website', 'portfolio'], siteUrl);
     }
 
     function ghFillLocation() {
@@ -335,10 +351,25 @@
 
         const has = (...keys) => keys.some(k => label.includes(k));
 
-        if (has('sponsor', 'visa', 'immigration'))
+        // Authorization is tested FIRST, and a question that asks about both is
+        // an authorization question. Workday and Greenhouse alike ask them in
+        // one sentence -- "Are you legally authorized to work in the US without
+        // requiring sponsorship?" -- and with the sponsorship test first that
+        // block answered No, which is the "legally authorized ... mysteriously
+        // No" the user reported on 2026-08-24. content.js carries the same fix.
+        const asksAuth = has('authoriz', 'eligible to work', 'right to work', 'lawfully');
+        const asksSponsor = has('sponsor', 'visa', 'immigration');
+
+        if (asksAuth) {
+            // Compound question: Yes only when both halves hold. Answering Yes
+            // while sponsorship is still needed is a false statement.
+            const yes = asksSponsor
+                ? (prefs.authorizedToWork !== false && !prefs.requiresSponsorship)
+                : prefs.authorizedToWork !== false;
+            return { values: [yes ? 'Yes' : 'No'] };
+        }
+        if (asksSponsor)
             return { values: [prefs.requiresSponsorship ? 'Yes' : 'No'] };
-        if (has('authoriz', 'eligible to work', 'right to work', 'lawfully'))
-            return { values: [prefs.authorizedToWork !== false ? 'Yes' : 'No'] };
         if (has('18 years', 'age or older'))
             return { values: ['Yes'] };
         if (has('former employee', 'previously employed', 'worked here', 'previously worked'))
