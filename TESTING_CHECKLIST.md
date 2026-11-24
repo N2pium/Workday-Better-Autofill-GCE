@@ -225,6 +225,158 @@ Workday Autoplay: Scan completed.
 
 ---
 
+## 🚦 v1.3 Release Tests — run these before uploading to the Store
+
+v1.3 changes ~890 lines of `content.js`. Tests 11–13 cover the fixes; **Test 14
+is the one that matters most**, because it covers paths that already worked and
+were touched anyway. A regression there is worse than a fix that did not land.
+
+---
+
+## 📋 Test 11: Dropdowns pick from the right list (F1, F6, F7)
+
+### Setup:
+- Fill in **Country** and **State** in the popup, then Save Profile
+- Manually set Country on the form to something wrong (e.g. Uzbekistan)
+- Click "AUTOFILL ACTIVE PAGE"
+
+### Expected Results:
+- [ ] `Found dropdown trigger for country (currently "Uzbekistan")` — **not**
+      `No dropdown trigger found`
+- [ ] Country changes to your stored value
+- [ ] `Found 61 options for State` (50 states + DC + territories + Armed Forces).
+      **250 means it is reading the Country list** — that is the F6 regression
+- [ ] State is selected, not merely highlighted
+- [ ] "How Did You Hear About Us?" selects your source
+- [ ] No `Selected ... but it did not commit` warnings
+
+---
+
+## 📋 Test 12: Degree matches across spellings (F4)
+
+### Setup:
+Run once per stored value: `BS`, `Bachelor of Science`, `Bachelors`.
+
+### Expected Results:
+- [ ] All three select **Bachelors** on Duke's list
+      (Select One / High School–GED / Associates / Bachelors / Masters / Doctorate)
+- [ ] The disabled "Select One" placeholder is never chosen
+- [ ] With a list offering **both** Bachelor of Arts and Bachelor of Science:
+      `BS` picks Science, `BA` picks Arts, and plain `Bachelors` leaves it
+      **blank** rather than guessing — a blank here is correct behavior
+
+---
+
+## 📋 Test 13: School and Field of Study (F2, F3)
+
+### Setup:
+- Clear School and Field of Study on the form, then autofill
+
+### Expected Results:
+- [ ] `Handling Searchable Picker for school` — **not** `Could not find searchBox`
+- [ ] School and Field of Study both get filled
+- [ ] **Exactly one** pill per field. Two pills means the commit check regressed
+- [ ] Run autofill a **second time** on the same page: it must log
+      `already has a selection (...), skipping` and **not** add a duplicate
+- [ ] With a deliberately misspelled school, it picks the closest real option
+      and logs the score, rather than the first one alphabetically
+
+---
+
+## 📋 Test 14: Nothing that already worked has broken
+
+These were confirmed working before v1.3 and were all touched indirectly.
+
+### Expected Results:
+- [ ] Address Line 1, City, Postal Code still fill
+- [ ] **First name and last name land in the correct fields** — not the same
+      value in both
+- [ ] Month/year date dropdowns still fill (they changed how they commit)
+- [ ] All three disclosure auto-declines still work (radio container scope
+      was tightened)
+- [ ] "Previously worked for..." still answers correctly
+- [ ] Language row still skips when one already exists
+- [ ] Resume still skips when one is already uploaded
+- [ ] Greenhouse autofill still works — `greenhouse.js` was untouched, so this
+      is a smoke test, not a deep one
+
+---
+
+## 📋 Test 15: Popup reads honestly (v1.3 QoL)
+
+### Expected Results:
+- [ ] Every empty field shows its hint in *italic grey* — clearly a hint, not
+      an answer you have already given
+- [ ] Country shows `e.g. United States of America` and it is obvious the field
+      is empty
+- [ ] Date fields show `MM` / `YYYY`, end dates show `MM or Present`
+- [ ] Saved values render as normal upright text, plainly different from hints
+- [ ] The "I am 18 years of age or older" card sits at the top of Job
+      Preferences, and its left accent turns **green** when ticked
+- [ ] That tick survives Save Profile and reopening the panel
+
+---
+
+## 📋 Test 16: Application Questions page (F8 — new, unverified)
+
+Only reachable on tenants that use a questionnaire page ("Application Questions
+1 of 2"). Duke Energy does **not** have one — BCBSLA and the IT Computer Science
+Intern posting do.
+
+### Setup:
+- In the popup set "Legally Authorized to Work in Country" and
+  "I Require Sponsorship" to known values, then Save Profile
+- Reach the Application Questions page and autofill
+
+### Expected Results:
+- [ ] "Are you legally authorized / legally eligible to work…?" is answered
+- [ ] "Will you now or in the future require sponsorship…?" is answered
+- [ ] Both match the toggles you set, including when set to **No**
+- [ ] With **"I am 18 years of age or older" ticked**, that question is answered Yes
+- [ ] With it **unticked**, the question is left on Select One and the console
+      says the age question was left for the user. It must **never** be answered
+      "No" just because the box is off
+- [ ] **Check this on a disclosures page too, not only a questionnaire page.**
+      Two separate code paths answer this question — `handleJobPreferences` via
+      `ageKeywords`, and `fillDisclosures` via `selectWorkdayDropdown`. The
+      second one ignored the checkbox entirely until `24f6700`, so an unticked
+      box still produced a Yes. Both are now gated; both need seeing
+- [ ] Unchecking "Legally Authorized to Work" does **not** change the age answer —
+      they are separate fields and must stay separate
+- [ ] Free-text questions with no matching toggle ("Do you have any relatives
+      who work at…", "What is your desired start date?") are left alone
+- [ ] Nothing is answered twice or flipped back
+
+---
+
+## 📋 Test 17: Blank fields are named, not nagged (B4 — new)
+
+Panel only. Nothing here touches a job page, so it can be checked without a
+Workday login.
+
+### Expected Results:
+- [ ] On a **fresh install**, or straight after "Delete all data", there is
+      **no** blank-field note at all — an untouched profile is not a profile
+      with gaps in it
+- [ ] With a partly filled profile, a muted card at the top of the panel reads
+      `Autofill will leave these blank: …` and names fields **using the labels
+      printed beside them** — never an internal name like `linkedinUrl`
+- [ ] The second line says blank is a valid choice. Nothing is red, nothing is
+      an error, and **Save Profile still works with any number of blanks**
+- [ ] Every blank field's box is **dashed**; filled ones stay solid. Focusing a
+      blank field shows the normal solid accent ring, not a dashed one
+- [ ] Typing into a blank field removes it from the list immediately, without
+      saving first
+- [ ] With more than six blanks, the list stops at six and ends `and N more.`
+- [ ] Ticking **"I currently work here"** removes that job's End Month / End
+      Year from the list — a blank end date on a current role is correct
+- [ ] Adding an Education or Work card makes its empty fields appear in the
+      list; removing the card takes them back out
+- [ ] With two or more cards, names are disambiguated — `School (school 2)`
+- [ ] Choosing a resume file removes "Resume" from the list straight away
+
+---
+
 ## ✅ Success Criteria
 
 All features working correctly when:
@@ -239,6 +391,47 @@ All features working correctly when:
 - ✅ Disability → Declined when toggle on
 - ✅ Multi-page forms → Auto-filled without manual intervention
 - ✅ No console errors during entire process
+
+### Unreleased additions (F12–F15)
+
+- ✅ Work experience **From** holds the start date and **To** holds the end date,
+      with "I currently work here" UNCHECKED — this is the case that was broken
+- ✅ With "I currently work here" CHECKED, From is still correct and no end date
+      is written anywhere
+- ✅ A single `MM/YYYY` box holds both month and year, not just the year
+- ✅ Education "First/Last Year Attended" still fill, and never receive a work date
+- ✅ "Are you legally authorized to work in the United States **without**
+      sponsorship?" → **Yes** (with Authorized ticked, Sponsorship unticked)
+- ✅ Same question with **Sponsorship ticked** → **No**
+- ✅ Separate authorization and sponsorship questions → Yes and No respectively
+      (this already worked — confirm no regression)
+- ✅ A Yes/No question offering "Not applicable" → picks **No**, not "Not applicable"
+- ✅ Website / Portfolio URL fills a "Website" field; LinkedIn URL fills a
+      "LinkedIn" field; neither gets the other's value
+- ✅ Workday Websites section → two rows, one per link; one link → one row
+- ✅ Website left blank in the panel → a lone "Website" field still gets LinkedIn
+- ✅ "I currently work here" UNCHECKED in the panel → unchecked on Workday, even
+      if the form arrives with it already ticked (F16 — not yet seen on a real run)
+- ✅ "I currently work here" CHECKED in the panel → checked on Workday
+- ✅ Terms & Conditions step still ticks the real terms box — console names which
+      box it ticked: `Checking Terms & Conditions — "..."`
+- ✅ No other checkbox on any page is ticked. Console logs every tick by name.
+
+Automated pre-check (does not replace the above — jsdom does no layout):
+
+```
+npm i -g jsdom
+NODE_PATH="$(npm root -g)" node tools/tests/run.js
+```
+
+### v1.3 additions
+
+- ✅ Country and State → Selected, and corrected when already set to something wrong
+- ✅ State dropdown → ~61 options, never 250
+- ✅ Degree → Matches whichever spelling you stored
+- ✅ School / Field of Study → Filled, exactly one pill, no duplicate on re-run
+- ✅ First and last name → In their own fields
+- ✅ Popup → Empty fields visibly empty, and named where autofill will skip them
 
 ---
 

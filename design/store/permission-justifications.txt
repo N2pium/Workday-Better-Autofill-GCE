@@ -12,7 +12,7 @@ The extension does nothing else. It does not submit applications, search for or 
 ===== storage =====
 The storage permission is used to save the user's application profile locally, so it does not have to be re-entered for every job application.
 
-Using chrome.storage.local, the extension stores: name, email, phone, LinkedIn URL, postal address, work history, education, skills, primary language, job preferences (work authorization, sponsorship requirement, former employee status, referral source), optional voluntary self-identification answers, and an optional resume file.
+Using chrome.storage.local, the extension stores: name, email, phone, LinkedIn URL, postal address, work history, education, skills, primary language, job preferences (work authorization, sponsorship requirement, former employee status, referral source, and a checkbox confirming the user is 18 or older), optional voluntary self-identification answers, and an optional resume file.
 
 This is the only place the extension keeps data. Nothing is written to a remote server, synced across devices, or shared with anyone. The user can erase all of it at any time with the "Delete All Data" button in the side panel, and uninstalling the extension removes it as well.
 

@@ -1,4 +1,28 @@
-Fill out Workday and Greenhouse job applications in one click, using a profile you enter once and that never leaves your computer.
+NEW IN 2.0
+
+• Optional account. Sign in with email or Google to sync your profile across
+  computers and track every application in a web dashboard. Without an
+  account, everything works exactly as before and stays on your computer.
+• Resume to profile: upload your resume and the profile fills itself in for
+  you to review.
+• Draft an answer: a ✦ Draft button next to open-ended questions ("Why do you
+  want to work here?") writes a first draft from your profile and the job
+  description. Nothing is entered until you accept it.
+• Answer Library: keep answers you've approved and reuse them on later
+  applications.
+• Match score: see how well your profile fits a job before you apply.
+• Resume versions: keep up to 10 resumes and choose which one to attach.
+• More of each form filled: every job in its own Work Experience entry, nested
+  "How did you hear about us?" menus, graduation date, major and GPA questions.
+• A fill report after each step lists what was filled, what failed and what was
+  left for you.
+
+AI features and sync are available only when you sign in, and only when you use
+them. Your self-identification answers never leave your computer.
+
+- - -
+
+Fill out Workday and Greenhouse job applications in one click, using a profile you enter once. It stays on your computer unless you choose to sign in.
 
 Applying to jobs means typing the same information over and over: your name, your address, your last three employers, your degree, your graduation date. Workday: Better Autofill enters all of it for you, so you can spend your time on the parts of an application that actually matter.
 
@@ -61,31 +85,40 @@ and access is revoked immediately.
 
 PRIVACY
 
-This extension has no backend. There is no account, no sign-in, and no server
-belonging to this extension for your data to be sent to.
+Without an account (the default), there is no sign-in and nothing is sent
+anywhere:
 
 • Your profile is stored locally using Chrome's storage API
-• Nothing is uploaded, synced, or backed up by us
-• No analytics, no tracking, no telemetry, no third-party services or SDKs
-• No external fonts, scripts, or stylesheets are loaded at runtime
+• Nothing is uploaded, synced, or backed up
 • Your data leaves the browser only when you click the autofill button, which
   types it into the job application in front of you - exactly as you would have
   typed it yourself
 
-Your self-identification answers (gender, race and ethnicity, veteran status,
-disability status) are entirely optional. Leave them blank and those questions
-are left untouched. They are stored locally like everything else and are used
-only to answer the corresponding voluntary questions when you ask the extension
-to fill a form.
+With an optional account:
 
-The extension can only run on the job board domains listed above. It has no
-access to any other website you visit.
+• The profile, resume versions, application records and saved answers you
+  choose to sync are stored with Amazon Web Services in the United States,
+  encrypted, and visible only to you
+• AI features send only what that feature needs (never your contact details)
+  to Amazon Bedrock in the United States, which does not store it or train on it
+• "Delete cloud account" removes your account and all of its data
 
-Delete everything at any time with the "Delete All Data" button in the side
-panel. Uninstalling the extension also removes all stored data.
+Either way:
+
+• No analytics, no tracking, no advertising, no third-party SDKs
+• Your data is never sold
+• Your self-identification answers (gender, race and ethnicity, veteran status,
+  disability status) are optional, stay on your computer, and are never synced
+  or uploaded. Leave them blank and those questions are left untouched.
+
+The extension can only run on the job board domains listed above and on its
+own service. It has no access to any other website you visit.
+
+Delete local data at any time with the "Delete All Data" button in the side
+panel. Uninstalling the extension also removes all locally stored data.
 
 Full privacy policy:
-https://github.com/N2pium/Workday-Better-Autofill-GCE/blob/master/PRIVACY_POLICY.md
+https://n2pium.github.io/Workday-Better-Autofill-GCE/
 
 
 HOW TO USE
