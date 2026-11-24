@@ -433,6 +433,7 @@
       root.setAttribute('aria-busy', 'false');
       // Keep the last good numbers on a failed refresh; only replace the loading text.
       if (!insightsLoaded) root.replaceChildren(el('p', { className: 'muted', textContent: `Insights could not be loaded: ${e.message}` }));
+      if (!insightsLoaded) $('flowBody').replaceChildren(el('p', { className: 'muted', textContent: `The flow could not be loaded: ${e.message}` }));
     }
   }
 

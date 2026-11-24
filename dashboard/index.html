@@ -23,6 +23,18 @@
     </section>
 
     <section id="app" hidden>
+      <section id="flow" class="card" aria-labelledby="flowTitle">
+        <div class="flow-head">
+          <h3 id="flowTitle">Application flow</h3>
+          <div id="flowDims" class="seg" role="group" aria-label="Group the flow by">
+            <button type="button" data-dim="industry" aria-pressed="true">Industry</button>
+            <button type="button" data-dim="company" aria-pressed="false">Company</button>
+            <button type="button" data-dim="role" aria-pressed="false">Role</button>
+          </div>
+        </div>
+        <div id="flowBody" aria-live="polite"><p class="muted">Loading...</p></div>
+      </section>
+
       <section id="insights" aria-labelledby="insightsTitle">
         <div class="insights-head">
           <h2 id="insightsTitle">Insights</h2>
@@ -38,18 +50,6 @@
         <input id="search" type="search" placeholder="Search company or role" aria-label="Search">
         <select id="filter" aria-label="Filter by status"><option value="">All statuses</option></select>
       </div>
-
-      <section id="flow" class="card" aria-labelledby="flowTitle" hidden>
-        <div class="flow-head">
-          <h3 id="flowTitle">Application flow</h3>
-          <div id="flowDims" class="seg" role="group" aria-label="Group the flow by">
-            <button type="button" data-dim="industry" aria-pressed="true">Industry</button>
-            <button type="button" data-dim="company" aria-pressed="false">Company</button>
-            <button type="button" data-dim="role" aria-pressed="false">Role</button>
-          </div>
-        </div>
-        <div id="flowBody" aria-live="polite"></div>
-      </section>
 
       <datalist id="industryList">
         <option value="Cloud & SaaS"></option>
