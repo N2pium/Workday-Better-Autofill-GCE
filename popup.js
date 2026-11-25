@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'firstName', 'lastName', 'phone', 'email', 'linkedinUrl', 'websiteUrl',
         'street', 'city', 'state', 'zip', 'country',
         'skills', 'languageInput',
-        'gender', 'hispanicLatino', 'race', 'veteranStatus',
+        'gender', 'hispanicLatino', 'race', 'veteranStatus', 'disabilityStatus',
         'sourceReferral'
     ];
 
@@ -285,6 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('hispanicLatino').value = result.demographics.hispanicLatino || '';
             document.getElementById('race').value = result.demographics.race || '';
             document.getElementById('veteranStatus').value = result.demographics.veteranStatus || '';
+            document.getElementById('disabilityStatus').value = result.demographics.disabilityStatus || '';
         }
 
         // Must run last: everything above decides what counts as blank.
@@ -369,7 +370,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 gender: document.getElementById('gender').value,
                 hispanicLatino: document.getElementById('hispanicLatino').value,
                 race: document.getElementById('race').value,
-                veteranStatus: document.getElementById('veteranStatus').value
+                veteranStatus: document.getElementById('veteranStatus').value,
+                disabilityStatus: document.getElementById('disabilityStatus').value
             }
         };
 
@@ -407,7 +409,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusCtx.style.color = 'var(--success)';
                 if (resumeFile) document.getElementById('resumeStatus').textContent = `Stored: ${resumeFile.name}`;
                 refreshBlankHints();
-                syncAfterSave(); // no-op unless the user turned sync on
+                profileDirty = false;
+                syncAfterSave(); // signed in: always syncs; guests: nothing leaves the device
                 renderHomeProfile();
             }
             const shown = statusCtx.textContent;
@@ -532,7 +535,6 @@ document.addEventListener('DOMContentLoaded', () => {
         signedIn: document.getElementById('cloudSignedIn'),
         email: document.getElementById('cloudEmail'),
         connection: document.getElementById('cloudConnection'),
-        syncToggle: document.getElementById('cloudSyncToggle'),
         signInBtn: document.getElementById('cloudSignInBtn'),
         signOutBtn: document.getElementById('cloudSignOutBtn'),
         deleteBtn: document.getElementById('cloudDeleteBtn')
@@ -572,9 +574,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function showSyncStatus() {
         const s = await CloudSync.state();
-        cloudUi.syncToggle.checked = s.enabled;
         cloudUi.connection.textContent = !s.enabled
-            ? 'Connected · sync is off'
+            ? 'Connected · sync waiting for your choice'
             : s.pending
                 ? 'Connected · changes waiting to sync'
                 : `Connected · synced ${when(s.lastSyncedAt)}`;
@@ -587,7 +588,6 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const result = await CloudSync.onOpen(Cloud, syncAsk);
             if (result === 'downloaded') { location.reload(); return; } // show the synced profile
-            if (result === 'off') await Cloud.api('/profiles'); // still confirm the connection works
             await showSyncStatus();
         } catch (e) {
             if (e.notSignedIn) {
@@ -641,7 +641,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             showTab('settings');
             cloudUi.section.classList.remove('collapsed');
-            flash('Signed in. Turn on "Sync my profile" to back it up to your account.', 'var(--success)', 7000);
+            flash('Signed in. Your profile now syncs across your devices.', 'var(--success)', 7000);
         }
     }
 
@@ -666,32 +666,11 @@ document.addEventListener('DOMContentLoaded', () => {
         else flash(result.message, 'var(--danger)', 6000);
     });
 
-    cloudUi.syncToggle.addEventListener('change', async () => {
-        const toggle = cloudUi.syncToggle;
-        toggle.disabled = true;
-        try {
-            if (toggle.checked) {
-                const result = await CloudSync.enable(Cloud, syncAsk);
-                if (result === 'downloaded') { location.reload(); return; }
-                if (result === 'cancelled') flash('Sync stays off.', 'var(--text-muted)');
-                else flash('Sync on. Your profile is backed up to your account.', 'var(--success)');
-            } else {
-                await CloudSync.disable();
-                flash('Sync off on this device. Your synced copy stays in your account.', 'var(--text-muted)', 5000);
-            }
-        } catch (e) {
-            flash(`Sync failed: ${e.message}`, 'var(--danger)', 6000);
-        } finally {
-            toggle.disabled = false;
-            await showSyncStatus();
-        }
-    });
-
     // Called by the Save handler after the profile is stored on this device.
     async function syncAfterSave() {
+        if (!signedInNow) return;
         try {
             const result = await CloudSync.afterLocalSave(Cloud, syncAsk);
-            if (result === 'off') return;
             if (result === 'downloaded') { location.reload(); return; }
             if (result === 'uploaded') flash('Profile saved and synced ✓', 'var(--success)');
             else if (result === 'pending') flash('Saved on this device. It will sync next time you open the panel online.', 'var(--primary)', 6000);
@@ -702,6 +681,28 @@ document.addEventListener('DOMContentLoaded', () => {
             flash(e.notSignedIn ? e.message : `Saved on this device, but sync failed: ${e.message}`, 'var(--danger)', 7000);
         }
     }
+
+    // Another device's changes, pulled by background.js while this panel is open:
+    // show them, unless that would throw away edits not saved yet.
+    let profileDirty = false;
+    form.addEventListener('input', () => { profileDirty = true; });
+    form.addEventListener('change', () => { profileDirty = true; });
+    chrome.storage.onChanged.addListener((changes, area) => {
+        const c = area === 'local' && changes.cloudSync;
+        if (!c || !c.newValue || !c.newValue.downloadedAt) return;
+        if (c.newValue.downloadedAt === (c.oldValue && c.oldValue.downloadedAt)) return;
+        if (!profileDirty) { location.reload(); return; }
+        flash('Your profile changed on another device. Save to keep your edits here, or reopen the panel to see the synced copy.', 'var(--primary)', 10000);
+    });
+
+    // Coming back to the panel: check for changes made elsewhere (at most every 30 s).
+    let lastFocusCheck = Date.now();
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible' || !signedInNow || profileDirty) return;
+        if (Date.now() - lastFocusCheck < 30000) return;
+        lastFocusCheck = Date.now();
+        refreshCloud();
+    });
 
     cloudUi.signOutBtn.addEventListener('click', async () => {
         cloudUi.signOutBtn.disabled = true;
@@ -1281,8 +1282,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!signedInNow) { chip.hidden = true; return; }
         const s = await CloudSync.state();
         chip.hidden = false;
-        chip.className = `chip ${s.enabled ? (s.pending ? 'warn' : 'ok') : ''}`;
-        chip.textContent = s.enabled ? (s.pending ? '● Sync pending' : '● Synced') : 'Signed in';
+        chip.className = `chip ${s.enabled && !s.pending ? 'ok' : 'warn'}`;
+        chip.textContent = s.enabled && !s.pending ? '● Synced' : '● Sync pending';
     }
 
     // Called by renderCloud() whenever the account state may have changed.
@@ -1340,10 +1341,56 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // ---------------------------------------------------------------- anonymous fill-failure reports
+    // Opt-in (default OFF), for guests and signed-in users alike, and never signed
+    // in: cloud-telemetry.js sends no token. What is sent: see #telemetryHelp.
+    const Telemetry = self.EasyApplyTelemetry;
+    const telemetryToggle = document.getElementById('telemetryToggle');
+    const telemetrySent = new Set(); // reports already handled, so each goes out at most once
+
+    if (Telemetry && telemetryToggle) {
+        chrome.storage.local.get('telemetryOptIn').then(({ telemetryOptIn }) => {
+            telemetryToggle.checked = telemetryOptIn === true;
+        });
+        telemetryToggle.addEventListener('change', async () => {
+            if (!telemetryToggle.checked) {
+                await chrome.storage.local.set({ telemetryOptIn: false });
+                flash('Fill-failure reports turned off.', 'var(--text-muted)', 3000);
+                return;
+            }
+            let granted = false;
+            // First thing in the click, so Chrome treats it as a user gesture.
+            try { granted = await Telemetry.requestPermission(); } catch (e) { granted = false; }
+            if (!granted) {
+                telemetryToggle.checked = false;
+                await chrome.storage.local.set({ telemetryOptIn: false });
+                flash('Chrome permission declined. Reports stay off.', 'var(--primary)');
+                return;
+            }
+            await chrome.storage.local.set({ telemetryOptIn: true });
+            flash('Thanks. Anonymous fill-failure reports are on.', 'var(--success)');
+        });
+    }
+
+    async function sendTelemetry(report, pageUrl) {
+        if (!Telemetry || !report) return;
+        const key = `${report.at}|${report.build}|${report.page}`;
+        if (telemetrySent.has(key)) return;
+        telemetrySent.add(key);
+        const { telemetryOptIn } = await chrome.storage.local.get('telemetryOptIn');
+        if (telemetryOptIn !== true) return;
+        const payload = Telemetry.buildPayload(report, { tenant: pageUrl });
+        if (payload) Telemetry.send(payload); // fire and forget
+    }
+
     // Live status from content script (side panel stays open, so we can show this)
-    chrome.runtime.onMessage.addListener((msg) => {
+    chrome.runtime.onMessage.addListener((msg, sender) => {
         if (msg.action === 'fill_complete') {
             if (msg.report) renderFillReport(msg.report);
+            if (msg.report) {
+                const pageUrl = (msg.job && msg.job.url) || (sender && sender.tab && sender.tab.url) || (sender && sender.url) || '';
+                sendTelemetry(msg.report, pageUrl).catch(() => { /* never disturbs the panel */ });
+            }
             // Don't cover a "Tracked … Undo" message from an earlier page of the same form.
             if (!statusCtx.querySelector('button')) flash('Autofill complete ✓', 'var(--success)', 5000);
             if (msg.job) trackApplication(msg.job);

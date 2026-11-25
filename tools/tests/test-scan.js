@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
+const { adapterPrelude } = require('./harness');
 
 const NEW = path.resolve(__dirname, '..', '..', 'content.js');
 
@@ -57,7 +58,7 @@ w.Element.prototype.scrollIntoView = function () {};
 w.Element.prototype.getBoundingClientRect = () => ({ width: 100, height: 20, top: 10, bottom: 30, left: 0, right: 100 });
 w.MutationObserver = w.MutationObserver || class { observe() {} disconnect() {} };
 w.console.log = () => {}; w.console.warn = () => {}; w.console.error = () => {};
-w.eval(fs.readFileSync(NEW, 'utf8') + String.raw`
+w.eval(adapterPrelude() + fs.readFileSync(NEW, 'utf8') + String.raw`
 ;window.__setProfile = (p) => { userProfile = p; };`);
 w.__setProfile(PROFILE);
 

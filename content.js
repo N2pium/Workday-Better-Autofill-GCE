@@ -49,10 +49,167 @@ let answeredQuestions = new WeakSet();
  * never the values written. Sent to the side panel with fill_complete.
  */
 // Bump with every change to fill logic: the fill report carries it.
-const FILL_BUILD = '2026-11-24c';
+const FILL_BUILD = '2026-11-24f';
 let fillTrace = [];
 let traceSection = '';
 const ABSENT = null; // a step whose field isn't on this page: not reported
+
+/*
+ * ADAPTER PACK (plan/Phase 3 Contracts.md §1). The Workday tunables most likely
+ * to break when Workday changes its markup (automation ids, heading regexes,
+ * label aliases) are DATA in adapters/workday-pack.js, loaded before this file.
+ * background.js may store a newer, signed copy in chrome.storage.local.adapterPack;
+ * it is used if it still passes the rules here, else the bundled one. Each key
+ * is checked on its own: a malformed key in a stored pack (a regex that does
+ * not compile, a wrong type) falls back to the bundled value for that key only.
+ *
+ * The bindings below are filled by applyAdapterPack() and read at call time.
+ */
+const ADAPTER_BUNDLED = self.EASYAPPLY_ADAPTER_BUNDLED || { schema: 1, ats: 'workday', version: 0, data: {} };
+if (!self.EASYAPPLY_ADAPTER_BUNDLED) console.error('Workday Autoplay: adapters/workday-pack.js did not load');
+let ADAPTER_VERSION = ADAPTER_BUNDLED.version;
+let WORK_PANEL_HEADING, EDU_PANEL_HEADING, WORK_SECTION_HEADING, EDU_SECTION_HEADING, SECTION_TITLE,
+    WORK_FIELD_LABEL, EDU_FIELD_LABEL, GUID_FIELD, ADD_BUTTON_IDS, ADD_BUTTON_TEXT, ADD_WORK_ARIA,
+    ADD_EDU_ARIA, PANEL_DELETE_IDS, PANEL_DELETE_TEXT, DATE_SECTION_SELECTORS, DATE_PICKER_TODAY_ID,
+    QUESTION_FIELD_IDS, DISABILITY_FIELD_ID, DISABILITY_GROUP_OPTION, DISABILITY_OPTION,
+    SIGNATURE_NAME_FIELD_ID, LABELS;
+
+// What each key must look like. Ids go inside [data-automation-id="..."], so no
+// quotes; label aliases go into selectors and XPath too, so no quotes either.
+const ADAPTER_SHAPE = {
+    workPanelHeading: 'regex', educationPanelHeading: 'regex', workSectionHeading: 'regex',
+    educationSectionHeading: 'regex', sectionTitle: 'regex', workFieldLabel: 'regex',
+    educationFieldLabel: 'regex', guidField: 'regex',
+    addButtonIds: 'ids', addButtonText: 'regex', addWorkAriaLabels: 'labels', addEducationAriaLabels: 'labels',
+    panelDeleteButtonIds: 'ids', panelDeleteText: 'regex',
+    dateSectionSelectors: { Month: 'selector', Year: 'selector' },
+    datePickerTodayId: 'id',
+    questionFieldIds: 'idMap',
+    disabilityFieldId: 'id', disabilityGroupOption: 'regex',
+    disabilityOption: { yes: 'regex', no: 'regex', decline: 'regex' },
+    signatureNameFieldId: 'id',
+    labels: 'labelMap'
+};
+const PACK_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
+const PACK_LABEL = /^[^"\\]{1,200}$/;
+const NEVER_MATCHES = /(?!)/;
+
+/** A pack regex { source, flags } as a RegExp, or null if it is not one. */
+function packRegExp(v) {
+    if (!v || typeof v !== 'object' || typeof v.source !== 'string' || v.source.length > 2000) return null;
+    const flags = v.flags === undefined ? '' : v.flags;
+    // No g / y: those make .test() stateful.
+    if (typeof flags !== 'string' || !/^[imsu]*$/.test(flags)) return null;
+    try { return new RegExp(v.source, flags); } catch (e) { return null; }
+}
+
+function packSelectorOk(s) {
+    if (typeof s !== 'string' || !s || s.length > 1000) return false;
+    try { document.createDocumentFragment().querySelector(s); return true; } catch (e) { return false; }
+}
+
+const isStringList = (v, re) => Array.isArray(v) && v.length > 0 && v.length <= 50 && v.every(x => typeof x === 'string' && re.test(x));
+
+/** The usable form of `v` for leaf kind `kind`, or undefined if `v` is malformed. */
+function packLeaf(kind, v) {
+    switch (kind) {
+        case 'regex': return packRegExp(v) || undefined;
+        case 'ids': return isStringList(v, PACK_ID) ? v.slice() : undefined;
+        case 'labels': return isStringList(v, PACK_LABEL) ? v.slice() : undefined;
+        case 'id': return typeof v === 'string' && PACK_ID.test(v) ? v : undefined;
+        case 'selector': return packSelectorOk(v) ? v : undefined;
+        case 'idMap': {
+            if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+            const out = {};
+            for (const [k, ids] of Object.entries(v)) {
+                if (!PACK_LABEL.test(k) || !isStringList(ids, PACK_ID)) return undefined;
+                out[k] = ids.slice();
+            }
+            return out;
+        }
+    }
+    return undefined;
+}
+
+/** Resolve one key: the stored value if well-formed, else the bundled one. */
+function resolvePackValue(shape, bundled, stored, path, fallbacks) {
+    if (shape && typeof shape === 'object') {
+        const out = {};
+        for (const k of Object.keys(shape)) out[k] = resolvePackValue(shape[k], bundled && bundled[k], stored && stored[k], `${path}.${k}`, fallbacks);
+        return out;
+    }
+    if (shape === 'labelMap') {
+        // Keys come from the bundled pack: content.js only asks for those.
+        const out = {};
+        for (const k of Object.keys(bundled || {})) out[k] = resolvePackValue('labels', bundled[k], stored && stored[k], `${path}.${k}`, fallbacks);
+        return out;
+    }
+    if (stored !== undefined) {
+        const v = packLeaf(shape, stored);
+        if (v !== undefined) return v;
+        fallbacks.push(path);
+    }
+    const b = packLeaf(shape, bundled);
+    if (b !== undefined) return b;
+    return shape === 'regex' ? NEVER_MATCHES : shape === 'id' || shape === 'selector' ? '' : shape === 'idMap' ? {} : [];
+}
+
+function extensionVersion() {
+    try { return chrome.runtime.getManifest().version; } catch (e) { return ''; }
+}
+
+/** Use `stored` (chrome.storage.local.adapterPack) if it passes the rules, else the bundled pack. */
+function applyAdapterPack(stored) {
+    let pack = ADAPTER_BUNDLED;
+    if (stored !== undefined && stored !== null) {
+        const verify = self.EasyApplyAdapterVerify;
+        const why = verify ? verify.checkPack(stored, { ats: 'workday', bundledVersion: ADAPTER_BUNDLED.version, extensionVersion: extensionVersion() })
+            : 'adapters/verify-pack.js did not load';
+        if (why) console.log(`Workday Autoplay: stored adapter pack not used (${why}); using bundled v${ADAPTER_BUNDLED.version}`);
+        else pack = stored;
+    }
+    const fallbacks = [];
+    const storedData = pack === ADAPTER_BUNDLED ? undefined : pack.data;
+    const d = resolvePackValue(ADAPTER_SHAPE, ADAPTER_BUNDLED.data, storedData, 'data', fallbacks);
+    if (fallbacks.length) console.log(`Workday Autoplay: adapter pack v${pack.version}: bundled value used for ${fallbacks.join(', ')}`);
+    ADAPTER_VERSION = pack.version;
+    WORK_PANEL_HEADING = d.workPanelHeading;
+    EDU_PANEL_HEADING = d.educationPanelHeading;
+    WORK_SECTION_HEADING = d.workSectionHeading;
+    EDU_SECTION_HEADING = d.educationSectionHeading;
+    SECTION_TITLE = d.sectionTitle;
+    WORK_FIELD_LABEL = d.workFieldLabel;
+    EDU_FIELD_LABEL = d.educationFieldLabel;
+    GUID_FIELD = d.guidField;
+    ADD_BUTTON_IDS = d.addButtonIds;
+    ADD_BUTTON_TEXT = d.addButtonText;
+    ADD_WORK_ARIA = d.addWorkAriaLabels;
+    ADD_EDU_ARIA = d.addEducationAriaLabels;
+    PANEL_DELETE_IDS = d.panelDeleteButtonIds;
+    PANEL_DELETE_TEXT = d.panelDeleteText;
+    DATE_SECTION_SELECTORS = d.dateSectionSelectors;
+    DATE_PICKER_TODAY_ID = d.datePickerTodayId;
+    QUESTION_FIELD_IDS = d.questionFieldIds;
+    DISABILITY_FIELD_ID = d.disabilityFieldId;
+    DISABILITY_GROUP_OPTION = d.disabilityGroupOption;
+    DISABILITY_OPTION = d.disabilityOption;
+    SIGNATURE_NAME_FIELD_ID = d.signatureNameFieldId;
+    LABELS = d.labels;
+    return ADAPTER_VERSION;
+}
+
+// Bundled values at once, so nothing ever runs without them; then the stored
+// pack, read once. A fill waits for that read (adapterReady).
+applyAdapterPack(undefined);
+const adapterReady = new Promise((resolve) => {
+    setTimeout(resolve, 1500); // storage never answering must not block a fill
+    try {
+        chrome.storage.local.get(['adapterPack'], (r) => {
+            try { if (r && r.adapterPack) applyAdapterPack(r.adapterPack); } catch (e) { applyAdapterPack(undefined); }
+            resolve();
+        });
+    } catch (e) { resolve(); }
+});
 
 async function step(field, run) {
     const warns = [];
@@ -95,9 +252,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "fill_form") {
         console.log("Workday Autoplay: Received fill_form request.");
         // Reload data to ensure freshness
-        chrome.storage.local.get(['personalInfo', 'address', 'education', 'workExperience', 'skills', 'language', 'jobPreferences', 'demographics', 'resume', 'resumeMeta'], (result) => {
+        chrome.storage.local.get(['personalInfo', 'address', 'education', 'workExperience', 'skills', 'language', 'jobPreferences', 'demographics', 'resume', 'resumeMeta'], async (result) => {
             userProfile = result;
             console.log('Workday Autoplay: Profile loaded for filling', userProfile);
+            await adapterReady;
             startObserver();
             scanAndFill();
             sendResponse({ status: "started" });
@@ -139,11 +297,11 @@ async function scanAndFill() {
     traceSection = 'My Information';
     if (userProfile.personalInfo) {
         const p = userProfile.personalInfo;
-        await step('First name', () => fillFieldByFuzzyLabel(['first name', 'given name'], p.firstName));
-        await step('Last name', () => fillFieldByFuzzyLabel(['last name', 'family name', 'surname'], p.lastName));
-        await step('Phone', () => fillFieldByFuzzyLabel(['phone', 'mobile'], p.phone));
+        await step('First name', () => fillFieldByFuzzyLabel(LABELS.firstName, p.firstName));
+        await step('Last name', () => fillFieldByFuzzyLabel(LABELS.lastName, p.lastName));
+        await step('Phone', () => fillFieldByFuzzyLabel(LABELS.phone, p.phone));
         await step('Phone device type', async () => (await selectWorkdayDropdown('Phone Device Type', 'Mobile')) ?? selectWorkdayDropdown('Device Type', 'Mobile'));
-        await step('Email', () => fillFieldByFuzzyLabel(['email'], p.email));
+        await step('Email', () => fillFieldByFuzzyLabel(LABELS.email, p.email));
 
         // LinkedIn and the personal website are two different profile fields and
         // have to stay two different fields on the form. With no website stored,
@@ -152,22 +310,22 @@ async function scanAndFill() {
         const websiteUrl = p.websiteUrl;
         traceSection = 'Social Network URLs';
         await step('LinkedIn', async () => {
-            const byLabel = fillFieldByFuzzyLabel(['linkedin'], linkedinUrl);
+            const byLabel = fillFieldByFuzzyLabel(LABELS.linkedin, linkedinUrl);
             const byId = fillByFieldId(/linked-?in/i, linkedinUrl);
             return byLabel === true || byId > 0 ? true : byLabel === 'skipped' ? 'skipped' : byLabel === false ? false : ABSENT;
         });
         traceSection = 'Websites';
-        await step('Website', () => fillFieldByFuzzyLabel(['personal website', 'portfolio', 'website'], websiteUrl || linkedinUrl));
+        await step('Website', () => fillFieldByFuzzyLabel(LABELS.website, websiteUrl || linkedinUrl));
         await step('Websites section', () => handleWebsitesSection([linkedinUrl, websiteUrl]));
     }
 
     traceSection = 'My Information';
     if (userProfile.address) {
         const a = userProfile.address;
-        await step('Address line 1', () => fillFieldByFuzzyLabel(['address line 1', 'street'], a.street));
-        await step('City', () => fillFieldByFuzzyLabel(['city', 'town'], a.city));
-        await step('Postal code', () => fillFieldByFuzzyLabel(['zip', 'postal code'], a.zip));
-        await step('Country', () => handleDropdown(['country', 'region'], a.country));
+        await step('Address line 1', () => fillFieldByFuzzyLabel(LABELS.addressLine1, a.street));
+        await step('City', () => fillFieldByFuzzyLabel(LABELS.city, a.city));
+        await step('Postal code', () => fillFieldByFuzzyLabel(LABELS.postalCode, a.zip));
+        await step('Country', () => handleDropdown(LABELS.country, a.country));
         if (a.state) {
             await step('State', async () => (await selectWorkdayDropdown('State', a.state)) || selectWorkdayDropdown('Province', a.state));
         }
@@ -189,7 +347,7 @@ async function scanAndFill() {
     traceSection = 'Skills';
     if (userProfile.skills && userProfile.skills.length > 0) {
         await step('Skills', async () => {
-            const skillsInput = findElementByFuzzyLabel(['skills', 'competencies']);
+            const skillsInput = findElementByFuzzyLabel(LABELS.skills);
             if (!skillsInput) return ABSENT;
             await injectSkills(skillsInput, userProfile.skills);
             return true;
@@ -262,7 +420,7 @@ function workdayJobInfo() {
  * title, location and description, and the other jobs never appeared.
  * Reported 2026-11-22. Now each job fills its own panel, adding panels as needed.
  */
-const WORK_PANEL_HEADING = /^\s*work experience\s*\d+\s*$/i;
+// WORK_PANEL_HEADING ("Work Experience 1") comes from the adapter pack.
 
 function findWorkPanels() {
     const panels = [];
@@ -283,7 +441,7 @@ function findWorkPanels() {
 
 // Headings of the My Experience sections. Used to stop a search at the edge of
 // its own section, so one section's Add button is never clicked for another.
-const SECTION_TITLE = /^\s*(work experience|education|websites?|social network urls?|languages?|skills|certifications?|resume\/?cv|links)\s*$/i;
+// SECTION_TITLE comes from the adapter pack.
 /** Is a section titled `titleRe` ("Education", "Languages") visible on this page? */
 function sectionOnPage(titleRe) {
     return Array.from(document.querySelectorAll('h2, h3, h4, h5, h6, [role="heading"], legend'))
@@ -294,7 +452,7 @@ function sectionOnPage(titleRe) {
 // Employer-written questions sit in formField-<32 hex GUID>; Workday's own
 // fields have names (formField-school). "School or University Name" on an
 // Application Questions page must not pass for an Education section.
-const GUID_FIELD = /^formField-[0-9a-f]{32}$/i;
+// GUID_FIELD comes from the adapter pack.
 function fieldLabeledOnPage(re) {
     return Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea'))
         .some(el => {
@@ -305,9 +463,9 @@ function fieldLabeledOnPage(re) {
         });
 }
 
-const ADD_BUTTON = (b) => b.getAttribute('data-automation-id') === 'add-button'
-    || b.getAttribute('data-automation-id') === 'Add'
-    || /^\s*add( another)?\s*$/i.test(b.innerText || b.textContent || '');
+// Ids and text from the adapter pack (bundled: "add-button" / "Add", text "Add" or "Add Another").
+const ADD_BUTTON = (b) => ADD_BUTTON_IDS.includes(b.getAttribute('data-automation-id'))
+    || ADD_BUTTON_TEXT.test(b.innerText || b.textContent || '');
 
 /**
  * The Add button of the section titled `titleRe` ("Websites", "Work Experience").
@@ -336,26 +494,26 @@ function findSectionAddButton(titleRe, ariaLabels = []) {
 }
 
 function findAddWorkButton() {
-    return findSectionAddButton(/^\s*work experience\s*$/i, ['Add Work Experience', 'Add Another Work Experience']);
+    return findSectionAddButton(WORK_SECTION_HEADING, ADD_WORK_ARIA);
 }
 
 async function fillWorkPanel(work, root) {
-    fillFieldByFuzzyLabel(['company', 'employer'], work.company, root);
-    fillFieldByFuzzyLabel(['job title', 'title', 'role'], work.title || work['job title'], root);
-    fillFieldByFuzzyLabel(['location'], work.location, root);
-    fillFieldByFuzzyLabel(['role description', 'description', 'summary'], work.description || work['role description'], root);
+    fillFieldByFuzzyLabel(LABELS.workCompany, work.company, root);
+    fillFieldByFuzzyLabel(LABELS.workTitle, work.title || work['job title'], root);
+    fillFieldByFuzzyLabel(LABELS.workLocation, work.location, root);
+    fillFieldByFuzzyLabel(LABELS.workDescription, work.description || work['role description'], root);
 
     // Before the dates: ticking "I currently work here" hides the To widget, so
     // filling To first would leave a value the user can neither see nor fix.
     // Set in BOTH directions so the form matches the profile. ('present' is not a
     // key: it is a substring of "represent", common in consent text.)
-    if (setCheckbox(['i currently work here', 'current job'], !!work.isCurrentRole, root)) {
+    if (setCheckbox(LABELS.workCurrentRole, !!work.isCurrentRole, root)) {
         await new Promise(r => setTimeout(r, 200));
     }
 
-    if (work.startDate) await fillDate(['from', 'start date'], work.startDate, root);
+    if (work.startDate) await fillDate(LABELS.workFrom, work.startDate, root);
     // Skipped for a current role: the To widget is not rendered.
-    if (work.endDate && !work.isCurrentRole) await fillDate(['to', 'end date'], work.endDate, root);
+    if (work.endDate && !work.isCurrentRole) await fillDate(LABELS.workTo, work.endDate, root);
 }
 
 async function handleWorkExperience(jobs) {
@@ -369,7 +527,7 @@ async function handleWorkExperience(jobs) {
     // "description" box it found there.
     if (!findWorkPanels().length) {
         const addBtn = findAddWorkButton();
-        if (!addBtn && !sectionOnPage(/^\s*work experience\s*$/i) && !fieldLabeledOnPage(/^\s*(company|employer)\b/i)) return ABSENT;
+        if (!addBtn && !sectionOnPage(WORK_SECTION_HEADING) && !fieldLabeledOnPage(WORK_FIELD_LABEL)) return ABSENT;
         if (addBtn) {
             addBtn.click();
             await waitForCondition(() => findWorkPanels().length > 0, 2000);
@@ -401,7 +559,52 @@ async function handleWorkExperience(jobs) {
         console.log(`Workday Autoplay: filling work experience ${i + 1}`, panels[i]);
         await fillWorkPanel(jobs[i], panels[i]);
     }
+    if (ok) ok = await removeExtraWorkPanels(jobs.length);
     return ok;
+}
+
+/**
+ * Workday's own "Autofill with Resume" can add more Work Experience entries
+ * than the profile has, usually half-parsed with no Job Title (report
+ * 2026-11-24: two extra panels, required Job Title empty, page can't be
+ * submitted). After filling, an extra entry with an EMPTY Job Title is deleted:
+ * it can't be submitted as it is, so nothing the user wants is lost. An extra
+ * entry that has a title is kept and mentioned in the report.
+ */
+function panelTitleInput(panel) {
+    for (const input of panel.querySelectorAll('input[type="text"], input:not([type])')) {
+        if (collectLabelTexts(input).some(t => /^\s*(job )?title\b/i.test(t || ''))) return input;
+    }
+    return null;
+}
+
+function panelDeleteButton(panel) {
+    const btns = Array.from(panel.querySelectorAll('button'));
+    return btns.find(b => PANEL_DELETE_IDS.includes(b.getAttribute('data-automation-id')))
+        || btns.find(b => PANEL_DELETE_TEXT.test(b.getAttribute('aria-label') || b.innerText || b.textContent || ''))
+        || null;
+}
+
+async function removeExtraWorkPanels(keep) {
+    let kept = 0;
+    for (let guard = 0; guard < 10; guard++) {
+        const panels = findWorkPanels();
+        // Last first, so earlier indexes don't shift under us.
+        const extra = panels.slice(keep).reverse().find(p => {
+            const t = panelTitleInput(p);
+            return t && !t.value.trim() && panelDeleteButton(p);
+        });
+        if (!extra) { kept = Math.max(0, findWorkPanels().length - keep); break; }
+        const before = panels.length;
+        console.log('Workday Autoplay: deleting an extra, untitled work experience entry', extra);
+        panelDeleteButton(extra).click();
+        if (!await waitForCondition(() => findWorkPanels().length < before, 2000)) {
+            console.warn('Workday Autoplay: could not delete an extra, empty work experience entry Workday added; delete it by hand');
+            return false;
+        }
+    }
+    if (kept) console.warn(`Workday Autoplay: ${kept} more work experience entr${kept === 1 ? 'y' : 'ies'} on the page than in your profile; check ${kept === 1 ? 'it' : 'them'}`);
+    return true;
 }
 
 /**
@@ -422,19 +625,19 @@ function findPanels(headingRe) {
     return panels;
 }
 
-const EDU_PANEL_HEADING = /^\s*education\s*\d+\s*$/i;
+// EDU_PANEL_HEADING ("Education 2") comes from the adapter pack.
 
 async function fillEducationPanel(edu, root) {
     return withScope(root, async () => {
         let ok = true;
         if (edu.school) {
-            const picked = await handleSearchablePicker(['school', 'institution', 'university'], edu.school);
+            const picked = await handleSearchablePicker(LABELS.educationSchool, edu.school);
             const landed = ensureSchool(edu.school, root);
             ok = (landed === ABSENT ? picked !== false : landed) && ok;
         }
-        if (edu.fieldOfStudy) ok = (await handleSearchablePicker(['field of study', 'major'], edu.fieldOfStudy)) !== false && ok;
+        if (edu.fieldOfStudy) ok = (await handleSearchablePicker(LABELS.educationFieldOfStudy, edu.fieldOfStudy)) !== false && ok;
         if (edu.degree) {
-            const viaDropdown = await handleDropdown(['degree', 'qualification'], edu.degree, matchDegreeOption);
+            const viaDropdown = await handleDropdown(LABELS.educationDegree, edu.degree, matchDegreeOption);
             if (!viaDropdown) ok = (await selectWorkdayDropdown('Degree', edu.degree, matchDegreeOption)) !== false && ok;
         }
         if (edu.startDate) await fillDate('first year attended', edu.startDate, root);
@@ -480,10 +683,10 @@ async function handleEducation(list) {
     if (!schools.length) return ABSENT;
 
     if (!findPanels(EDU_PANEL_HEADING).length) {
-        const addBtn = findSectionAddButton(/^\s*education\s*$/i, ['Add Education']);
+        const addBtn = findSectionAddButton(EDU_SECTION_HEADING, ADD_EDU_ARIA);
         // Same gate as Work Experience: the page-wide fallback is for a
         // single-entry Education form, not for pages with no Education at all.
-        if (!addBtn && !sectionOnPage(/^\s*education\s*$/i) && !fieldLabeledOnPage(/^\s*(school|university|institution)\b/i)) return ABSENT;
+        if (!addBtn && !sectionOnPage(EDU_SECTION_HEADING) && !fieldLabeledOnPage(EDU_FIELD_LABEL)) return ABSENT;
         if (addBtn) {
             addBtn.click();
             await waitForCondition(() => findPanels(EDU_PANEL_HEADING).length > 0, 2500);
@@ -498,7 +701,7 @@ async function handleEducation(list) {
     for (let i = 0; i < schools.length; i++) {
         let panels = findPanels(EDU_PANEL_HEADING);
         if (!panels[i]) {
-            const addBtn = findSectionAddButton(/^\s*education\s*$/i, ['Add Education']);
+            const addBtn = findSectionAddButton(EDU_SECTION_HEADING, ADD_EDU_ARIA);
             if (!addBtn) { console.warn(`Workday Autoplay: no Add button for education ${i + 1}`); return false; }
             const before = panels.length;
             addBtn.click();
@@ -581,6 +784,7 @@ function buildFillReport() {
     const empty = emptyFieldSweep();
     return {
         build: FILL_BUILD,
+        pack: ADAPTER_VERSION,
         page: ((heading && heading.innerText) || '').trim().slice(0, 80),
         path: location.pathname.slice(0, 200),
         at: new Date().toISOString(),
@@ -836,10 +1040,7 @@ async function handleDropdown(keys, value, matcher = null) {
 // are fallbacks for tenants that render a plain pair of text boxes.
 // Placeholder matching is exact on purpose: [placeholder*="MM" i] would also
 // match "Summary".
-const DATE_SECTION_SELECTORS = {
-    Month: 'input[data-automation-id="dateSectionMonth-input"], input[aria-label*="Month" i], input[placeholder="MM"], input[placeholder="mm"]',
-    Year: 'input[data-automation-id="dateSectionYear-input"], input[aria-label*="Year" i], input[placeholder="YYYY"], input[placeholder="yyyy"]'
-};
+// DATE_SECTION_SELECTORS ({ Month, Year }) come from the adapter pack.
 
 const MONTH_NAMES = {
     "01": "January", "02": "February", "03": "March", "04": "April",
@@ -1737,17 +1938,85 @@ async function fillDisclosures() {
     };
     await ask('Veteran status', ['Veteran Status', 'Veteran'], demo.veteranStatus || (decline ? DECLINE : ''), veteranOption);
 
-    if (decline) {
-        // Disability is often a dropdown, sometimes radios/checkboxes (CC-305).
-        await ask('Disability', ['Disability'], DECLINE);
-        const disabilityKeywords = ['disability', 'disabled', 'handicapped'];
-        for (const choice of ['I do not wish to answer', 'I do not want to answer', 'I don’t wish to answer', "I don't wish to answer"]) {
-            if (await autoAnswerRadioExact(disabilityKeywords, choice)) break;
-        }
-    }
+    await step('Disability', () => fillDisability(demo.disabilityStatus || (decline ? DECLINE : ''), DECLINE));
+
+    // The CC-305 form is signed by typing your name.
+    await step('Signature name', () => fillSignatureName());
 
     // Auto-fill Date field in disclosure section with TODAY's date
     await fillDisclosureDate();
+}
+
+/**
+ * Disability (CC-305 "Voluntary Self-Identification of Disability").
+ * Workday shows it as mutually exclusive checkboxes (formField-disabilityStatus,
+ * report 2026-11-24), on some tenants as radios or a dropdown. `want` is the
+ * saved answer: 'Yes' | 'No' | the decline wording. Nothing saved: skipped.
+ */
+// DISABILITY_OPTION ({ yes, no, decline } regexes) comes from the adapter pack.
+const disabilityKind = (want) => (/^yes\b/i.test(want) ? 'yes' : /^no\b/i.test(want) ? 'no' : 'decline');
+
+function findDisabilityGroup() {
+    const direct = document.querySelector(`[data-automation-id="formField-${DISABILITY_FIELD_ID}"]`);
+    if (direct && direct.offsetParent !== null) return direct;
+    // Elsewhere: the group around an option that says "...have a disability...".
+    for (const el of document.querySelectorAll('input[type="checkbox"], input[type="radio"], [role="checkbox"], [role="radio"]')) {
+        if (el.offsetParent === null) continue;
+        if (!checkboxLabelTexts(el).some(t => DISABILITY_GROUP_OPTION.test(t))) continue;
+        const g = el.closest('[data-automation-id^="formField"], fieldset, [role="group"], [role="radiogroup"]');
+        if (g) return g;
+    }
+    return null;
+}
+
+/** The option's own text: its label, never the question it sits under. */
+function optionText(el) {
+    const own = (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`)) || el.closest('label');
+    return ((own && own.innerText) || el.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
+}
+
+async function fillDisability(want, DECLINE) {
+    const group = findDisabilityGroup();
+    if (!group) {
+        if (!want) return findDropdownForQuestion('Disability') ? 'skipped' : ABSENT;
+        const kind = disabilityKind(want);
+        return selectWorkdayDropdown('Disability', kind === 'decline' ? DECLINE : want,
+            (opts) => opts.find(o => DISABILITY_OPTION[kind].test(o.innerText.replace(/\s+/g, ' ').trim())) || null);
+    }
+    if (!want) return 'skipped';
+    const kind = disabilityKind(want);
+    const options = Array.from(group.querySelectorAll('input[type="checkbox"], input[type="radio"], [role="checkbox"], [role="radio"]'))
+        .filter(el => !(el.getAttribute('role') && el.querySelector('input')));
+    const pick = options.find(el => DISABILITY_OPTION[kind].test(optionText(el)));
+    if (!pick) { console.warn('Workday Autoplay: no matching disability option on this form'); return false; }
+    // Checkboxes here are one-of: clear any other ticked option first.
+    for (const el of options) if (el !== pick && isChecked(el) && (el.type === 'checkbox' || el.getAttribute('role') === 'checkbox')) await toggleCheckbox(el, false);
+    if (pick.type === 'radio' || pick.getAttribute('role') === 'radio') {
+        const on = () => (pick.type === 'radio' ? pick.checked : pick.getAttribute('aria-checked') === 'true');
+        if (!on()) { pick.click(); pick.dispatchEvent(new Event('change', { bubbles: true })); }
+        if (await waitForCondition(on, 800)) return true;
+        console.warn('Workday Autoplay: clicked the disability answer but it did not change');
+        return false;
+    }
+    return toggleCheckbox(pick, true);
+}
+
+/**
+ * The signature on the disability form: a "Name" box. Only filled on that
+ * form, so a bare "Name" field elsewhere (a referrer's name) is never given
+ * the user's name. Left alone if it already has something in it.
+ */
+function fillSignatureName() {
+    if (!findDisabilityGroup()) return ABSENT;
+    const field = document.querySelector(`[data-automation-id="formField-${SIGNATURE_NAME_FIELD_ID}"]`);
+    const input = field && field.querySelector('input[type="text"], input:not([type])');
+    if (!input || input.offsetParent === null) return ABSENT;
+    if (input.value.trim()) return true;
+    const info = userProfile.personalInfo || {};
+    const name = [info.firstName, info.lastName].map(s => (s || '').trim()).filter(Boolean).join(' ');
+    if (!name) return 'skipped';
+    setNativeValue(input, name);
+    return true;
 }
 
 // Helper function to fill the disclosure date with today's date (MM/DD/YYYY format)
@@ -1760,7 +2029,7 @@ async function fillDisclosureDate() {
     console.log(`Workday Autoplay: Filling disclosure date with ${mm}/${dd}/${yyyy}`);
 
     // Method 1: Click the "Today" button if visible
-    const todayBtn = document.querySelector('[data-automation-id="datePickerSelectedToday"]');
+    const todayBtn = document.querySelector(`[data-automation-id="${DATE_PICKER_TODAY_ID}"]`);
     if (todayBtn) {
         console.log("Workday Autoplay: Clicking Today button");
         todayBtn.click();
@@ -1909,7 +2178,22 @@ function chooseOption(options, desired, matcher = null) {
  * CURRENT ANSWER (" Yes Required", tools/LegallyAuthorized.png), so label- and
  * aria-label lookups never found these. Container first, whole-word match.
  */
+// Workday's own field ids for the self-ID questions. Some tenants word the
+// question as a legal paragraph that never names it (HUB International's gender
+// question, report 2026-11-24), so the label can't be matched; the id still can.
+// QUESTION_FIELD_IDS (question label -> formField ids) comes from the adapter pack.
+
 function findDropdownForQuestion(label) {
+    const found = findDropdownByLabel(label);
+    if (found) return found;
+    for (const id of (Object.prototype.hasOwnProperty.call(QUESTION_FIELD_IDS, label.toLowerCase()) ? QUESTION_FIELD_IDS[label.toLowerCase()] : [])) {
+        const btn = SCOPE.querySelector(`[data-automation-id="formField-${id}"] button[aria-haspopup="listbox"]`);
+        if (btn && btn.offsetParent !== null) return btn;
+    }
+    return null;
+}
+
+function findDropdownByLabel(label) {
     const re = new RegExp(`(^|[^a-z0-9])${escapeRegExp(label.toLowerCase())}([^a-z0-9]|$)`);
     const textOf = (n) => (n ? (n.innerText || n.textContent || '').replace(/\s+/g, ' ').toLowerCase() : '');
     for (const sel of ['fieldset', 'div[data-automation-id^="formField"]']) {
@@ -2037,46 +2321,6 @@ async function selectByAriaLabel(ariaLabelKeyword, desiredValue) {
     }
 
     console.warn(`Workday Autoplay: Option '${desiredValue}' not found for ${ariaLabelKeyword} (via aria-label)`);
-    return false;
-}
-
-/**
- * Auto-answer radio buttons with exact text matching (for disability disclosures)
- */
-async function autoAnswerRadioExact(keywords, exactChoice) {
-    const labels = Array.from(document.querySelectorAll('label'));
-    const matches = labels.filter(label => matchesAny(label.innerText, keywords));
-
-    for (const label of matches) {
-        // Prefix match. closest() returns the NEAREST matching ancestor, so this
-        // makes the question's own formField-* wrapper win over an outer
-        // fieldset — tighter scoping, less chance of picking up a neighbouring
-        // question's radios.
-        const container = label.closest('div[data-automation-id^="formField"], fieldset, div[role="group"]');
-
-        if (container) {
-            const radios = container.querySelectorAll('input[type="radio"]');
-            for (const radio of radios) {
-                const id = radio.id;
-                const radioLabel = document.querySelector(`label[for="${CSS.escape(id)}"]`);
-
-                let radioText = "";
-                if (radioLabel) radioText = radioLabel.innerText;
-                else if (radio.getAttribute('aria-label')) radioText = radio.getAttribute('aria-label');
-
-                // Check for exact match (case-insensitive, but check for full phrase)
-                if (radioText.toLowerCase().includes(exactChoice.toLowerCase())) {
-                    if (!radio.checked) {
-                        console.log(`Workday Autoplay: Auto-answering "${label.innerText}" -> ${exactChoice}`);
-                        radio.click();
-                        radio.dispatchEvent(new Event('change', { bubbles: true }));
-                        await new Promise(r => setTimeout(r, 200));
-                        return true;
-                    }
-                }
-            }
-        }
-    }
     return false;
 }
 

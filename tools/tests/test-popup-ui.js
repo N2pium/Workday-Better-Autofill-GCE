@@ -42,7 +42,7 @@ async function openPanel({ local = {}, signedIn = false, apps = [], activeUrl = 
   const evt = () => ({ addListener() {} });
   w.chrome = {
     runtime: { onMessage: { addListener: (f) => listeners.message.push(f) }, lastError: null, sendMessage() {} },
-    storage: { local: area(stores.local), session: area(stores.session) },
+    storage: { local: area(stores.local), session: area(stores.session), onChanged: { addListener() {} } },
     tabs: {
       query(_q, cb) { const t = [{ id: 1, active: true, url: activeUrl }]; if (cb) setTimeout(() => cb(t)); return Promise.resolve(t); },
       sendMessage(_id, _m, cb) { if (cb) setTimeout(() => cb({ ok: true })); },
@@ -112,7 +112,7 @@ test('every field autofill reads still exists inside the profile form', async ()
     'sourceReferral', 'autoDisclosures', 'resume', 'education-container', 'work-container', 'saveBtn']) {
     assert.ok(p.$(`#profileForm #${id}`), `#${id} inside the form`);
   }
-  for (const id of ['cloudSignInBtn', 'cloudSyncToggle', 'greenhouseToggle', 'exportBtn', 'importBtn', 'deleteBtn']) {
+  for (const id of ['cloudSignInBtn', 'greenhouseToggle', 'exportBtn', 'importBtn', 'deleteBtn']) {
     assert.ok(p.$(`#tab-settings #${id}`), `#${id} in Settings`);
   }
   assert.ok(p.$('#tab-home #autofillBtn'));

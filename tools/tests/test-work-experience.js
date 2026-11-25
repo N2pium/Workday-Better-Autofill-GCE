@@ -10,7 +10,7 @@ function check(name, actual, expected) {
 }
 
 let uid = 0;
-function panel(n) {
+function panel(n, { del = false } = {}) {
   const f = (label, tag = 'input') => {
     const id = `f${uid++}`;
     return `<div data-automation-id="formField-x"><label for="${id}">${label}</label><${tag} id="${id}" class="${label.replace(/\W/g, '')}"></${tag}>${tag === 'textarea' ? '' : ''}</div>`;
@@ -18,7 +18,7 @@ function panel(n) {
   return `<div role="group" class="panel"><h4>Work Experience ${n}</h4>
     ${f('Job Title*')}${f('Company*')}${f('Location')}
     <div data-automation-id="formField-cur"><input type="checkbox" id="cb${n}"><label for="cb${n}">I currently work here</label></div>
-    ${f('Role Description', 'textarea')}</div>`;
+    ${f('Role Description', 'textarea')}${del ? '<button data-automation-id="panel-set-delete-button" class="del">Delete</button>' : ''}</div>`;
 }
 
 function page(existing) {
@@ -80,6 +80,29 @@ const JOBS = [
   w.console.log = () => {};
   await w.eval(`handleWorkExperience(${JSON.stringify(JOBS)})`);
   check('no panels, no Add: first job page-wide', w.document.getElementById('c').value, 'AWS');
+
+  // Workday's own "Autofill with Resume" added extra panels (report 2026-11-24):
+  // after filling, extras with no Job Title are deleted; titled extras are kept.
+  const parsedPage = (titles, { deletes = true } = {}) => {
+    const { w } = load(`<section><h3>Work Experience</h3><div id="panels">${titles.map((_, i) => panel(i + 1, { del: true })).join('')}</div>
+      <button data-automation-id="add-button" id="add">Add Another</button></section>`, 'window.__trace = () => JSON.stringify(fillTrace);');
+    w.console.log = () => {}; w.console.warn = () => {};
+    w.document.querySelectorAll('.panel').forEach((p, i) => { p.querySelector('.JobTitle').value = titles[i]; });
+    if (deletes) w.document.querySelectorAll('.del').forEach(b => b.addEventListener('click', () => b.closest('.panel').remove()));
+    return w;
+  };
+  w = parsedPage(['', '', '', '']);
+  await w.eval(`handleWorkExperience(${JSON.stringify(JOBS.slice(0, 2))})`);
+  check("4 panels from Workday's resume parse, 2 jobs: the 2 untitled extras are deleted", read(w).map(r => r[0]), ['Student Builder Campus Leader', 'Intern']);
+
+  w = parsedPage(['', '', 'Parsed Analyst', '']);
+  await w.eval(`handleWorkExperience(${JSON.stringify(JOBS.slice(0, 2))})`);
+  check('an extra entry WITH a title is kept; only the untitled one goes', read(w).map(r => r[0]), ['Student Builder Campus Leader', 'Intern', 'Parsed Analyst']);
+
+  w = parsedPage(['', '', ''], { deletes: false });
+  await w.eval(`step('Work experience', () => handleWorkExperience(${JSON.stringify(JOBS.slice(0, 2))}))`);
+  const t = JSON.parse(w.eval('__trace()'))[0];
+  check('an untitled extra that will not delete is reported failed, with the reason', [t.status, /delete it by hand/.test(t.detail)], ['failed', true]);
 
   console.log(failures ? `\n${failures} FAILED` : '\nall passed');
   process.exit(failures ? 1 : 0);

@@ -1,9 +1,12 @@
 #!/usr/bin/env node
+import * as fs from 'node:fs';
 import { App, Tags } from 'aws-cdk-lib';
+import { ADAPTER_DIST, AdapterContentStack } from '../lib/adapter-content-stack';
 import { ApiStack } from '../lib/api-stack';
 import { AuthStack } from '../lib/auth-stack';
 import { loadConfig, REGION } from '../lib/config';
 import { DataStack } from '../lib/data-stack';
+import { TelemetryStack } from '../lib/telemetry-stack';
 import { WebContentStack, WebStack } from '../lib/web-stack';
 
 const app = new App();
@@ -16,6 +19,8 @@ const web = new WebStack(app, 'EasyApply-Web', { env });
 const auth = new AuthStack(app, 'EasyApply-Auth', {
   env, terminationProtection: true, config, dashboardOrigins: [web.origin],
 });
+// Anonymous opt-in telemetry (F07): its own stack, deployed before the API.
+const telemetry = new TelemetryStack(app, 'EasyApply-Telemetry', { env });
 const api = new ApiStack(app, 'EasyApply-Api', {
   env,
   config,
@@ -25,6 +30,7 @@ const api = new ApiStack(app, 'EasyApply-Api', {
   userPool: auth.userPool,
   clients: [auth.extensionClient, auth.dashboardClient],
   dashboardOrigins: [web.origin],
+  telemetryStream: telemetry.stream,
 });
 new WebContentStack(app, 'EasyApply-WebContent', {
   env,
@@ -34,5 +40,16 @@ new WebContentStack(app, 'EasyApply-WebContent', {
   authDomain: auth.loginDomain,
   clientId: auth.dashboardClient.userPoolClientId,
 });
+
+// Adapter packs: depends only on EasyApply-Web. adapters/dist/ is produced and
+// committed by tools/build-adapter-pack.mjs; until it exists there is nothing
+// to upload, so the stack is left out rather than failing every synth.
+if (fs.existsSync(ADAPTER_DIST)) {
+  new AdapterContentStack(app, 'EasyApply-Adapters', {
+    env, bucket: web.adapterBucket, distribution: web.distribution,
+  });
+} else {
+  console.warn(`EasyApply-Adapters skipped: ${ADAPTER_DIST} does not exist (run node tools/build-adapter-pack.mjs).`);
+}
 
 Tags.of(app).add('project', 'easyapply');

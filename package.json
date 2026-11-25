@@ -1,0 +1,14 @@
+{
+  "name": "workday-better-autofill",
+  "private": true,
+  "description": "Dev tooling only: the extension itself ships with no dependencies.",
+  "scripts": {
+    "test": "node tools/tests/run.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "jsdom": "29.1.1"
+  }
+}

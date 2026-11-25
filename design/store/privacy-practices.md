@@ -1,4 +1,4 @@
-# Chrome Web Store: Privacy practices tab (version 2.0)
+# Chrome Web Store: Privacy practices tab (version 2.0.1)
 
 Answers for the Developer Dashboard's **Privacy practices** tab. Each one was checked
 against the 2.0 code and `PRIVACY_POLICY.md`. Update this file whenever the extension
@@ -19,14 +19,18 @@ starts handling something new.
 | `scripting` | Injects the autofill script into a supported job page when the user clicks Autofill, and into Greenhouse pages only after the user turns Greenhouse on. |
 | `sidePanel` | Shows the extension's interface in the side panel so it stays open while the user works through a multi-page form. |
 | `identity` | Opens the secure sign-in window (Amazon Cognito, email or Google) when the user chooses to sign in. Not used otherwise. |
+| `alarms` | Schedules two background checks: while the user is signed in, profile changes made on their other devices (every few minutes); and, for every install, a download of the signed field-mapping data (adapter pack, every 6 hours). |
 | Host `*://*.myworkdayjobs.com/*` | Workday application pages are where the extension fills forms, reads the job title, company and description for the tracker and AI features, and shows the Draft button. |
 | Optional host: Greenhouse domains | Requested only when the user turns on Greenhouse under Supported Portals, to fill Greenhouse forms. Revoked when they turn it off. |
-| Optional host: extension's API, sign-in domain and resume storage (`execute-api…`, `…amazoncognito.com`, `…s3…amazonaws.com`) | The extension's own backend. API and sign-in access are requested when the user signs in; resume storage access is requested the first time they add a resume version. Used for sync, application tracking, resume versions and AI features. |
+| Optional host: extension's API, sign-in domain and resume storage (`execute-api…`, `…amazoncognito.com`, `…s3…amazonaws.com`) | The extension's own backend. API and sign-in access are requested when the user signs in; resume storage access is requested the first time they add a resume version. Used for sync, application tracking, resume versions and AI features, and for anonymous fill-failure reports if the user turns them on (API host only). |
 
 ## Remote code
 
 **No, I am not using remote code.** All JavaScript ships in the package. The backend
-returns data (JSON) only.
+returns data (JSON) only. The adapter pack downloaded every 6 hours is signed JSON
+(field IDs, label lists, regular-expression patterns as strings) read by code that
+ships in the package; it can't contain or load code, and it is used only if its
+Ed25519 signature matches the public key in the package.
 
 ## Data usage: what the extension collects
 

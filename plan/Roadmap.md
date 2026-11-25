@@ -3,7 +3,6 @@ type: plan
 tags:
   - easyapply
 ---
-befo
 # Roadmap
 
 Colours on the [[Architecture.canvas|board]]: green = phase 1, purple = 2, cyan = 3, yellow = 4.
@@ -49,9 +48,9 @@ Backend code lives in `cloud/` (see `cloud/README.md`). Deployed to us-east-2 on
 - [ ] After approval: test store-version sign-in (email + Google); ship 2.0.1 with the autofill fixes made since (build 2026-11-24c)
 
 ## Phase 3 - Adapters
-- [ ] Adapter pack JSON schema + interpreter in `content.js` - [[F06 Remote Adapter Packs]]
-- [ ] [[S3 Adapter Packs]] behind [[CloudFront]], bundled fallback
-- [ ] [[telemetry-ingest]] + [[Firehose]] + [[Athena]] - [[F07 Failure Telemetry]]
+- [x] Adapter pack JSON schema + interpreter in `content.js` - [[F06 Remote Adapter Packs]] (2026-11-24: `adapters/workday-pack.js`, Ed25519-signed `adapters/dist`, background fetch every 6 h; see [[Phase 3 Contracts]])
+- [x] [[S3 Adapter Packs]] behind [[CloudFront]], bundled fallback (2026-11-24: `/adapters/*` on the dashboard distribution, stack `EasyApply-Adapters`; built, not yet deployed)
+- [x] [[telemetry-ingest]] + [[Firehose]] + [[Athena]] - [[F07 Failure Telemetry]] (2026-11-24: unauthenticated `POST /telemetry`, stack `EasyApply-Telemetry`, opt-in toggle; built, not yet deployed)
 - [ ] Lever, then Ashby packs - [[F09 More Job Sites]]
 
 ## Phase 4 - Engagement

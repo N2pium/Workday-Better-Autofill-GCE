@@ -314,6 +314,17 @@
             <option value="I do not wish to answer">Decline to Self-Identify</option>
           </select>
         </div>
+
+        <div class="input-group">
+          <label for="disabilityStatus">Disability</label>
+          <select id="disabilityStatus">
+            <option value="">-- Select --</option>
+            <option value="Yes">Yes, I have a disability (or had one in the past)</option>
+            <option value="No">No, I do not have a disability</option>
+            <option value="I do not wish to answer">Decline to Self-Identify</option>
+          </select>
+          <p class="helper">For the disability self-identification form. Autofill also types your name as its signature.</p>
+        </div>
       </section>
 
       <!-- Job Preferences -->
@@ -370,7 +381,7 @@
           <label for="autoDisclosures"><strong>Decline all disclosures</strong></label>
         </div>
         <p class="helper">
-          Selects "I decline to self-identify" for Race, Veteran Status, and Disability questions.
+          Selects "I decline to self-identify" for any self-identification question you have not answered above.
         </p>
       </section>
 
@@ -418,12 +429,9 @@
         <div id="cloudSignedIn" hidden>
           <p class="helper">Signed in as <strong id="cloudEmail"></strong></p>
           <p class="helper" id="cloudConnection" aria-live="polite"></p>
-          <div class="input-group checkbox-group">
-            <input type="checkbox" id="cloudSyncToggle" />
-            <label for="cloudSyncToggle">Sync my profile across devices</label>
-          </div>
-          <p class="helper">Syncs personal info, address, education, work experience, skills, languages and job
-            preferences when you press Save. Self-identification answers and your resume file stay on this device.</p>
+          <p class="helper">Your profile syncs across every device you sign in on: personal info, address,
+            education, work experience, skills, languages and job preferences. Self-identification answers and
+            your resume file stay on this device. Sign out to stop syncing on this device.</p>
           <div class="input-group checkbox-group">
             <input type="checkbox" id="aiAssistToggle" checked />
             <label for="aiAssistToggle">Show &#10022; Draft buttons on job forms</label>
@@ -446,6 +454,21 @@
           <label for="greenhouseToggle">Greenhouse (boards.greenhouse.io)</label>
         </div>
         <p class="helper">After enabling, refresh any Greenhouse tab that is already open.</p>
+      </section>
+
+      <!-- Anonymous fill-failure reports (cloud-telemetry.js; off by default) -->
+      <section id="telemetrySection">
+        <h2>Help Improve Autofill</h2>
+        <div class="input-group checkbox-group">
+          <input type="checkbox" id="telemetryToggle" />
+          <label for="telemetryToggle">Send anonymous fill-failure reports</label>
+        </div>
+        <p class="helper" id="telemetryHelp">Off unless you turn it on. After each autofill it sends only: which of the
+          extension's own steps failed or were skipped and why (for example "Work Experience: did not change"), the
+          form's internal ID and type for required fields left empty, the site's host name (like
+          company.wd1.myworkdayjobs.com) and the extension version. Never sent: your answers or profile, question
+          text, names, the job or page address, self-identification, or your account. Reports are not signed in
+          and are kept for up to 12 months.</p>
       </section>
 
       <!-- Backup -->
@@ -603,6 +626,7 @@
   <script src="cloud-tracker.js"></script>
   <script src="cloud-library.js"></script>
   <script src="cloud-vault.js"></script>
+  <script src="cloud-telemetry.js"></script>
   <script src="popup.js"></script>
 </body>
 

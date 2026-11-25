@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
+const { adapterPrelude } = require('./harness');
 
 // Variant A: distinct ids (the happy case).
 // Variant B: From and To share an id — the duplicate-id behaviour Workday is
@@ -64,7 +65,7 @@ function boot(src, bodyHtml) {
   w.Element.prototype.scrollIntoView = function () {};
   w.Element.prototype.getBoundingClientRect = () => ({ width: 100, height: 20, top: 10, bottom: 30, left: 0, right: 100 });
   w.console.log = () => {}; w.console.warn = () => {};
-  w.eval(fs.readFileSync(src, 'utf8'));
+  w.eval(adapterPrelude() + fs.readFileSync(src, 'utf8'));
   return w;
 }
 

@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Workday: Better Autofill",
-    "version": "2.0",
+    "version": "2.0.1",
     "description": "Autofills job applications on Workday and Greenhouse, including experience, education, and legal disclosures.",
     "homepage_url": "https://github.com/N2pium/Workday-Better-Autofill-GCE",
     "permissions": [
@@ -9,7 +9,8 @@
         "activeTab",
         "scripting",
         "sidePanel",
-        "identity"
+        "identity",
+        "alarms"
     ],
     "host_permissions": [
         "*://*.myworkdayjobs.com/*"
@@ -45,6 +46,8 @@
                 "*://*.myworkdayjobs.com/*"
             ],
             "js": [
+                "adapters/workday-pack.js",
+                "adapters/verify-pack.js",
                 "content.js",
                 "cloud-library.js",
                 "ai-assist.js"

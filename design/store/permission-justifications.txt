@@ -45,6 +45,9 @@ The side panel stays open alongside the page, so the user can fill a step, click
 
 The panel displays only the extension's own page (popup.html) from inside the extension package.
 
+===== alarms =====
+alarms schedules the extension's background checks. For every install, it wakes the background worker every 6 hours to download the extension's signed field-mapping data (JSON only, verified against a public key in the package, never code) so autofill keeps working when Workday changes its forms. Separately, alarms is used while the user is signed in to their optional account. Every few minutes it wakes the background worker to check whether the user's synced profile was changed on another of their devices, and if so copies the newer profile to this device, so autofill always uses the latest details. It sends nothing when the user is signed out and never uploads data on its own.
+
 ===== HOST PERMISSIONS =====
 Host access to *://*.myworkdayjobs.com/* is required for the extension's core function: reading the field labels on a Workday job application and entering the user's saved profile information into them. Workday applications are served from company-specific subdomains of myworkdayjobs.com, so a wildcard is needed to cover each employer's careers site.
 

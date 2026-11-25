@@ -36,6 +36,12 @@ Four bugs reported from a real application, all with a reproduction in
 
 ### New
 
+- **Workday fixes without a store release (adapter packs).** The Workday
+  automation ids, section headings and label aliases the autofill relies on now
+  live in a data-only pack (`adapters/workday-pack.js`). The extension checks
+  for a newer, Ed25519-signed copy every 6 hours and uses it only if the
+  signature verifies; otherwise it keeps the bundled one. The fill report shows
+  the pack version in use.
 - **Website / Portfolio URL is its own profile field.** It used to share the
   LinkedIn field, so a form asking for a website was given your LinkedIn URL and
   your actual site was never filled in. Both are now sent, and on Workday's

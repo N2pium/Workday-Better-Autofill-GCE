@@ -32,7 +32,7 @@ try {
 
 // Suites that assert; a non-zero exit fails the run.
 const ASSERTING = ['test-dates.js', 'test-websites.js', 'test-scan.js', 'test-checkbox.js', 'test-work-experience.js',
-    'test-cloud-auth.js', 'test-cloud-sync.js', 'test-cloud-tracker.js', 'test-popup-ui.js', 'test-ai-assist.js', 'test-cloud-vault.js', 'test-my-experience.js', 'test-reliability.js', 'test-app-questions.js'];
+    'test-cloud-auth.js', 'test-cloud-sync.js', 'test-cloud-tracker.js', 'test-popup-ui.js', 'test-ai-assist.js', 'test-cloud-vault.js', 'test-my-experience.js', 'test-reliability.js', 'test-app-questions.js', 'test-adapter-pack.js', 'test-telemetry.js'];
 // Suites that print an old-vs-new comparison for a human to read.
 const COMPARING = ['test-real.js', 'test-auth.js'];
 

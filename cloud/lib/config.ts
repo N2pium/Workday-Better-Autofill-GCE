@@ -19,6 +19,13 @@ export interface AppConfig {
    * rather than committing it: the repo is public. Empty = alarms not emailed.
    */
   readonly alarmEmail?: string;
+  /**
+   * Reserved concurrency for the unauthenticated POST /telemetry function, which
+   * caps what a flood of anonymous calls can cost. 0 = no reservation (use it if
+   * the account's concurrency quota is still the new-account 10, where Lambda
+   * refuses any reservation). Default 2.
+   */
+  readonly telemetryConcurrency: number;
 }
 
 const EXTENSION_ID = /^[a-p]{32}$/;
@@ -65,8 +72,15 @@ export function loadConfig(app: App): AppConfig {
     throw new Error(`Not an email address: "${alarmEmail}"`);
   }
 
+  const rawConcurrency = app.node.tryGetContext('telemetryConcurrency');
+  const telemetryConcurrency = rawConcurrency === undefined || rawConcurrency === '' ? 0 : Number(rawConcurrency);
+  if (!Number.isInteger(telemetryConcurrency) || telemetryConcurrency < 0 || telemetryConcurrency > 50) {
+    throw new Error(`telemetryConcurrency must be a whole number 0-50, got "${String(rawConcurrency)}"`);
+  }
+
   return {
     alarmEmail,
+    telemetryConcurrency,
     extensionIds,
     dashboardUrls: dashboardUrls.map((u) => new URL(u).origin),
     domainPrefix,
