@@ -5,7 +5,16 @@ const { JSDOM } = require('jsdom');
 
 const SRC = path.resolve(__dirname, '..', '..', 'content.js');
 
-function load(bodyHtml, extraSource = '') {
+// The manifest loads these content scripts before content.js (the bundled
+// adapter pack and its rules). Every suite that evals content.js prepends this.
+const ADAPTER_FILES = ['adapters/workday-pack.js', 'adapters/verify-pack.js'];
+function adapterPrelude() {
+  return ADAPTER_FILES.map(f => fs.readFileSync(path.resolve(__dirname, '..', '..', f), 'utf8')).join(String.fromCharCode(10) + ';') + String.fromCharCode(10) + ';';
+}
+
+// opts.storage: what chrome.storage.local.get answers (e.g. { adapterPack }).
+// opts.version: the manifest version chrome.runtime.getManifest() reports.
+function load(bodyHtml, extraSource = '', opts = {}) {
   const dom = new JSDOM(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
     runScripts: 'outside-only',
     pretendToBeVisual: true
@@ -16,9 +25,10 @@ function load(bodyHtml, extraSource = '') {
     runtime: {
       onMessage: { addListener() {} },
       sendMessage() {},
+      getManifest() { return { version: opts.version || '2.0.1' }; },
       lastError: null
     },
-    storage: { local: { get(k, cb) { cb && cb({}); } } }
+    storage: { local: { get(k, cb) { cb && cb(opts.storage || {}); } } }
   };
 
   // jsdom does no layout: offsetParent is always null and every rect is 0x0.
@@ -51,8 +61,8 @@ function load(bodyHtml, extraSource = '') {
   };
 
   // extraSource runs in the same eval, so it can reach content.js's let bindings.
-  w.eval(fs.readFileSync(SRC, 'utf8') + String.fromCharCode(10) + ';' + extraSource);
+  w.eval(adapterPrelude() + fs.readFileSync(SRC, 'utf8') + String.fromCharCode(10) + ';' + extraSource);
   return { dom, w };
 }
 
-module.exports = { load };
+module.exports = { load, adapterPrelude };

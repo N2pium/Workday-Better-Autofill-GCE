@@ -46,6 +46,8 @@
                 "*://*.myworkdayjobs.com/*"
             ],
             "js": [
+                "adapters/workday-pack.js",
+                "adapters/verify-pack.js",
                 "content.js",
                 "cloud-library.js",
                 "ai-assist.js"
