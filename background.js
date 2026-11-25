@@ -187,3 +187,61 @@ async function ensureSyncAlarm() {
 chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === SYNC_ALARM) backgroundPull(); });
 chrome.runtime.onStartup.addListener(backgroundPull);
 ensureSyncAlarm();
+
+/**
+ * ADAPTER PACK (plan/Phase 3 Contracts.md §1). Downloads the signed Workday
+ * pack (data only: automation ids, label aliases, regex sources) at browser
+ * start, at install/update and every 6 hours. Anonymous GET of a static file:
+ * no account, profile or page data is sent. Stored only if the Ed25519
+ * signature over the exact bytes checks out against the bundled public key and
+ * the pack passes the rules in adapters/verify-pack.js. Any failure keeps the
+ * previous pack and is logged to the console only. An HTTP 200 alone means
+ * nothing: CloudFront answers a missing file with the dashboard's index.html.
+ */
+importScripts('adapters/public-key.js', 'adapters/workday-pack.js', 'adapters/verify-pack.js');
+
+const ADAPTER_ALARM = 'adapter-pack';
+const ADAPTER_EVERY_MINUTES = 6 * 60;
+
+async function refreshAdapterPack() {
+    try {
+        const url = EASYAPPLY_CLOUD_CONFIG.adapterPackUrl;
+        const bundled = self.EASYAPPLY_ADAPTER_BUNDLED;
+        if (!url || !bundled) return;
+        const opts = {
+            ats: bundled.ats,
+            bundledVersion: bundled.version,
+            extensionVersion: chrome.runtime.getManifest().version,
+            publicKey: self.EASYAPPLY_ADAPTER_PUBLIC_KEY
+        };
+        const { adapterPack: stored } = await chrome.storage.local.get('adapterPack');
+        // A pack the installed extension has caught up with is dead weight.
+        if (stored && EasyApplyAdapterVerify.checkPack(stored, opts)) await chrome.storage.local.remove('adapterPack');
+        const current = stored && !EasyApplyAdapterVerify.checkPack(stored, opts) ? stored.version : bundled.version;
+
+        const get = (u) => fetch(u, { cache: 'no-cache', credentials: 'omit', redirect: 'error' });
+        const [packRes, sigRes] = await Promise.all([get(url), get(`${url}.sig`)]);
+        if (!packRes.ok || !sigRes.ok) { console.log(`Workday Autofill: adapter pack not fetched (HTTP ${packRes.status}/${sigRes.status})`); return; }
+        const bytes = new Uint8Array(await packRes.arrayBuffer());
+        const sig = (await sigRes.text()).slice(0, 200);
+        const { pack, error } = await EasyApplyAdapterVerify.acceptPackBytes(bytes, sig, opts);
+        if (error) { console.log(`Workday Autofill: adapter pack rejected (${error}); keeping v${current}`); return; }
+        // Never step back to an older signed pack than the one in use.
+        if (pack.version <= current) return;
+        await chrome.storage.local.set({ adapterPack: pack });
+        console.log(`Workday Autofill: adapter pack v${pack.version} stored (was v${current})`);
+    } catch (e) {
+        console.log('Workday Autofill: adapter pack refresh failed', e && e.message);
+    }
+}
+
+async function ensureAdapterAlarm() {
+    if (!(await chrome.alarms.get(ADAPTER_ALARM))) {
+        await chrome.alarms.create(ADAPTER_ALARM, { periodInMinutes: ADAPTER_EVERY_MINUTES });
+    }
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === ADAPTER_ALARM) refreshAdapterPack(); });
+chrome.runtime.onStartup.addListener(refreshAdapterPack);
+chrome.runtime.onInstalled.addListener(refreshAdapterPack);
+ensureAdapterAlarm();

@@ -11,5 +11,8 @@ self.EASYAPPLY_CLOUD_CONFIG = Object.freeze({
     clientId: '43qdd554clva7dugdetl1evlea',
     // Resume Vault bucket (EasyApply-Api.ResumeBucketHost). Asked for only when the vault is used.
     resumeBucketHost: 'easyapply-data-resumesb6263180-1qd2ewprnfb4.s3.us-east-2.amazonaws.com',
-    scopes: ['openid', 'email', 'profile']
+    scopes: ['openid', 'email', 'profile'],
+    // Signed Workday adapter pack (data only; see adapters/ and background.js).
+    // Fetched without a host permission: CloudFront sends Access-Control-Allow-Origin: *.
+    adapterPackUrl: 'https://d3sun3zkns70tc.cloudfront.net/adapters/workday.json'
 });
