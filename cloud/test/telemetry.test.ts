@@ -286,18 +286,18 @@ describe('ApiStack with telemetry', () => {
   const telemetryFn = () =>
     Object.entries(api.findResources('AWS::Lambda::Function')).find(([, f]) => f.Properties.Environment?.Variables?.STREAM_NAME);
 
-  it('runs a small function with reserved concurrency and no table access', () => {
+  it('runs a small function with no reservation by default and no table access', () => {
     const [, fn] = telemetryFn()!;
     expect(fn.Properties.MemorySize).toBe(128);
-    expect(fn.Properties.ReservedConcurrentExecutions).toBe(2);
+    expect(fn.Properties.ReservedConcurrentExecutions).toBeUndefined();
     expect(fn.Properties.Runtime).toBe('nodejs22.x');
     expect(fn.Properties.Environment.Variables.TABLE_NAME).toBeUndefined();
   });
 
-  it('can drop the reservation for accounts at the 10-concurrency quota', () => {
-    const { api: noReserve } = synth({ telemetryConcurrency: 0 });
-    const fn = Object.values(noReserve.findResources('AWS::Lambda::Function')).find((f) => f.Properties.Environment?.Variables?.STREAM_NAME);
-    expect(fn?.Properties.ReservedConcurrentExecutions).toBeUndefined();
+  it('can reserve concurrency once the account quota allows it', () => {
+    const { api: reserved } = synth({ telemetryConcurrency: 2 });
+    const fn = Object.values(reserved.findResources('AWS::Lambda::Function')).find((f) => f.Properties.Environment?.Variables?.STREAM_NAME);
+    expect(fn?.Properties.ReservedConcurrentExecutions).toBe(2);
     expect(() => synth({ telemetryConcurrency: 'lots' })).toThrow(/telemetryConcurrency/);
   });
 

@@ -73,7 +73,7 @@ export function loadConfig(app: App): AppConfig {
   }
 
   const rawConcurrency = app.node.tryGetContext('telemetryConcurrency');
-  const telemetryConcurrency = rawConcurrency === undefined || rawConcurrency === '' ? 2 : Number(rawConcurrency);
+  const telemetryConcurrency = rawConcurrency === undefined || rawConcurrency === '' ? 0 : Number(rawConcurrency);
   if (!Number.isInteger(telemetryConcurrency) || telemetryConcurrency < 0 || telemetryConcurrency > 50) {
     throw new Error(`telemetryConcurrency must be a whole number 0-50, got "${String(rawConcurrency)}"`);
   }
