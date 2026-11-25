@@ -7,6 +7,7 @@ import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import type * as cognito from 'aws-cdk-lib/aws-cognito';
 import type * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import type * as firehose from 'aws-cdk-lib/aws-kinesisfirehose';
 import type * as kms from 'aws-cdk-lib/aws-kms';
 import type * as s3 from 'aws-cdk-lib/aws-s3';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -27,6 +28,11 @@ export interface ApiStackProps extends StackProps {
   readonly clients: cognito.IUserPoolClient[];
   /** Dashboard origins known only at deploy time (the CloudFront URL), allowed by CORS. */
   readonly dashboardOrigins?: string[];
+  /**
+   * Firehose stream from TelemetryStack. When set, adds the UNAUTHENTICATED
+   * POST /telemetry route (F07). Optional so the API can synth without it.
+   */
+  readonly telemetryStream?: firehose.IDeliveryStream;
 }
 
 /** PRIVACY_POLICY.md: service logs are kept for 14 days. */
@@ -155,6 +161,36 @@ export class ApiStack extends Stack {
       new iam.PolicyStatement({ actions: ['s3:DeleteObject'], resources: [resumeBucket.arnForObjects('users/*')] }),
     );
 
+    // Anonymous fill-failure telemetry (F07). Not built with fn(): it gets no
+    // table or key access at all, only PutRecord(Batch) on its own stream.
+    let telemetry: NodejsFunction | undefined;
+    if (props.telemetryStream) {
+      const telemetryLogs = new logs.LogGroup(this, 'TelemetryFnLogs', {
+        retention: LOG_RETENTION,
+        removalPolicy: RemovalPolicy.DESTROY,
+      });
+      telemetry = new NodejsFunction(this, 'TelemetryFn', {
+        entry: path.join(__dirname, '..', 'src', 'functions', 'telemetry', 'handler.ts'),
+        handler: 'handler',
+        runtime: lambda.Runtime.NODEJS_22_X,
+        architecture: lambda.Architecture.ARM_64,
+        memorySize: 128,
+        timeout: Duration.seconds(5),
+        // Caps what a flood of anonymous calls can run up (0 = no reservation).
+        reservedConcurrentExecutions: config.telemetryConcurrency || undefined,
+        tracing: lambda.Tracing.ACTIVE,
+        logGroup: telemetryLogs,
+        loggingFormat: lambda.LoggingFormat.JSON,
+        environment: {
+          STREAM_NAME: props.telemetryStream.deliveryStreamName,
+          POWERTOOLS_SERVICE_NAME: 'TelemetryFn',
+          NODE_OPTIONS: '--enable-source-maps',
+        },
+        bundling: { minify: true, sourceMap: true, target: 'node22' },
+      });
+      props.telemetryStream.grantPutRecords(telemetry);
+    }
+
     // ---------------------------------------------------------------- API
     // CORS is for the web dashboard only. API Gateway rejects chrome-extension://
     // origins, and the extension doesn't need CORS: an MV3 extension may call any
@@ -212,13 +248,33 @@ export class ApiStack extends Stack {
     route(POST, '/ai/match', ai, 'AiMatch');
     route(POST, '/ai/categorise', ai, 'AiCategorise');
 
+    // The one route WITHOUT the JWT authorizer: telemetry must not be linkable to
+    // an account. The body is an allowlist (schema.ts), capped at 8 KB.
+    const telemetryRoutes = telemetry
+      ? this.api.addRoutes({
+          path: '/telemetry',
+          methods: [POST],
+          integration: new HttpLambdaIntegration('TelemetryIntegration', telemetry),
+          authorizer: new apigw.HttpNoneAuthorizer(),
+        })
+      : [];
+
     // Throttling protects the bill; access logs record authorizer decisions (no bodies).
+    // They deliberately hold no source IP or user agent ($context.identity.*), so
+    // the anonymous /telemetry calls can't be tied to a person through them either.
     const accessLogs = new logs.LogGroup(this, 'ApiAccessLogs', {
       retention: LOG_RETENTION,
       removalPolicy: RemovalPolicy.DESTROY,
     });
     const stage = this.api.defaultStage?.node.defaultChild as apigw.CfnStage;
     stage.defaultRouteSettings = { throttlingRateLimit: 20, throttlingBurstLimit: 40 };
+    if (telemetryRoutes.length) {
+      // Tighter limit for the unauthenticated route. The stage may only name a
+      // route key that already exists, hence the dependency. RouteSettings is a
+      // raw JSON map in CloudFormation, so its keys are PascalCase.
+      stage.routeSettings = { 'POST /telemetry': { ThrottlingRateLimit: 5, ThrottlingBurstLimit: 10 } };
+      for (const r of telemetryRoutes) stage.node.addDependency(r);
+    }
     stage.accessLogSettings = {
       destinationArn: accessLogs.logGroupArn,
       format: JSON.stringify({
@@ -258,7 +314,7 @@ export class ApiStack extends Stack {
       return a;
     };
 
-    for (const f of [profiles, applications, account, resumes, ai, answersFn, vault]) {
+    for (const f of [profiles, applications, account, resumes, ai, answersFn, vault, ...(telemetry ? [telemetry] : [])]) {
       alarm(`${f.node.id}Errors`, {
         metric: f.metricErrors({ period: Duration.minutes(5) }),
         threshold: 1,
