@@ -1341,10 +1341,56 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // ---------------------------------------------------------------- anonymous fill-failure reports
+    // Opt-in (default OFF), for guests and signed-in users alike, and never signed
+    // in: cloud-telemetry.js sends no token. What is sent: see #telemetryHelp.
+    const Telemetry = self.EasyApplyTelemetry;
+    const telemetryToggle = document.getElementById('telemetryToggle');
+    const telemetrySent = new Set(); // reports already handled, so each goes out at most once
+
+    if (Telemetry && telemetryToggle) {
+        chrome.storage.local.get('telemetryOptIn').then(({ telemetryOptIn }) => {
+            telemetryToggle.checked = telemetryOptIn === true;
+        });
+        telemetryToggle.addEventListener('change', async () => {
+            if (!telemetryToggle.checked) {
+                await chrome.storage.local.set({ telemetryOptIn: false });
+                flash('Fill-failure reports turned off.', 'var(--text-muted)', 3000);
+                return;
+            }
+            let granted = false;
+            // First thing in the click, so Chrome treats it as a user gesture.
+            try { granted = await Telemetry.requestPermission(); } catch (e) { granted = false; }
+            if (!granted) {
+                telemetryToggle.checked = false;
+                await chrome.storage.local.set({ telemetryOptIn: false });
+                flash('Chrome permission declined. Reports stay off.', 'var(--primary)');
+                return;
+            }
+            await chrome.storage.local.set({ telemetryOptIn: true });
+            flash('Thanks. Anonymous fill-failure reports are on.', 'var(--success)');
+        });
+    }
+
+    async function sendTelemetry(report, pageUrl) {
+        if (!Telemetry || !report) return;
+        const key = `${report.at}|${report.build}|${report.page}`;
+        if (telemetrySent.has(key)) return;
+        telemetrySent.add(key);
+        const { telemetryOptIn } = await chrome.storage.local.get('telemetryOptIn');
+        if (telemetryOptIn !== true) return;
+        const payload = Telemetry.buildPayload(report, { tenant: pageUrl });
+        if (payload) Telemetry.send(payload); // fire and forget
+    }
+
     // Live status from content script (side panel stays open, so we can show this)
-    chrome.runtime.onMessage.addListener((msg) => {
+    chrome.runtime.onMessage.addListener((msg, sender) => {
         if (msg.action === 'fill_complete') {
             if (msg.report) renderFillReport(msg.report);
+            if (msg.report) {
+                const pageUrl = (msg.job && msg.job.url) || (sender && sender.tab && sender.tab.url) || (sender && sender.url) || '';
+                sendTelemetry(msg.report, pageUrl).catch(() => { /* never disturbs the panel */ });
+            }
             // Don't cover a "Tracked … Undo" message from an earlier page of the same form.
             if (!statusCtx.querySelector('button')) flash('Autofill complete ✓', 'var(--success)', 5000);
             if (msg.job) trackApplication(msg.job);
