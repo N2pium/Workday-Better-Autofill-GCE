@@ -1,13 +1,13 @@
 # Privacy Policy
 
-**Effective Date:** on release of version 2.0. Version 1.4 and earlier are covered by the policy dated 2026-08-17.
+**Effective Date:** on release of version 2.0.1 (adds field-mapping updates and optional fill-failure reports; version 2.0 is covered by the policy published with it). Version 1.4 and earlier are covered by the policy dated 2026-08-17.
 
 ## Overview
 This extension ("Workday: Better Autofill") autofills job application forms on supported job portals (Workday and, optionally, Greenhouse and other supported sites).
 
 You can use it in one of two ways:
 
-1. **Local-only mode (the default).** Everything stays in your browser, exactly as in earlier versions. No account, no servers, nothing transmitted to us.
+1. **Local-only mode (the default).** Everything stays in your browser, exactly as in earlier versions. No account, and nothing about you is transmitted to us. (The extension does download field-mapping updates; see below. That download sends nothing about you.)
 2. **Cloud account (optional).** If you choose to sign in, the extension syncs your profile across the devices you sign in on, store resume versions, track your applications in a web dashboard, and offer AI-assisted features. Each cloud feature is described below, along with exactly what it sends.
 
 You can switch back to local-only mode, or delete your cloud account, at any time.
@@ -16,6 +16,19 @@ You can switch back to local-only mode, or delete your cloud account, at any tim
 1. **What is stored**: Only the profile information you type into the extension yourself — name, contact details, address, work history, education, skills, languages, job preferences, an optional resume file, and optional voluntary self-identification answers (gender, race/ethnicity, veteran status, disability status). Job preferences include a single checkbox confirming you are 18 years of age or older; no date of birth or age is stored.
 2. **Where it is stored**: In your browser using the Chrome Storage API (`chrome.storage.local`). It is never synced, uploaded, or backed up by us.
 3. **When it leaves your browser**: Only when **you** click the autofill button, which enters your data into the job application form you are viewing — exactly as if you had typed it yourself.
+
+## Field-mapping updates (every install)
+Job sites change their forms, so the extension downloads an updated list of where fields sit on Workday pages (an "adapter pack": data only, never code). It fetches it from our server at browser start, after installs and updates, and every 6 hours.
+- **What is sent**: an ordinary download request with no cookies and no information from your profile, account or browsing. As with any download, our hosting provider (Amazon CloudFront) sees your IP address in its request handling; we do not log it.
+- **Safety**: an update is used only if its digital signature matches the key built into the extension; otherwise the built-in copy is used.
+
+## Fill-failure reports (optional, off by default)
+If you turn on **Settings → "Send anonymous fill-failure reports"**, the extension sends a short report after an autofill that could not fill something, so we can fix it for everyone. It works with or without an account.
+- **What is sent**: the job site type and its host name (for example `company.wd1.myworkdayjobs.com`), the extension and adapter-pack versions, which of the extension's own fill steps failed or were skipped with a reason code, and the form's internal ID and type for required fields left empty.
+- **What is never sent**: field labels, question text, anything you typed or saved, names, the page address, the job title or company, any self-identification step, your account or any identifier, cookies or tokens.
+- **Not linked to you**: reports are sent without signing in, so they cannot be tied to an account. We do not store your IP address; we store the date (not the time) a report arrived.
+- **Retention**: up to 12 months, then deleted automatically.
+- **Stop**: turn the setting off at any time.
 
 ## Cloud account (optional)
 
@@ -53,6 +66,7 @@ When you use an AI feature — parsing a resume into your profile, drafting an a
 - **Account data** (profiles, resumes, application records, saved answers) is kept until you delete it or delete your account.
 - **Backups** are kept for up to 35 days, after which deleted data is gone from backups as well.
 - **Service logs** (used to detect errors and abuse) are kept for 14 days.
+- **Fill-failure reports** (if you turned them on) are kept for up to 12 months and are not linked to any account.
 
 ## Your choices and rights
 - **See and export your data**: See your applications and synced profile in the dashboard, and your resume versions and saved answers in the extension. Export your profile as a JSON file at any time.
@@ -66,9 +80,10 @@ When you use an AI feature — parsing a resume into your profile, drafting an a
 - **activeTab / scripting** — lets the extension fill the job application form in the tab you are viewing when you click the autofill button.
 - **sidePanel** — displays the extension UI in the browser side panel.
 - **identity** — used only when you choose to sign in, to open the secure sign-in window.
+- **alarms** — schedules the background checks: profile changes from your other devices (only while signed in) and field-mapping updates.
 - **Host permission `*://*.myworkdayjobs.com/*`** — required to autofill Workday application pages.
 - **Optional host permissions for Greenhouse and other supported job sites** — requested **only if you enable that site** in the extension's "Supported Portals" settings. You can revoke them at any time by turning the toggle off or via Chrome's extension settings.
-- **Access to the extension's own service** — used only for the cloud features above, and only when you are signed in.
+- **Access to the extension's own service** — used for the cloud features above while you are signed in, and for fill-failure reports if you turn them on.
 
 The extension runs only on the job portal domains listed above and on its own service, and has no access to any other website.
 

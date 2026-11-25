@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: built
 ---
 # Phase 3 contracts (2026-11-24)
 

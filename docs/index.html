@@ -43,12 +43,12 @@
 <body>
 <main>
 <h1>Privacy Policy</h1>
-<p><strong>Effective Date:</strong> on release of version 2.0. Version 1.4 and earlier are covered by the policy dated 2026-08-17.</p>
+<p><strong>Effective Date:</strong> on release of version 2.0.1 (adds field-mapping updates and optional fill-failure reports; version 2.0 is covered by the policy published with it). Version 1.4 and earlier are covered by the policy dated 2026-08-17.</p>
 <h2>Overview</h2>
 <p>This extension ("Workday: Better Autofill") autofills job application forms on supported job portals (Workday and, optionally, Greenhouse and other supported sites).</p>
 <p>You can use it in one of two ways:</p>
 <ol>
-<li><strong>Local-only mode (the default).</strong> Everything stays in your browser, exactly as in earlier versions. No account, no servers, nothing transmitted to us.</li>
+<li><strong>Local-only mode (the default).</strong> Everything stays in your browser, exactly as in earlier versions. No account, and nothing about you is transmitted to us. (The extension does download field-mapping updates; see below. That download sends nothing about you.)</li>
 <li><strong>Cloud account (optional).</strong> If you choose to sign in, the extension syncs your profile across the devices you sign in on, store resume versions, track your applications in a web dashboard, and offer AI-assisted features. Each cloud feature is described below, along with exactly what it sends.</li>
 </ol>
 <p>You can switch back to local-only mode, or delete your cloud account, at any time.</p>
@@ -58,6 +58,21 @@
 <li><strong>Where it is stored</strong>: In your browser using the Chrome Storage API (<code>chrome.storage.local</code>). It is never synced, uploaded, or backed up by us.</li>
 <li><strong>When it leaves your browser</strong>: Only when <strong>you</strong> click the autofill button, which enters your data into the job application form you are viewing — exactly as if you had typed it yourself.</li>
 </ol>
+<h2>Field-mapping updates (every install)</h2>
+<p>Job sites change their forms, so the extension downloads an updated list of where fields sit on Workday pages (an "adapter pack": data only, never code). It fetches it from our server at browser start, after installs and updates, and every 6 hours.</p>
+<ul>
+<li><strong>What is sent</strong>: an ordinary download request with no cookies and no information from your profile, account or browsing. As with any download, our hosting provider (Amazon CloudFront) sees your IP address in its request handling; we do not log it.</li>
+<li><strong>Safety</strong>: an update is used only if its digital signature matches the key built into the extension; otherwise the built-in copy is used.</li>
+</ul>
+<h2>Fill-failure reports (optional, off by default)</h2>
+<p>If you turn on <strong>Settings → "Send anonymous fill-failure reports"</strong>, the extension sends a short report after an autofill that could not fill something, so we can fix it for everyone. It works with or without an account.</p>
+<ul>
+<li><strong>What is sent</strong>: the job site type and its host name (for example <code>company.wd1.myworkdayjobs.com</code>), the extension and adapter-pack versions, which of the extension's own fill steps failed or were skipped with a reason code, and the form's internal ID and type for required fields left empty.</li>
+<li><strong>What is never sent</strong>: field labels, question text, anything you typed or saved, names, the page address, the job title or company, any self-identification step, your account or any identifier, cookies or tokens.</li>
+<li><strong>Not linked to you</strong>: reports are sent without signing in, so they cannot be tied to an account. We do not store your IP address; we store the date (not the time) a report arrived.</li>
+<li><strong>Retention</strong>: up to 12 months, then deleted automatically.</li>
+<li><strong>Stop</strong>: turn the setting off at any time.</li>
+</ul>
 <h2>Cloud account (optional)</h2>
 <h3>Signing in</h3>
 <p>You sign in through Amazon Cognito, our sign-in provider, either with your email address and a password or with your Google account. With email, Cognito stores your email address and a protected (hashed) form of your password; we never see the password. With Google, we receive your <strong>email address, name, and a Google account identifier</strong>, and never see your Google password. If you use both with the same verified email address, they are joined into one account.</p>
@@ -96,6 +111,7 @@
 <li><strong>Account data</strong> (profiles, resumes, application records, saved answers) is kept until you delete it or delete your account.</li>
 <li><strong>Backups</strong> are kept for up to 35 days, after which deleted data is gone from backups as well.</li>
 <li><strong>Service logs</strong> (used to detect errors and abuse) are kept for 14 days.</li>
+<li><strong>Fill-failure reports</strong> (if you turned them on) are kept for up to 12 months and are not linked to any account.</li>
 </ul>
 <h2>Your choices and rights</h2>
 <ul>
@@ -111,9 +127,10 @@
 <li><strong>activeTab / scripting</strong> — lets the extension fill the job application form in the tab you are viewing when you click the autofill button.</li>
 <li><strong>sidePanel</strong> — displays the extension UI in the browser side panel.</li>
 <li><strong>identity</strong> — used only when you choose to sign in, to open the secure sign-in window.</li>
+<li><strong>alarms</strong> — schedules the background checks: profile changes from your other devices (only while signed in) and field-mapping updates.</li>
 <li><strong>Host permission <code>*://*.myworkdayjobs.com/*</code></strong> — required to autofill Workday application pages.</li>
 <li><strong>Optional host permissions for Greenhouse and other supported job sites</strong> — requested <strong>only if you enable that site</strong> in the extension's "Supported Portals" settings. You can revoke them at any time by turning the toggle off or via Chrome's extension settings.</li>
-<li><strong>Access to the extension's own service</strong> — used only for the cloud features above, and only when you are signed in.</li>
+<li><strong>Access to the extension's own service</strong> — used for the cloud features above while you are signed in, and for fill-failure reports if you turn them on.</li>
 </ul>
 <p>The extension runs only on the job portal domains listed above and on its own service, and has no access to any other website.</p>
 <h2>Service providers</h2>
