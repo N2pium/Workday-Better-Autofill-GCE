@@ -11,9 +11,10 @@ Everything Regional is in **us-east-2** (fixed in `lib/config.ts`).
 |---|---|---|
 | `EasyApply-Data` | KMS key, DynamoDB single table | Termination protection, `RETAIN`, PITR 35 days |
 | `EasyApply-Auth` | Cognito user pool, managed login, extension + dashboard clients, optional Google | Public PKCE clients, no secrets |
-| `EasyApply-Web` | Private S3 bucket + CloudFront (OAC, strict CSP) for the dashboard | No WAF yet (fixed monthly cost) |
+| `EasyApply-Web` | Private S3 buckets + CloudFront (OAC, strict CSP) for the dashboard, and `/adapters/*` (separate bucket, CORS `*`, 5 min cache) for adapter packs | No WAF yet (fixed monthly cost) |
 | `EasyApply-Api` | HTTP API (JWT on every route), 4 Lambdas, access logs, alarms → SNS topic | 20 req/s, burst 40; logs 14 days |
 | `EasyApply-WebContent` | Uploads `../dashboard/` + generated `config.json`, invalidates CloudFront | Deploy order: Web → Auth → Api → WebContent |
+| `EasyApply-Adapters` | Uploads `../adapters/dist/` (signed packs) to the adapter bucket, invalidates `/adapters/*` | Depends only on Web. Pack fix: `npx cdk deploy EasyApply-Adapters --exclusively`. Skipped at synth while `adapters/dist/` is missing |
 
 ## API (all routes need `Authorization: <Cognito access token>`)
 

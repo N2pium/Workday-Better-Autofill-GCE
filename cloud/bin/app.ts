@@ -1,5 +1,7 @@
 #!/usr/bin/env node
+import * as fs from 'node:fs';
 import { App, Tags } from 'aws-cdk-lib';
+import { ADAPTER_DIST, AdapterContentStack } from '../lib/adapter-content-stack';
 import { ApiStack } from '../lib/api-stack';
 import { AuthStack } from '../lib/auth-stack';
 import { loadConfig, REGION } from '../lib/config';
@@ -34,5 +36,16 @@ new WebContentStack(app, 'EasyApply-WebContent', {
   authDomain: auth.loginDomain,
   clientId: auth.dashboardClient.userPoolClientId,
 });
+
+// Adapter packs: depends only on EasyApply-Web. adapters/dist/ is produced and
+// committed by tools/build-adapter-pack.mjs; until it exists there is nothing
+// to upload, so the stack is left out rather than failing every synth.
+if (fs.existsSync(ADAPTER_DIST)) {
+  new AdapterContentStack(app, 'EasyApply-Adapters', {
+    env, bucket: web.adapterBucket, distribution: web.distribution,
+  });
+} else {
+  console.warn(`EasyApply-Adapters skipped: ${ADAPTER_DIST} does not exist (run node tools/build-adapter-pack.mjs).`);
+}
 
 Tags.of(app).add('project', 'easyapply');
