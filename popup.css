@@ -18,6 +18,29 @@
   /* One step lighter than --card-bg, for surfaces that sit on top of a card. */
   --surface-raised: #35312d;
 
+  /* Two tints that were loose literals in hover rules; now named. */
+  --primary-light: #e2b98d;
+  --border-strong: #4a443f;
+
+  /* Shape: two radii. Controls are nearly square, containers a touch softer. */
+  --radius-s: 3px;
+  --radius-m: 6px;
+
+  /* Motion: two durations and one curve for every transition in the panel. */
+  --dur-fast: 90ms;
+  --dur-base: 160ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* Pixel gradients: ordered 4x4 Bayer dither tiles, drawn only in palette
+     colours. One SVG unit is one cell; background-size makes a cell 2 CSS px
+     (1 px in the progress bar) so the pattern stays on whole pixels. */
+  --dither-amber-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='8' viewBox='0 0 4 8' shape-rendering='crispEdges'%3E%3Cpath fill='%23d4a574' d='M0 0h1v1h-1zM2 0h1v1h-1zM1 1h1v1h-1zM0 2h1v1h-1zM2 2h1v1h-1zM0 4h1v1h-1zM2 4h1v1h-1zM2 6h1v1h-1z'/%3E%3C/svg%3E");
+  --dither-raised-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='8' viewBox='0 0 4 8' shape-rendering='crispEdges'%3E%3Cpath fill='%2335312d' d='M0 0h1v1h-1zM1 0h1v1h-1zM2 0h1v1h-1zM3 0h1v1h-1zM0 1h1v1h-1zM1 1h1v1h-1zM3 1h1v1h-1zM0 2h1v1h-1zM1 2h1v1h-1zM2 2h1v1h-1zM3 2h1v1h-1zM1 3h1v1h-1zM3 3h1v1h-1zM0 4h1v1h-1zM2 4h1v1h-1zM1 5h1v1h-1zM0 6h1v1h-1zM2 6h1v1h-1z'/%3E%3C/svg%3E");
+  --dither-amber-edge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='4' viewBox='0 0 8 4' shape-rendering='crispEdges'%3E%3Cpath fill='%23d4a574' d='M0 0h1v1h-1zM1 0h1v1h-1zM2 0h1v1h-1zM4 0h1v1h-1zM6 0h1v1h-1zM1 1h1v1h-1zM3 1h1v1h-1zM5 1h1v1h-1zM0 2h1v1h-1zM2 2h1v1h-1zM4 2h1v1h-1zM6 2h1v1h-1zM1 3h1v1h-1zM3 3h1v1h-1z'/%3E%3C/svg%3E");
+  --dither-amber-bar: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='4' viewBox='0 0 16 4' shape-rendering='crispEdges'%3E%3Cpath fill='%23d4a574' d='M0 0h1v1h-1zM2 0h1v1h-1zM4 0h1v1h-1zM5 0h1v1h-1zM6 0h1v1h-1zM7 0h1v1h-1zM8 0h1v1h-1zM9 0h1v1h-1zM10 0h1v1h-1zM12 0h1v1h-1zM14 0h1v1h-1zM3 1h1v1h-1zM5 1h1v1h-1zM7 1h1v1h-1zM8 1h1v1h-1zM9 1h1v1h-1zM11 1h1v1h-1zM13 1h1v1h-1zM2 2h1v1h-1zM4 2h1v1h-1zM6 2h1v1h-1zM7 2h1v1h-1zM8 2h1v1h-1zM9 2h1v1h-1zM10 2h1v1h-1zM12 2h1v1h-1zM14 2h1v1h-1zM3 3h1v1h-1zM5 3h1v1h-1zM7 3h1v1h-1zM9 3h1v1h-1zM11 3h1v1h-1z'/%3E%3C/svg%3E");
+  --dither-amber-half: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath fill='%23d4a574' d='M0 0h1v1h-1zM2 0h1v1h-1zM1 1h1v1h-1zM3 1h1v1h-1zM0 2h1v1h-1zM2 2h1v1h-1zM1 3h1v1h-1zM3 3h1v1h-1z'/%3E%3C/svg%3E");
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.75 6 6.25 11 1.75' fill='none' stroke='%23a29790' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
   /* Monospace carries the section headers and ordinals. It gives the panel an
      archival, form-like character without a webfont — PRIVACY_POLICY.md
      promises zero third-party network calls, so remote faces are not available. */
@@ -96,21 +119,21 @@ h1 {
   background: var(--primary);
   color: var(--on-primary);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-s);
   font-family: var(--mono);
   font-weight: 600;
   font-size: var(--step--1);
   cursor: pointer;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  transition: background-color 0.18s ease, transform 0.08s ease;
+  transition: background-color var(--dur-base) var(--ease), transform var(--dur-fast) var(--ease);
 }
 
 /* No glow. The button is the brightest thing in the panel already; a halo on
    top of that is decoration standing in for hierarchy. */
 @media (hover: hover) {
   .autofill-btn:hover {
-    background: #e2b98d;
+    background: var(--primary-light);
   }
 }
 
@@ -148,7 +171,7 @@ h2 {
   color: var(--text-muted);
   cursor: pointer;
   user-select: none;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition: color var(--dur-base) var(--ease), border-color var(--dur-base) var(--ease);
 }
 
 /* The signature: an amber ordinal per section. Amber appears in exactly three
@@ -169,7 +192,7 @@ h2::after {
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: translateY(-2px) rotate(45deg);
-  transition: transform 0.2s ease;
+  transition: transform var(--dur-base) var(--ease);
 }
 
 @media (hover: hover) {
@@ -210,7 +233,7 @@ label {
   display: block;
   margin-bottom: var(--space-2xs);
   font-weight: 500;
-  /* Was #cbd5e1 — a cold slate blue in an entirely warm palette. */
+  /* Muted clay, not the cold slate grey it used to be. */
   color: var(--text-muted);
   font-size: var(--step--1);
   letter-spacing: 0.01em;
@@ -223,12 +246,12 @@ select {
   padding: 9px 10px;
   background-color: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-s);
   color: var(--text);
   font-family: inherit;
   font-size: var(--step-0);
   box-sizing: border-box;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color var(--dur-base) var(--ease), background-color var(--dur-base) var(--ease);
 }
 
 @media (hover: hover) {
@@ -236,7 +259,7 @@ select {
   input:hover,
   textarea:hover,
   select:hover {
-    border-color: #4a443f;
+    border-color: var(--border-strong);
   }
 }
 
@@ -245,7 +268,7 @@ textarea:focus,
 select:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--ring);
+  box-shadow: 0 0 0 1px var(--accent);
   background-color: var(--surface-raised);
 }
 
@@ -259,7 +282,7 @@ textarea {
 select {
   appearance: none;
   padding-right: 30px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.75 6 6.25 11 1.75' fill='none' stroke='%23a29790' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: var(--chevron);
   background-repeat: no-repeat;
   background-position: right 11px center;
   background-size: 10px;
@@ -297,14 +320,14 @@ input[type="file"]::file-selector-button {
   padding: 5px 11px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: var(--radius-s);
   color: var(--text);
   font-family: var(--mono);
   font-size: var(--step--2);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color var(--dur-base) var(--ease), color var(--dur-base) var(--ease);
 }
 
 @media (hover: hover) {
@@ -317,9 +340,9 @@ input[type="file"]::file-selector-button {
 /* ---- Cards -------------------------------------------------------------- */
 
 .card {
-  background-color: rgba(255, 255, 255, 0.025);
+  background-color: transparent;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-m);
   padding: var(--space-s);
   margin-bottom: var(--space-xs);
 }
@@ -370,13 +393,13 @@ input[type="file"]::file-selector-button {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-muted);
-  border-radius: 3px;
+  border-radius: var(--radius-s);
   padding: 3px 7px;
   cursor: pointer;
   font-family: var(--mono);
   font-size: var(--step--2);
   letter-spacing: 0.06em;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition: color var(--dur-base) var(--ease), border-color var(--dur-base) var(--ease);
 }
 
 /* Destructive intent should surface on approach, not sit red permanently —
@@ -394,13 +417,13 @@ input[type="file"]::file-selector-button {
   background: transparent;
   border: 1px dashed var(--border);
   color: var(--text-muted);
-  border-radius: 4px;
+  border-radius: var(--radius-s);
   cursor: pointer;
   font-family: var(--mono);
   font-size: var(--step--2);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color var(--dur-base) var(--ease), color var(--dur-base) var(--ease);
 }
 
 @media (hover: hover) {
@@ -453,8 +476,8 @@ input[type="checkbox"] {
   margin-top: var(--space-2xs);
 }
 
-/* Separates the master toggle from the individual preferences above it. Was an
-   inline #f3f4f6 — a near-white line on a near-black panel. */
+/* Separates the master toggle from the individual preferences above it. It
+   used to be an inline near-white line on a near-black panel. */
 .divider-above {
   margin-top: var(--space-s);
   padding-top: var(--space-s);
@@ -474,11 +497,11 @@ input[type="checkbox"] {
   gap: 10px;
   padding: var(--space-s);
   margin-bottom: var(--space-s);
-  background-color: rgba(255, 255, 255, 0.025);
+  background-color: transparent;
   border: 1px solid var(--border);
   border-left: 2px solid var(--primary);
-  border-radius: 0 6px 6px 0;
-  transition: border-color 0.18s ease, background-color 0.18s ease;
+  border-radius: 0 var(--radius-m) var(--radius-m) 0;
+  transition: border-color var(--dur-base) var(--ease), background-color var(--dur-base) var(--ease);
 }
 
 @media (hover: hover) {
@@ -515,12 +538,12 @@ input[type="checkbox"] {
 
 .attestation:has(input:checked) {
   border-left-color: var(--success);
-  background-color: rgba(107, 158, 122, 0.07);
+  background-color: color-mix(in srgb, var(--success) 7%, transparent);
 }
 
 .attestation:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--ring);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 /* ---- Footer ------------------------------------------------------------- */
@@ -539,19 +562,19 @@ input[type="checkbox"] {
   background-color: var(--primary);
   color: var(--on-primary);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-s);
   font-family: var(--mono);
   font-weight: 600;
   font-size: var(--step--1);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background-color 0.18s ease, transform 0.08s ease;
+  transition: background-color var(--dur-base) var(--ease), transform var(--dur-fast) var(--ease);
 }
 
 @media (hover: hover) {
   #saveBtn:hover {
-    background-color: #e2b98d;
+    background-color: var(--primary-light);
   }
 }
 
@@ -567,14 +590,14 @@ input[type="checkbox"] {
   margin-bottom: var(--space-xs);
   background-color: transparent;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-s);
   color: var(--text-muted);
   font-family: var(--mono);
   font-size: var(--step--2);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition: color var(--dur-base) var(--ease), border-color var(--dur-base) var(--ease);
 }
 
 @media (hover: hover) {
@@ -605,7 +628,7 @@ input[type="checkbox"] {
   padding: var(--space-s) var(--space-m);
   background-color: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-s);
 }
 
 .blank-summary-lead {
@@ -660,19 +683,21 @@ button:focus:not(:focus-visible) {
 ::-webkit-scrollbar-thumb {
   background: var(--border);
   border: 3px solid var(--bg);
-  border-radius: 5px;
+  border-radius: var(--radius-s);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4a443f;
+  background: var(--border-strong);
 }
 
+/* Transitions collapse; each animation states its own reduced-motion form in
+   "Feedback" at the end of this file, because the success pulse must still
+   show (as a held colour) rather than vanish. */
 @media (prefers-reduced-motion: reduce) {
 
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
 }
@@ -749,7 +774,12 @@ body.show-welcome .container { display: none; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-s) var(--space-m);
+  padding: var(--space-s) var(--space-m) calc(var(--space-s) + 12px);
+  background:
+    var(--dither-raised-down) 0 100% / 8px 16px repeat-x,
+    linear-gradient(var(--surface-raised), var(--surface-raised)) 0 0 / 100% calc(100% - 16px) no-repeat,
+    var(--bg);
+  image-rendering: pixelated;
 }
 
 .brand {
@@ -766,7 +796,7 @@ body.show-welcome .container { display: none; }
   width: 8px;
   height: 8px;
   margin-right: var(--space-xs);
-  border-radius: 2px;
+  border-radius: 0;
   background: var(--primary);
   vertical-align: 1px;
 }
@@ -776,7 +806,7 @@ body.show-welcome .container { display: none; }
   font-size: var(--step--2);
   letter-spacing: 0.06em;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-s);
   border: 1px solid var(--border);
   color: var(--text-muted);
 }
@@ -813,7 +843,7 @@ body.show-welcome .container { display: none; }
 .job-card {
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-m);
   padding: var(--space-m);
 }
 
@@ -853,15 +883,24 @@ body.show-welcome .container { display: none; }
   cursor: pointer;
 }
 .link-btn::after { content: ' →'; }
-.link-btn:hover { color: #e2b98d; }
+.link-btn:hover { color: var(--primary-light); }
 
 /* ---- Home: the job on this page ------------------------------------------ */
 
 .job-card {
   border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
-  background:
-    linear-gradient(160deg, color-mix(in srgb, var(--primary) 9%, transparent), transparent 60%),
-    var(--card-bg);
+  background: var(--card-bg);
+}
+/* A 16 px dithered amber band that lives in the card's top padding, so it
+   never sits behind text. It replaced a smooth 9 % amber wash. */
+.job-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 16px;
+  background: var(--dither-amber-down) 0 0 / 8px 16px repeat-x;
+  image-rendering: pixelated;
+  pointer-events: none;
 }
 .job-company {
   margin: var(--space-xs) 0 0;
@@ -893,7 +932,7 @@ body.show-welcome .container { display: none; }
 .app-item {
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-m);
   padding: var(--space-s);
   display: grid;
   grid-template-columns: 1fr auto;
@@ -957,7 +996,7 @@ body.show-welcome .container { display: none; }
 .resume-import .helper { margin: 0; }
 .resume-import.busy .autofill-btn { opacity: 0.7; cursor: progress; }
 .import-status:empty { display: none; }
-.resume-import.highlight { border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
+.resume-import.highlight { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
 
 /* ---- Toast + tab bar ----------------------------------------------------- */
 
@@ -1009,7 +1048,7 @@ body.show-welcome .container { display: none; }
 }
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--primary); border-top-color: var(--primary); }
-.tab:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* ---------------------------------------------------------------- fill report */
 .report-list { list-style: none; margin: var(--space-xs) 0 0; padding: 0; font-size: var(--step--1); }
@@ -1029,7 +1068,7 @@ body.show-welcome .container { display: none; }
   background: transparent;
   color: var(--primary);
   border: 1px solid var(--primary);
-  border-radius: 4px;
+  border-radius: var(--radius-s);
   font-family: var(--mono);
   font-weight: 600;
   font-size: var(--step--1);
@@ -1039,7 +1078,7 @@ body.show-welcome .container { display: none; }
 }
 .secondary-btn:hover { background: var(--ring); }
 .secondary-btn:disabled { opacity: 0.55; cursor: wait; }
-.secondary-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.secondary-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .count-badge { font-family: var(--mono); font-size: var(--step--2); color: var(--text-muted); }
 .kicker.small { margin-top: var(--space-xs); font-size: 0.625rem; }
@@ -1057,7 +1096,122 @@ body.show-welcome .container { display: none; }
 .answer-item .answer-text { white-space: pre-wrap; font-size: var(--step--1); margin: 4px 0; }
 .answer-item textarea {
   width: 100%; min-height: 110px; margin: 4px 0; padding: 6px; resize: vertical;
-  background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-s);
   font: inherit; font-size: var(--step--1);
 }
 .answer-item select { max-width: 100%; }
+
+/* ========================================================================
+   Feedback: pressed, busy, done, and staged focus
+   One vocabulary for the whole panel. A press answers within --dur-fast. Any
+   action that can take longer than the 400 ms Doherty threshold shows a
+   dithered progress bar right away (.is-busy, set by setBusy in popup.js).
+   A finished action gets exactly one --success pulse (.pulse, set by pulse()).
+   ======================================================================== */
+
+/* Pressed: every solid button sinks 1 px on press, with no colour change, so
+   the press reads at once even when the action behind it is slow. */
+.autofill-btn,
+#saveBtn,
+.secondary-btn,
+.add-btn,
+.danger-btn {
+  transition: background-color var(--dur-base) var(--ease), border-color var(--dur-base) var(--ease),
+    color var(--dur-base) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.secondary-btn:active,
+.add-btn:active,
+.danger-btn:active {
+  transform: translateY(1px);
+}
+.autofill-btn[aria-busy="true"] {
+  cursor: progress;
+}
+
+/* Busy: a 4 px indeterminate dither bar along the bottom edge of the card. */
+.panel-card,
+.job-card {
+  position: relative;
+  overflow: hidden;
+}
+.is-busy::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: var(--dither-amber-bar) 0 0 / 16px 4px repeat-x;
+  image-rendering: pixelated;
+  animation: dither-run 640ms steps(8, end) infinite;
+  pointer-events: none;
+}
+/* Stepped, not smooth: the wave moves 2 px a frame, like the pixels it is made of. */
+@keyframes dither-run {
+  to { background-position: 16px 0; }
+}
+
+/* Done: a single ring that leaves and fades. It is drawn with a hard spread
+   and no blur, so it is a ring, not a glow. */
+.pulse {
+  animation: pulse-ring 420ms var(--ease) 1;
+}
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 85%, transparent); }
+  100% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--success) 0%, transparent); }
+}
+.chip.pulse {
+  animation-name: pulse-ring-tight;
+}
+@keyframes pulse-ring-tight {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 85%, transparent); }
+  100% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 0%, transparent); }
+}
+
+/* Staged focus: the section, card or entry you are typing in stays at full
+   strength and gets a dithered amber edge in the margin. Its siblings step
+   back. They stay readable and clickable, and everything returns as soon as
+   focus leaves. Only fields stage the panel: clicking a button does not. */
+.tab-panel > *,
+.tab-panel section,
+.tab-panel .card {
+  transition: opacity var(--dur-base) var(--ease);
+}
+.tab-panel section {
+  position: relative;
+}
+.tab-panel section:has(:is(input:not([type="checkbox"], [type="radio"], [type="file"]), select, textarea):focus)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--space-m) * -1);
+  width: 16px;
+  background: var(--dither-amber-edge) 0 0 / 16px 8px repeat-y;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.tab-panel:has(section :is(input:not([type="checkbox"], [type="radio"], [type="file"]), select, textarea):focus) section:not(:has(:is(input:not([type="checkbox"], [type="radio"], [type="file"]), select, textarea):focus)),
+.tab-panel:has(section :is(input:not([type="checkbox"], [type="radio"], [type="file"]), select, textarea):focus) > .panel-card,
+.tab-panel:has(> .panel-card :is(input:not([type="checkbox"], [type="radio"], [type="file"]), select, textarea):focus) > :not(:has(:is(input:not([type="checkbox"], [type="radio"], [type="file"]), select, textarea):focus)),
+section:has(.card :is(input:not([type="checkbox"], [type="radio"], [type="file"]), select, textarea):focus) .card:not(:has(:is(input:not([type="checkbox"], [type="radio"], [type="file"]), select, textarea):focus)),
+.tab-panel:has(> .is-busy) > :not(.is-busy) {
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The bar stops moving and becomes a steady 50 % checker. */
+  .is-busy::after {
+    animation: none;
+    background-image: var(--dither-amber-half);
+    background-size: 4px 4px;
+  }
+  /* The pulse becomes a held success outline for 1.5 s. */
+  .pulse,
+  .chip.pulse {
+    animation: pulse-hold 1.5s steps(1, end) 1;
+  }
+  @keyframes pulse-hold {
+    0%, 100% { box-shadow: 0 0 0 2px var(--success); }
+  }
+}

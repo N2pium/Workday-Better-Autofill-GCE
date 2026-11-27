@@ -407,6 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 statusCtx.textContent = 'Profile saved!';
                 statusCtx.style.color = 'var(--success)';
+                pulse(document.getElementById('saveBtn'));
                 if (resumeFile) document.getElementById('resumeStatus').textContent = `Stored: ${resumeFile.name}`;
                 refreshBlankHints();
                 profileDirty = false;
@@ -463,9 +464,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Autofill Trigger
+    // Busy from the click until fill_complete. A step can legitimately take a
+    // while; the cap only stops a lost message from leaving the bar running.
+    const jobCard = document.querySelector('.job-card');
+    let fillBusyTimer = null;
+    function setFillBusy(on) {
+        clearTimeout(fillBusyTimer);
+        setBusy(jobCard, on);
+        autofillBtn.setAttribute('aria-busy', on ? 'true' : 'false');
+        if (on) fillBusyTimer = setTimeout(() => setFillBusy(false), 90000);
+    }
+
     autofillBtn.addEventListener('click', () => {
+        setFillBusy(true);
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (tabs.length === 0) return;
+            if (tabs.length === 0) { setFillBusy(false); return; }
 
             const activeTab = tabs[0];
             // Known portal hosts. We still attempt the message on unknown URLs
@@ -481,6 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         ? 'Error: Refresh the page and try again.'
                         : 'Not a supported job page (Workday / Greenhouse).';
                     statusCtx.style.color = 'var(--danger)';
+                    setFillBusy(false);
                 } else {
                     console.log("Message sent", response);
                     statusCtx.textContent = "Autofill running...";
@@ -546,6 +560,22 @@ document.addEventListener('DOMContentLoaded', () => {
         guestBtn: document.getElementById('welcomeGuestBtn'),
         status: document.getElementById('welcomeStatus')
     };
+
+    // Feedback primitives (popup.css "Feedback"). setBusy shows progress at once,
+    // so a slow action never sits silent past the 400 ms Doherty threshold.
+    // pulse() confirms a finished action and is never fired on the click itself.
+    function setBusy(node, on) {
+        if (!node) return;
+        node.classList.toggle('is-busy', on);
+        node.setAttribute('aria-busy', on ? 'true' : 'false');
+    }
+    function pulse(node) {
+        if (!node) return;
+        node.classList.remove('pulse');
+        void node.offsetWidth; // restart the animation if it is already playing
+        node.classList.add('pulse');
+        node.addEventListener('animationend', () => node.classList.remove('pulse'), { once: true });
+    }
 
     function flash(text, color, ms = 4000) {
         statusCtx.textContent = text;
@@ -1015,6 +1045,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (file.size > 3 * 1024 * 1024) { importUi.status.textContent = 'That file is over 3 MB. Export a smaller PDF and try again.'; return; }
 
         importUi.card.classList.add('busy');
+        setBusy(importUi.card, true);
         importUi.card.classList.remove('highlight');
         importUi.btn.disabled = true;
         importUi.status.textContent = 'Reading your resume… this takes about 10 seconds.';
@@ -1032,9 +1063,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 `Found ${plural(n(profile.workExperience), 'job')}, ${plural(n(profile.education), 'school')} and ` +
                 `${plural(n(profile.skills), 'skill')}. Check the details below, then press Save profile.`;
             flash('Profile filled from your resume. Review it, then Save.', 'var(--success)', 7000);
+            setBusy(importUi.card, false);
+            pulse(importUi.card);
         } catch (e) {
             importUi.status.textContent = e.notSignedIn ? e.message : `Couldn't read that resume: ${e.message}`;
         } finally {
+            setBusy(importUi.card, false);
             importUi.card.classList.remove('busy');
             importUi.btn.disabled = false;
         }
@@ -1075,6 +1109,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     matchUi.btn.addEventListener('click', async () => {
         matchUi.btn.disabled = true;
+        const matchCard = document.getElementById('matchCard');
+        setBusy(matchCard, true);
         matchUi.help.textContent = 'Comparing your profile with this job…';
         try {
             const job = await jobOnActiveTab();
@@ -1093,9 +1129,12 @@ document.addEventListener('DOMContentLoaded', () => {
             matchUi.gaps.replaceChildren(...(r.gaps.length ? r.gaps : ['None spotted']).map((s) => el('li', '', s)));
             matchUi.result.hidden = false;
             matchUi.help.textContent = [job.role, job.company].filter(Boolean).join(' · ') || MATCH_HELP;
+            setBusy(matchCard, false);
+            pulse(matchCard);
         } catch (e) {
             matchUi.help.textContent = e.notSignedIn ? e.message : e.status === 429 ? e.message : `Couldn't score this job: ${e.message}`;
         } finally {
+            setBusy(matchCard, false);
             matchUi.btn.disabled = false;
         }
     });
@@ -1277,13 +1316,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ---------------------------------------------------------------- top bar + start
+    let chipWasPending = false;
     async function renderChip() {
         const chip = document.getElementById('syncChip');
         if (!signedInNow) { chip.hidden = true; return; }
         const s = await CloudSync.state();
         chip.hidden = false;
-        chip.className = `chip ${s.enabled && !s.pending ? 'ok' : 'warn'}`;
-        chip.textContent = s.enabled && !s.pending ? '● Synced' : '● Sync pending';
+        const ok = s.enabled && !s.pending;
+        chip.className = `chip ${ok ? 'ok' : 'warn'}`;
+        chip.textContent = ok ? '● Synced' : '● Sync pending';
+        if (ok && chipWasPending) pulse(chip); // a sync just finished
+        chipWasPending = !ok;
     }
 
     // Called by renderCloud() whenever the account state may have changed.
@@ -1386,6 +1429,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Live status from content script (side panel stays open, so we can show this)
     chrome.runtime.onMessage.addListener((msg, sender) => {
         if (msg.action === 'fill_complete') {
+            setFillBusy(false);
+            pulse(jobCard);
             if (msg.report) renderFillReport(msg.report);
             if (msg.report) {
                 const pageUrl = (msg.job && msg.job.url) || (sender && sender.tab && sender.tab.url) || (sender && sender.url) || '';

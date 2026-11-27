@@ -161,33 +161,76 @@
     // ------------------------------------------------------------ UI
 
     const CSS_TEXT = `
-      :host { all: initial; }
+      :host { all: initial;
+        /* Same tokens as popup.css. The page cannot see into this closed root. */
+        --primary: #d4a574; --primary-hover: #bf9156; --on-primary: #1a1612;
+        --bg: #1a1612; --card-bg: #2d2a27; --surface-raised: #35312d;
+        --text: #f5f1ed; --text-muted: #a29790; --border: #3a3531;
+        --accent: #a8b5a0; --success: #6b9e7a; --danger: #e67873;
+        --radius-s: 3px; --radius-m: 6px;
+        --dur-fast: 90ms; --dur-base: 160ms; --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+        --dither-amber-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='8' viewBox='0 0 4 8' shape-rendering='crispEdges'%3E%3Cpath fill='%23d4a574' d='M0 0h1v1h-1zM2 0h1v1h-1zM1 1h1v1h-1zM0 2h1v1h-1zM2 2h1v1h-1zM0 4h1v1h-1zM2 4h1v1h-1zM2 6h1v1h-1z'/%3E%3C/svg%3E");
+        --mono: ui-monospace, Consolas, monospace; }
       * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
-      .btn { font-size: 12px; font-weight: 600; border-radius: 6px; padding: 4px 10px; cursor: pointer;
-        border: 1px solid #3a3531; background: #2d2a27; color: #f5f1ed; line-height: 1.4; }
-      .btn:hover { background: #35312d; }
-      .btn.primary { background: #d4a574; border-color: #d4a574; color: #1a1612; }
-      .btn.primary:hover { background: #bf9156; }
+      .btn { position: relative; font-size: 12px; font-weight: 600; border-radius: var(--radius-s); padding: 4px 10px; cursor: pointer;
+        border: 1px solid var(--border); background: var(--card-bg); color: var(--text); line-height: 1.4;
+        transition: background-color var(--dur-base) var(--ease), transform var(--dur-fast) var(--ease); }
+      .btn:hover { background: var(--surface-raised); }
+      .btn:active { transform: translateY(1px); }
+      .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+      .btn.primary:hover { background: var(--primary-hover); }
       .btn:disabled { opacity: .55; cursor: wait; }
-      .btn:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid rgba(212,165,116,.5); outline-offset: 1px; }
-      .trigger { margin: 6px 0; }
-      .panel { margin: 6px 0 12px; padding: 12px; border-radius: 10px; background: #1a1612; color: #f5f1ed;
-        border: 1px solid #3a3531; font-size: 13px; line-height: 1.45; max-width: 720px; }
+      .btn.is-busy { opacity: 1; cursor: progress; }
+      .btn:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+      /* The trigger sits on the job site's own (light) page, so it is an outline,
+         not a fill: a crisp 1 px amber edge plus an amber glow on a pseudo-element.
+         Only the glow's opacity ever changes, so the page layout never moves. */
+      .trigger { margin: 8px 0; background: transparent; color: var(--on-primary); border-color: transparent;
+        box-shadow: 0 0 0 1px var(--primary-hover); }
+      .trigger:hover { background: transparent; }
+      .trigger:focus-visible { outline: 2px solid var(--on-primary); outline-offset: 3px; }
+      .trigger::after, .trigger::before { content: ''; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; }
+      .trigger::after { box-shadow: 0 0 8px 2px color-mix(in srgb, var(--primary) 80%, transparent); opacity: .7;
+        transition: opacity var(--dur-base) var(--ease); }
+      .trigger:hover::after, .trigger:focus-visible::after, .trigger.is-near::after { opacity: 1; }
+      .trigger.is-busy::after { animation: breathe 1.6s ease-in-out infinite alternate; }
+      @keyframes breathe { from { opacity: .3; } to { opacity: 1; } }
+      .trigger.pulse::before { animation: pulse-ring 420ms var(--ease) 1; }
+      @keyframes pulse-ring {
+        0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 85%, transparent); }
+        100% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--success) 0%, transparent); }
+      }
+
+      .panel { position: relative; margin: 6px 0 12px; padding: 16px 12px 12px; border-radius: var(--radius-m); background: var(--bg); color: var(--text);
+        border: 1px solid var(--border); font-size: 13px; line-height: 1.45; max-width: 720px; overflow: hidden; }
+      /* Pixel-gradient header band, inside the top padding: never behind text. */
+      .panel::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 12px;
+        background: var(--dither-amber-down) 0 0 / 8px 16px repeat-x; image-rendering: pixelated; pointer-events: none; }
       .head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-      .kicker { font: 600 11px ui-monospace, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; color: #d4a574; }
-      .muted { color: #a29790; }
-      .x { margin-left: auto; background: none; border: 0; color: #a29790; font-size: 18px; cursor: pointer; padding: 0 4px; }
-      .match { border: 1px solid #3a3531; border-radius: 8px; padding: 8px; margin: 6px 0; background: #2d2a27; }
+      .kicker { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--primary); }
+      .muted { color: var(--text-muted); }
+      .x { margin-left: auto; background: none; border: 0; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 0 4px; }
+      .x:hover { color: var(--text); }
+      .match { border: 1px solid var(--border); border-radius: var(--radius-m); padding: 8px; margin: 6px 0; background: var(--card-bg); }
       .match p { margin: 0 0 6px; white-space: pre-wrap; }
       .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-      textarea { width: 100%; min-height: 140px; margin: 8px 0 4px; padding: 8px; border-radius: 6px; resize: vertical;
-        background: #2d2a27; color: #f5f1ed; border: 1px solid #3a3531; font-size: 13px; line-height: 1.5; }
-      .count { font-size: 11px; }
-      .count.over { color: #e67873; }
+      textarea { width: 100%; min-height: 140px; margin: 8px 0 4px; padding: 8px; border-radius: var(--radius-s); resize: vertical;
+        background: var(--card-bg); color: var(--text); border: 1px solid var(--border); font-size: 13px; line-height: 1.5; }
+      .count { font-size: 11px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+      .count.over { color: var(--danger); }
       .status { min-height: 1.2em; margin-top: 6px; font-size: 12px; }
-      .status.err { color: #e67873; }
-      label.save { display: flex; gap: 6px; align-items: center; margin-right: auto; font-size: 12px; color: #a29790; cursor: pointer; }
+      .status.err { color: var(--danger); }
+      label.save { display: flex; gap: 6px; align-items: center; margin-right: auto; font-size: 12px; color: var(--text-muted); cursor: pointer; }
       .foot { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+      .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { transition-duration: 0.01ms !important; }
+        .trigger.is-busy::after { animation: none; opacity: 1; }
+        .trigger.pulse::before { animation: pulse-hold 1.5s steps(1, end) 1; }
+        @keyframes pulse-hold { 0%, 100% { box-shadow: 0 0 0 2px var(--success); } }
+      }
     `;
 
     const h = (tag, props = {}, ...kids) => {
@@ -210,8 +253,19 @@
         root.append(h('style', { text: CSS_TEXT }));
         const trigger = h('button', { type: 'button', class: 'btn trigger', text: '✦ Draft', title: 'Saved answers and AI drafts (Better Autofill)' });
         const slot = h('div');
-        root.append(trigger, slot);
+        const live = h('div', { class: 'sr', 'aria-live': 'polite' }); // outlives the panel
+        root.append(trigger, slot, live);
         box.insertAdjacentElement('afterend', host);
+
+        // Its question has focus: the glow strengthens (staged focus).
+        box.addEventListener('focus', () => trigger.classList.add('is-near'));
+        box.addEventListener('blur', () => trigger.classList.remove('is-near'));
+        const pulse = () => {
+            trigger.classList.remove('pulse');
+            void trigger.offsetWidth;
+            trigger.classList.add('pulse');
+            trigger.addEventListener('animationend', () => trigger.classList.remove('pulse'), { once: true });
+        };
 
         let open = false;
         trigger.addEventListener('click', (e) => {
@@ -219,11 +273,14 @@
             e.stopPropagation();
             if (open) { slot.replaceChildren(); open = false; return; }
             open = true;
-            slot.replaceChildren(buildPanel(box, () => { slot.replaceChildren(); open = false; }));
+            slot.replaceChildren(buildPanel(box, (inserted) => {
+                slot.replaceChildren(); open = false;
+                if (inserted === true) { live.textContent = 'Answer inserted.'; pulse(); }
+            }, trigger));
         });
     }
 
-    function buildPanel(box, close) {
+    function buildPanel(box, close, trigger) {
         const question = questionFor(box);
         const maxChars = maxCharsFor(box);
         let category = null;
@@ -253,9 +310,15 @@
             const before = button.textContent;
             button.disabled = true;
             button.textContent = label;
+            button.classList.add('is-busy');
+            if (trigger) trigger.classList.add('is-busy');
             try { await fn(); } catch (e) {
                 say(e.status === 429 ? e.message : e.notSignedIn ? 'Sign in again in the Better Autofill side panel.' : `Couldn't do that: ${e.message}`, true);
-            } finally { button.disabled = false; button.textContent = before; }
+            } finally {
+                button.disabled = false; button.textContent = before;
+                button.classList.remove('is-busy');
+                if (trigger) trigger.classList.remove('is-busy');
+            }
         }
 
         draftBtn.addEventListener('click', () => busy(draftBtn, 'Drafting…', async () => {
@@ -282,7 +345,7 @@
                 }).then(() => { answersPromise = null; }));
             }
             await Promise.all(jobs);
-            close();
+            close(true);
         }));
 
         // Library matches: rules first, then the tiny categoriser (cached per question).
