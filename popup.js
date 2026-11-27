@@ -609,7 +609,6 @@ document.addEventListener('DOMContentLoaded', () => {
             : s.pending
                 ? 'Connected · changes waiting to sync'
                 : `Connected · synced ${when(s.lastSyncedAt)}`;
-        renderChip();
     }
 
     // On open: pull a newer synced profile, or push changes that couldn't sync earlier.
@@ -1315,24 +1314,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // ---------------------------------------------------------------- top bar + start
-    let chipWasPending = false;
-    async function renderChip() {
-        const chip = document.getElementById('syncChip');
-        if (!signedInNow) { chip.hidden = true; return; }
-        const s = await CloudSync.state();
-        chip.hidden = false;
-        const ok = s.enabled && !s.pending;
-        chip.className = `chip ${ok ? 'ok' : 'warn'}`;
-        chip.textContent = ok ? '● Synced' : '● Sync pending';
-        if (ok && chipWasPending) pulse(chip); // a sync just finished
-        chipWasPending = !ok;
-    }
-
+    // ---------------------------------------------------------------- start
     // Called by renderCloud() whenever the account state may have changed.
     function renderSignedInViews(s) {
         signedInNow = s.signedIn;
-        renderChip();
         updateResumeImport();
         refreshTrackedViews();
     }

@@ -443,7 +443,7 @@
     insightsTimer = setTimeout(() => { loadInsights(); }, 400);
   }
 
-  // A slow save shows a dither bar in its cell at once; a finished one pulses the control.
+  // A slow save shows a gold bar in its cell at once; a finished one pulses the control.
   function pulse(node) {
     node.classList.remove('pulse');
     void node.offsetWidth;

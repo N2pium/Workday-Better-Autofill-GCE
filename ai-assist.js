@@ -162,16 +162,21 @@
 
     const CSS_TEXT = `
       :host { all: initial;
-        /* Same tokens as popup.css. The page cannot see into this closed root. */
-        --primary: #d4a574; --primary-hover: #bf9156; --on-primary: #1a1612;
-        --bg: #1a1612; --card-bg: #2d2a27; --surface-raised: #35312d;
-        --text: #f5f1ed; --text-muted: #a29790; --border: #3a3531;
-        --accent: #a8b5a0; --success: #6b9e7a; --danger: #e67873;
-        --radius-s: 3px; --radius-m: 6px;
+        /* Same tokens as popup.css and dashboard/app.css. The page cannot see into this closed root. */
+        --primary: #ffc93c; --primary-hover: #f2b52e; --on-primary: #2a1a0d;
+        --bg: #fffaee; --card-bg: #fffaee; --surface-raised: #f7efd6;
+        --text: #2a1a0d; --text-muted: #6a4f35; --border: #eadcb5;
+        --primary-ink: #8a5a1f; --accent: #6b4423; --success: #7a5a12; --danger: #a3402a;
+        --radius-s: 4px; --radius-m: 6px;
         --dur-fast: 90ms; --dur-base: 160ms; --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
-        --dither-amber-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='8' viewBox='0 0 4 8' shape-rendering='crispEdges'%3E%3Cpath fill='%23d4a574' d='M0 0h1v1h-1zM2 0h1v1h-1zM1 1h1v1h-1zM0 2h1v1h-1zM2 2h1v1h-1zM0 4h1v1h-1zM2 4h1v1h-1zM2 6h1v1h-1z'/%3E%3C/svg%3E");
         --mono: ui-monospace, Consolas, monospace; }
-      * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      :host([data-theme="dark"]) { --bg: #1b110a; --card-bg: #28190d; --surface-raised: #33200f;
+        --text: #f7efd6; --text-muted: #c9b48a; --border: #3b2616;
+        --primary-ink: #ffc93c; --accent: #ffc93c; --success: #ffd45c; --danger: #ec9a80; }
+      @media (prefers-color-scheme: dark) { :host(:not([data-theme="light"])) { --bg: #1b110a; --card-bg: #28190d; --surface-raised: #33200f;
+        --text: #f7efd6; --text-muted: #c9b48a; --border: #3b2616;
+        --primary-ink: #ffc93c; --accent: #ffc93c; --success: #ffd45c; --danger: #ec9a80; } }
+      * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif; }
       .btn { position: relative; font-size: 12px; font-weight: 600; border-radius: var(--radius-s); padding: 4px 10px; cursor: pointer;
         border: 1px solid var(--border); background: var(--card-bg); color: var(--text); line-height: 1.4;
         transition: background-color var(--dur-base) var(--ease), transform var(--dur-fast) var(--ease); }
@@ -202,13 +207,10 @@
         100% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--success) 0%, transparent); }
       }
 
-      .panel { position: relative; margin: 6px 0 12px; padding: 16px 12px 12px; border-radius: var(--radius-m); background: var(--bg); color: var(--text);
+      .panel { position: relative; margin: 6px 0 12px; padding: 12px; border-radius: var(--radius-m); background: var(--bg); color: var(--text);
         border: 1px solid var(--border); font-size: 13px; line-height: 1.45; max-width: 720px; overflow: hidden; }
-      /* Pixel-gradient header band, inside the top padding: never behind text. */
-      .panel::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 12px;
-        background: var(--dither-amber-down) 0 0 / 8px 16px repeat-x; image-rendering: pixelated; pointer-events: none; }
       .head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-      .kicker { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--primary); }
+      .kicker { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--primary-ink); }
       .muted { color: var(--text-muted); }
       .x { margin-left: auto; background: none; border: 0; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 0 4px; }
       .x:hover { color: var(--text); }
