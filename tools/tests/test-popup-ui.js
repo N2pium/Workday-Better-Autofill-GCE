@@ -145,11 +145,23 @@ test('Applications lists tracked jobs as text (page content is never rendered as
   assert.deepEqual(p.api.calls.at(-1), { method: 'PATCH', path: '/applications/20261122T120000Z-00000001', body: { status: 'offer' } });
 });
 
+test('signed in, Applications links to the dashboard application flow', async () => {
+  const p = await openPanel({ signedIn: true });
+  p.$('.tab[data-tab="apps"]').click();
+  await settle();
+  const link = p.$('#appsDashboard');
+  assert.equal(link.hidden, false);
+  assert.equal(link.getAttribute('href'), 'https://d3sun3zkns70tc.cloudfront.net/');
+  assert.equal(link.getAttribute('target'), '_blank');
+  assert.match(link.getAttribute('rel'), /noopener/);
+});
+
 test('signed out, Applications explains how to start tracking', async () => {
   const p = await openPanel({ local: { cloudChoice: 'guest' } });
   p.$('.tab[data-tab="apps"]').click();
   await settle();
   assert.equal(p.$('#appsSignedOut').hidden, false);
+  assert.equal(p.$('#appsDashboard').hidden, true, 'no dashboard link for guests');
   assert.equal(p.api.calls.length, 0, 'no network calls for guests');
 });
 

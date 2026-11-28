@@ -478,6 +478,8 @@ button.row { cursor: pointer; }
 
 /* ---- Applications ---------------------------------------------------------- */
 
+.dashboard-link { margin-top: 14px; }
+
 .app-list li.app-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
