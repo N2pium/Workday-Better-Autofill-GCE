@@ -430,9 +430,9 @@
           <p class="helper">Your profile syncs across every device you sign in on: personal info, address,
             education, work experience, skills, languages and job preferences. Self-identification answers and
             your resume file stay on this device. Sign out to stop syncing on this device.</p>
-          <div class="input-group checkbox-group">
-            <input type="checkbox" id="aiAssistToggle" checked />
+          <div class="switch-row">
             <label for="aiAssistToggle">Show &#10022; Draft buttons on job forms</label>
+            <input type="checkbox" role="switch" id="aiAssistToggle" checked />
           </div>
           <p class="helper">Saved answers and AI drafts for free-text questions. Nothing is sent until you press a button in them.</p>
           <div class="row">
@@ -447,9 +447,9 @@
         <h2>Supported Portals</h2>
         <p class="helper">Workday is always enabled. Turn on other portals below — Chrome will ask you to approve
           access to that site.</p>
-        <div class="input-group checkbox-group">
-          <input type="checkbox" id="greenhouseToggle" />
+        <div class="switch-row">
           <label for="greenhouseToggle">Greenhouse (boards.greenhouse.io)</label>
+          <input type="checkbox" role="switch" id="greenhouseToggle" />
         </div>
         <p class="helper">After enabling, refresh any Greenhouse tab that is already open.</p>
       </section>
@@ -457,9 +457,9 @@
       <!-- Anonymous fill-failure reports (cloud-telemetry.js; off by default) -->
       <section id="telemetrySection">
         <h2>Help Improve Autofill</h2>
-        <div class="input-group checkbox-group">
-          <input type="checkbox" id="telemetryToggle" />
+        <div class="switch-row">
           <label for="telemetryToggle">Send anonymous fill-failure reports</label>
+          <input type="checkbox" role="switch" id="telemetryToggle" />
         </div>
         <p class="helper" id="telemetryHelp">Off unless you turn it on. After each autofill it sends only: which of the
           extension's own steps failed or were skipped and why (for example "Work Experience: did not change"), the
