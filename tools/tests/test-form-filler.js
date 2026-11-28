@@ -139,6 +139,52 @@ test('most recent school and job fill when the page asks for one of each', () =>
   assert.deepEqual([v('s'), v('m'), v('c'), v('t')].map(String), ['University of London', 'Mathematics', 'Babbage & Co', 'Analyst']);
 });
 
+// The four required questions from a real iCIMS report (Shure, Embedded Software
+// Intern). Their markup is not captured yet, so both shapes are tried.
+const SCREENING = (gpaControl) => `<form>
+  <label for="Q39">Do you have any previous internship experience? *</label>
+  <select id="Q39" name="Q39" required><option value="">Select</option><option>Yes</option><option>No</option></select>
+  <label for="Q37">Please provide the level of education you will have COMPLETED effective Spring 2027 *</label>
+  <select id="Q37" name="Q37" required><option value="">Select</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select>
+  <label for="Q38">Please provide your current cumulative GPA. *</label>
+  ${gpaControl}
+  <label for="Q40">Please rate your familiarity with Shure and our products *</label>
+  <select id="Q40" name="Q40" required><option value="">Select</option><option>1</option><option>5</option></select>
+</form>`;
+const STUDENT = { ...PROFILE, education: [{ school: 'UIUC', gpa: '3.62', endYear: '2028' }],
+  workExperience: [{ company: 'Acme Audio', title: 'Software Engineering Intern' }] };
+
+test('screening questions: GPA from the saved profile, internship only when one is saved', () => {
+  const w = page(SCREENING('<input id="Q38" name="Q38" required>'));
+  const r = w.EasyApplyFormFiller.fill(w.document, STUDENT, { site: 'icims' });
+  const v = (id) => w.document.getElementById(id).value;
+  assert.equal(v('Q38'), '3.62', 'GPA typed as saved');
+  assert.equal(v('Q39'), 'Yes', 'a saved internship answers Yes');
+  assert.equal(v('Q37'), '', 'a future education level is left for the person');
+  assert.equal(v('Q40'), '', 'company familiarity is left for the person');
+  assert.deepEqual(JSON.parse(JSON.stringify(r.empty.map((e) => e.field))), ['Q37', 'Q40']);
+});
+
+test('no saved internship: the internship question is left, never answered No', () => {
+  const w = page(SCREENING('<input id="Q38" name="Q38" required>'));
+  w.EasyApplyFormFiller.fill(w.document, { ...STUDENT, workExperience: [{ company: 'Cafe', title: 'Barista' }] });
+  assert.equal(w.document.getElementById('Q39').value, '');
+});
+
+test('GPA as a dropdown of ranges picks the range that holds it', () => {
+  const w = page(SCREENING(`<select id="Q38" name="Q38" required><option value="">Select</option>
+    <option value="a">Below 2.0</option><option value="b">2.0 - 2.99</option><option value="c">3.0 - 3.49</option>
+    <option value="d">3.50 - 3.99</option><option value="e">4.0 or higher</option></select>`));
+  w.EasyApplyFormFiller.fill(w.document, STUDENT);
+  assert.equal(w.document.getElementById('Q38').value, 'd');
+});
+
+test('no saved GPA: the GPA question is left', () => {
+  const w = page(SCREENING('<input id="Q38" name="Q38" required>'));
+  w.EasyApplyFormFiller.fill(w.document, { ...STUDENT, education: [{ school: 'UIUC' }] });
+  assert.equal(w.document.getElementById('Q38').value, '');
+});
+
 test('iCIMS job pages are recognised for the tracker', () => {
   const w = page('');
   w.chrome = { storage: { local: { get: async () => ({}), set: async () => {} } } };

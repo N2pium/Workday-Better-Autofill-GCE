@@ -23,7 +23,7 @@
 (function (root) {
     'use strict';
 
-    const BUILD = 'forms-2026-11-27a';
+    const BUILD = 'forms-2026-11-27b';
 
     // ------------------------------------------------------------ text helpers
 
@@ -146,6 +146,11 @@
     function chooseOption(options, candidates) {
         const opts = options.filter((o) => !isPlaceholderOption(o));
         for (const c of candidates) {
+            if (typeof c === 'function') {
+                const hit = opts.find((o) => c(clean(o.textContent)));
+                if (hit) return hit;
+                continue;
+            }
             if (c instanceof RegExp) {
                 const hit = opts.find((o) => c.test(clean(o.textContent)) || c.test(o.value));
                 if (hit) return hit;
@@ -184,6 +189,33 @@
 
     // ------------------------------------------------------------ answers
 
+    /** The GPA to give: the current or most recent school that has one, as typed. */
+    function savedGpa(p) {
+        const withGpa = (p.education || []).filter((e) => e && String(e.gpa || '').trim());
+        if (!withGpa.length) return '';
+        const current = withGpa.find((e) => !String(e.endYear || '').trim() || Number(e.endYear) >= new Date().getFullYear());
+        return String((current || withGpa[0]).gpa).trim();
+    }
+
+    /** Matches option texts like "3.50 - 3.99", "3.5+", "Above 3.0", "Below 2.0" that contain the GPA. */
+    function gpaRange(gpa) {
+        const g = parseFloat(gpa);
+        if (!Number.isFinite(g)) return null;
+        return (text) => {
+            const t = text.toLowerCase();
+            const nums = (t.match(/\d+(?:\.\d+)?/g) || []).map(Number).filter((n) => n <= 5);
+            if (nums.length >= 2 && /-|–|\bto\b/.test(t)) return g >= Math.min(nums[0], nums[1]) && g <= Math.max(nums[0], nums[1]) + 0.005;
+            if (nums.length !== 1) return false;
+            if (/\+|above|or (higher|more|greater|better)|greater|over|at least|minimum/.test(t)) return g >= nums[0];
+            if (/below|under|less|lower/.test(t)) return g < nums[0];
+            return Math.abs(g - nums[0]) < 0.005;
+        };
+    }
+
+    /** "Yes" when a saved job is an internship or co-op. Otherwise nothing: a job
+        missing from the profile would make "No" a guess. */
+    const hadInternship = (p) => (p.workExperience || []).some((w) => /\bintern(ship)?\b|\bco-?op\b/i.test(`${w.title || ''} ${w.company || ''}`));
+
     const DECLINE = /decline|do not wish|don ?t wish|not wish to|prefer not|choose not|not to (answer|disclose|self.?identify)|i do not want/i;
     const yesNo = (b) => (b ? [/^\s*yes\b/i] : [/^\s*no\b/i]);
 
@@ -202,7 +234,8 @@
             ['City', /\bcity\b|\btown\b|ac:address-level2/, /state|country|zip|postal|birth/, ad.city, 'Address'],
             ['Zip or postal code', /\bzip\b|postal|post code|postcode|ac:postal-code/, /country/, ad.zip, 'Address'],
             ['LinkedIn', /linked ?in/, null, pi.linkedinUrl, 'Links'],
-            ['Website', /website|portfolio|personal (url|site|web)|home ?page|\bblog\b/, /linked ?in|company|employer/, pi.websiteUrl, 'Links']
+            ['Website', /website|portfolio|personal (url|site|web)|home ?page|\bblog\b/, /linked ?in|company|employer/, pi.websiteUrl, 'Links'],
+            ['GPA', /\bgpa\b|grade point average/, /minimum|required|scale|major gpa/, savedGpa(p), 'Education']
         ];
     }
 
@@ -233,7 +266,9 @@
             ['Race', /\brace\b|ethnic/, /hispanic or latino\s*\??$/, selfId(dm.race, (v) => [v, ...v.split(/\s+or\s+/)]), 'Self-identification'],
             ['Veteran status', /veteran/, null, selfId(dm.veteranStatus, (v) => /not a veteran/i.test(v) ? [/not a (protected )?veteran|i am not a veteran|^\s*no\b/i]
                 : /not a protected/i.test(v) ? [/not a protected/i] : [/^(?!.*\bnot\b).*protected veteran/i, /^\s*yes\b/i]), 'Self-identification'],
-            ['Disability', /disabilit/, null, selfId(dm.disabilityStatus, (v) => /^y/i.test(v) ? [/^\s*yes\b/i] : [/^\s*no\b/i]), 'Self-identification']
+            ['Disability', /disabilit/, null, selfId(dm.disabilityStatus, (v) => /^y/i.test(v) ? [/^\s*yes\b/i] : [/^\s*no\b/i]), 'Self-identification'],
+            ['GPA', /\bgpa\b|grade point average/, /minimum|required|scale/, savedGpa(p) ? [savedGpa(p), gpaRange(savedGpa(p))].filter(Boolean) : null, 'Education'],
+            ['Internship experience', /\b(previous|prior|any|past)\b.*\b(internship|co ?op)s?\b/, null, hadInternship(p) ? yesNo(true) : null, 'Education']
         ];
     }
 
