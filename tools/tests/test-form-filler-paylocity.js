@@ -48,6 +48,11 @@ const PAGE = `<form>
   <div class="form-group"><label>Responsibilities</label><textarea id="workHistory.responsibilities.0" data-for="Responsibilities"></textarea></div>
   ${text('txt-workHistory-startDate-0', 'Start Date', false, 'placeholder="MM/YYYY"')}${text('txt-workHistory-endDate-0', 'End Date', false, 'placeholder="MM/YYYY"')}
   <input type="checkbox" id="workHistory.currentlyWorkingHere.0"><label for="workHistory.currentlyWorkingHere.0">Currently Working Here</label>
+  <label>Address Line 1<input id="public-candidate-work-history-address-0-address-1" required type="text" value=""></label>
+  <label>City<input id="public-candidate-work-history-address-0-city" required type="text" value=""></label>
+  ${select('public-candidate-work-history-address-0-us-state', 'State', 'Select a state', ['IL', 'IN', 'NY'])}
+  ${text('workHistory.companyName.1', 'Company Name', false)}
+  <label>City<input id="public-candidate-work-history-address-1-city" required type="text" value=""></label>
   <button type="button">Next Step</button>
 </form>`;
 
@@ -63,7 +68,10 @@ const BEHAVIOUR = `
   document.querySelectorAll('.pcty-input-select-full-container').forEach((box) => {
     const menu = box.querySelector('.pcty-input-select__menu-list');
     const shown = box.querySelector('.pcty-input-select__single-value');
-    box.querySelector('.pcty-input-select-input-container').addEventListener('mousedown', () => { menu.hidden = false; });
+    const control = box.querySelector('.pcty-input-select-input-container');
+    control.addEventListener('mousedown', () => { menu.hidden = false; });
+    // Live behaviour seen in the first report: a click on the open control closes the menu.
+    control.addEventListener('click', () => { menu.hidden = true; });
     menu.querySelectorAll('[role="listitem"]').forEach((row) => row.addEventListener('click', () => {
       shown.textContent = row.textContent; menu.hidden = true;
     }));
@@ -81,8 +89,9 @@ const PROFILE = {
   personalInfo: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', phone: '(555) 010-2030', linkedinUrl: 'https://linkedin.com/in/ada' },
   address: { street: '12 Analytical Way', city: 'Albany', state: 'New York', zip: '12207', country: 'United States of America' },
   jobPreferences: { authorizedToWork: true, formerEmployee: false, sourceReferral: 'LinkedIn' },
-  workExperience: [{ company: 'Babbage & Co', title: 'Analyst', description: 'Built engines.',
-    startDate: { month: '3', year: '2024' }, endDate: { month: '', year: '' }, isCurrentRole: true }]
+  workExperience: [{ company: 'Babbage & Co', title: 'Analyst', description: 'Built engines.', location: 'Chicago, IL',
+    startDate: { month: '3', year: '2024' }, endDate: { month: '', year: '' }, isCurrentRole: true },
+    { company: 'Old Mill', title: 'Clerk', location: 'Gary, Indiana' }]
 };
 
 const tests = [];
@@ -135,6 +144,27 @@ test('how did you hear (radios) and the most recent job with dates', async () =>
   assert.equal($('txt-workHistory-endDate-0').value, '', 'a current role has no end date');
   assert.equal($('info.dateAvailableToStart').value, '', 'availability is not the job start date');
   assert.equal($('useAttachedResumeToFillOutApplication').checked, false, 'Paylocity\'s own resume parsing is left to the person');
+});
+
+test('employer addresses: city and state from each saved job, matched by company', async () => {
+  const w = page();
+  w.document.getElementById('workHistory.companyName.1').value = 'Old Mill'; // as Paylocity's resume parse leaves it
+  const r = await w.EasyApplyFormFiller.fill(w.document, PROFILE);
+  const $ = (id) => w.document.getElementById(id);
+  assert.equal($('public-candidate-work-history-address-0-city').value, 'Chicago');
+  assert.equal(shows(w, 'public-candidate-work-history-address-0-us-state'), 'IL');
+  assert.equal($('public-candidate-work-history-address-1-city').value, 'Gary', 'block 2 is matched by its company name');
+  assert.equal($('public-candidate-work-history-address-0-address-1').value, '', 'no saved street: left');
+  assert.equal($('public-site-address-city').value, 'Albany', 'the home address is not the employer address');
+  assert.ok(!r.steps.some((s) => s.status === 'failed'), JSON.stringify(r.steps.filter((s) => s.status === 'failed')));
+});
+
+test('report labels read once, without the select placeholder', async () => {
+  const w = page();
+  const r = await w.EasyApplyFormFiller.fill(w.document, { personalInfo: {} });
+  const labels = JSON.parse(JSON.stringify(r.empty.map((e) => e.label)));
+  assert.ok(labels.includes('State'), labels.join(' | '));
+  assert.ok(labels.includes('County'), labels.join(' | '));
 });
 
 test('required fields left are listed: SMS consent and county', async () => {

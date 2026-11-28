@@ -29,7 +29,7 @@
 (function (root) {
     'use strict';
 
-    const BUILD = 'forms-2026-11-28a';
+    const BUILD = 'forms-2026-11-28b';
 
     // ------------------------------------------------------------ text helpers
 
@@ -67,8 +67,25 @@
         if (!el) return '';
         // Ignore the controls inside a label (a select's options, a nested input).
         const copy = el.cloneNode(true);
-        copy.querySelectorAll('select, option, input, textarea, script, style, button').forEach((n) => n.remove());
-        return clean(copy.textContent);
+        copy.querySelectorAll('select, option, input, textarea, script, style, button, [hidden], [aria-hidden="true"], [role="listbox"], [role="option"], [role="listitem"], [class*="menu"]')
+            .forEach((n) => n.remove());
+        const walker = el.ownerDocument.createTreeWalker(copy, 4 /* NodeFilter.SHOW_TEXT */);
+        const bits = [];
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) bits.push(n.nodeValue);
+        return clean(bits.join(' '));
+    }
+
+    // A searchable select: an autocomplete input inside a select box. (An address
+    // autocomplete is a free-text box with suggestions, not one of these.)
+    function isSearch(el) {
+        return el.tagName === 'INPUT' && el.getAttribute('aria-autocomplete') === 'list'
+            && !!el.closest('[class*="select"], [class*="Select"]');
+    }
+
+    /** The box a searchable select draws around its input (it shows the chosen value). */
+    function searchBox(el) {
+        return el.closest('[class*="select"][class*="container"], [class*="Select"][class*="container"]')
+            || (el.parentElement && el.parentElement.parentElement) || el;
     }
 
     /** What a person reads as this control's label. */
@@ -82,14 +99,22 @@
             doc.querySelectorAll(`label[for="${esc}"]`).forEach((l) => parts.push(textOf(l)));
         }
         const wrap = el.closest('label');
-        if (wrap) parts.push(textOf(wrap));
+        if (wrap) {
+            let t = textOf(wrap);
+            if (isSearch(el)) {
+                const shown = textOf(searchBox(el));
+                if (shown) t = clean(t.split(shown).join(' '));
+            }
+            parts.push(t);
+        }
         if (el.getAttribute('aria-label')) parts.push(el.getAttribute('aria-label'));
         if (!parts.join('').trim() && el.getAttribute('data-for')) parts.push(el.getAttribute('data-for'));
         if (!parts.join('').trim()) {
             if (el.placeholder) parts.push(el.placeholder);
             if (el.title) parts.push(el.title);
         }
-        return clean(parts.join(' ').replace(/\((required|optional)\)/gi, ' '));
+        const unique = [...new Set(parts.map((x) => clean(x.replace(/\((required|optional)\)/gi, ' '))).filter(Boolean))];
+        return clean(unique.join(' '));
     }
 
     /** The question a radio group or select asks: its legend, or the text of the
@@ -200,10 +225,7 @@
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const UNANSWERED = /^(|-+|select\b.*|choose\b.*|please (select|choose)\b.*)$/i;
     const isCombo = (el) => el.getAttribute('role') === 'combobox' && !/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName);
-    // A searchable select: an autocomplete input inside a select box. (An address
-    // autocomplete is a free-text box with suggestions, not one of these.)
-    const isSearch = (el) => el.tagName === 'INPUT' && el.getAttribute('aria-autocomplete') === 'list'
-        && !!el.closest('[class*="select"], [class*="Select"]');
+
 
     function press(el) {
         const win = el.ownerDocument.defaultView;
@@ -212,9 +234,7 @@
         }
     }
 
-    /** The box a searchable select draws around its input (it shows the chosen value). */
-    const searchBox = (el) => el.closest('[class*="select"][class*="container"], [class*="Select"][class*="container"]')
-        || (el.parentElement && el.parentElement.parentElement) || el;
+
 
     /** What a widget currently shows as its answer ('' when unanswered). */
     function widgetShows(el) {
@@ -240,9 +260,17 @@
 
     /** Opens the widget, clicks the option matching the candidates, and checks it took. */
     async function pickInWidget(el, candidates) {
-        press(isCombo(el) ? el : searchBox(el));
-        await sleep(250);
-        const options = widgetOptions(el).map((o) => ({ o, textContent: o.textContent, value: clean(o.textContent) }));
+        if (isCombo(el)) press(el);
+        else {
+            const win = el.ownerDocument.defaultView;
+            searchBox(el).dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, view: win }));
+        }
+        let found = [];
+        for (let i = 0; i < 8 && !found.length; i++) {
+            await sleep(i ? 200 : 150);
+            found = widgetOptions(el);
+        }
+        const options = found.map((o) => ({ o, textContent: o.textContent, value: clean(o.textContent) }));
         const hit = chooseOption(options, candidates);
         if (!hit) { closeWidget(el); return false; }
         press(hit.o);
@@ -354,9 +382,12 @@
 
         // Text fields.
         const textual = controls.filter((el) => !isSearch(el) && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && /^(text|email|tel|url|number|)$/i.test(el.type))));
+        // An employer's address (work history) is never the person's own.
+        const isWorkHistory = (el) => /work.?history|employer.?address/i.test(`${el.id} ${el.name || ''}`);
         for (const [field, want, avoid, value, section] of textRules(profile)) {
             if (!value) continue;
-            const el = textual.find((c) => !done.has(c) && want.test(keysOf(c)) && !(avoid && avoid.test(norm(labelFor(c)))));
+            const el = textual.find((c) => !done.has(c) && !(section === 'Address' && isWorkHistory(c))
+                && want.test(keysOf(c)) && !(avoid && avoid.test(norm(labelFor(c)))));
             if (!el) continue;
             done.add(el);
             if (el.value && el.value.trim()) { add('kept', section, field); continue; } // the site or the person already filled it
@@ -368,7 +399,7 @@
         // State and country: a select or a text box.
         const ad = profile.address || {};
         const fillPlace = async (field, want, candidates, text) => {
-            const el = controls.find((c) => !done.has(c) && !isCombo(c) && c.type !== 'radio' && c.type !== 'checkbox' && want.test(keysOf(c)));
+            const el = controls.find((c) => !done.has(c) && !isCombo(c) && !isWorkHistory(c) && c.type !== 'radio' && c.type !== 'checkbox' && want.test(keysOf(c)));
             if (!el || !text) return;
             done.add(el);
             if (isSearch(el)) {
@@ -478,6 +509,47 @@
                 } else {
                     const endEl = textual.find((c) => !done.has(c) && /\bend ?date\b|\bdate ended\b|\bto date\b/.test(keysOf(c)));
                     typed('End date', endEl, monthYear(job.endDate, endEl));
+                }
+            }
+        }
+
+        // Employer addresses (Paylocity asks for one per job): city and state from
+        // the saved job's location, "Chicago, IL". Street, county and zip are not saved.
+        const jobs = profile.workExperience || [];
+        const blockIndex = (el) => {
+            const m = `${el.id} ${el.name || ''}`.match(/work.?history\D*?(\d+)/i);
+            return m ? m[1] : null;
+        };
+        const companyIn = (i) => controls.find((c) => blockIndex(c) === i && /company|employer/i.test(`${c.id} ${c.name || ''}`));
+        const jobFor = (i) => {
+            const named = companyIn(i);
+            const name = norm(named && named.value);
+            if (name) return jobs.find((j) => norm(j.company) === name) || null;
+            return jobs.length === 1 ? jobs[0] : null;
+        };
+        for (const el of controls) {
+            const i = blockIndex(el);
+            if (i === null || done.has(el) || !/address/i.test(el.id)) continue;
+            const job = jobFor(i);
+            const loc = job && String(job.location || '').split(',').map(clean);
+            if (!loc || loc.length < 2 || !loc[0]) continue;
+            const ab = (US_STATES[loc[1].toUpperCase()] && loc[1].toUpperCase())
+                || Object.keys(US_STATES).find((k) => US_STATES[k].toLowerCase() === loc[1].toLowerCase());
+            if (/city/i.test(el.id) && !isSearch(el) && el.tagName !== 'SELECT') {
+                done.add(el);
+                if (el.value) { add('kept', 'Work experience', `Employer city (job ${Number(i) + 1})`); continue; }
+                setNative(el, loc[0]);
+                if (el.value) add('filled', 'Work experience', `Employer city (job ${Number(i) + 1})`);
+            } else if (/state/i.test(el.id) && ab) {
+                done.add(el);
+                const field = `Employer state (job ${Number(i) + 1})`;
+                if (isSearch(el)) {
+                    if (widgetShows(el)) { add('kept', 'Work experience', field); continue; }
+                    if (await pickInWidget(el, [ab, US_STATES[ab]])) add('filled', 'Work experience', field);
+                    else add('failed', 'Work experience', field, `No option matched "${ab}".`);
+                } else if (el.tagName === 'SELECT') {
+                    if (el.value && !isPlaceholderOption(el.selectedOptions[0] || {})) { add('kept', 'Work experience', field); continue; }
+                    if (selectOption(el, [ab, US_STATES[ab]])) add('filled', 'Work experience', field);
                 }
             }
         }
