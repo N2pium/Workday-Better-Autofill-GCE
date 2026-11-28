@@ -4,7 +4,7 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
     .catch((err) => console.error('Workday Autofill: sidePanel setup failed', err));
 
 /**
- * OPT-IN JOB SITES (Greenhouse, iCIMS)
+ * OPT-IN JOB SITES (Greenhouse, iCIMS, Paylocity)
  *
  * Each site's access is an optional host permission the user grants from the
  * side panel (Settings > Job sites). Its content scripts are registered
@@ -33,16 +33,28 @@ const PORTALS = [
     {
         name: 'iCIMS',
         origins: ['*://*.icims.com/*'],
-        // form-filler.js is the shared label-based filler; icims.js decides
-        // which frame fills and leaves iCIMS sign-in pages alone.
+        // form-filler.js is the shared label-based filler; job-site.js decides
+        // which frame fills and leaves sign-in pages alone.
         scripts: [
-            { id: 'icims-autofill', js: ['form-filler.js', 'icims.js', 'cloud-library.js', 'ai-assist.js'] }
+            { id: 'icims-autofill', js: ['form-filler.js', 'job-site.js', 'cloud-library.js', 'ai-assist.js'] }
+        ]
+    },
+    {
+        name: 'Paylocity',
+        // Chrome grants host access per host, so the permission names the whole
+        // domain; the scripts only ever run on recruiting pages (match patterns
+        // are case-sensitive in the path, hence both spellings), never on
+        // Paylocity's payroll or employee sites.
+        origins: ['*://*.paylocity.com/*'],
+        matches: ['*://*.paylocity.com/Recruiting/*', '*://*.paylocity.com/recruiting/*'],
+        scripts: [
+            { id: 'paylocity-autofill', js: ['form-filler.js', 'job-site.js', 'cloud-library.js', 'ai-assist.js'] }
         ]
     }
 ];
 
 const registrationFor = (portal) => portal.scripts.map((s) => ({
-    id: s.id, matches: portal.origins, js: s.js, runAt: 'document_end', allFrames: true, ...(s.world ? { world: s.world } : {})
+    id: s.id, matches: portal.matches || portal.origins, js: s.js, runAt: 'document_end', allFrames: true, ...(s.world ? { world: s.world } : {})
 }));
 
 async function syncPortalRegistration(portal) {
@@ -77,7 +89,7 @@ async function injectIntoOpenTabs(portal) {
     try {
         const granted = await chrome.permissions.contains({ origins: portal.origins });
         if (!granted) return;
-        const tabs = await chrome.tabs.query({ url: portal.origins });
+        const tabs = await chrome.tabs.query({ url: portal.matches || portal.origins });
         for (const tab of tabs) {
             for (const s of portal.scripts) {
                 try {

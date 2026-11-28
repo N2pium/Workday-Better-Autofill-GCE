@@ -1,6 +1,6 @@
 # Workday: Better Autofill
 
-A Chrome extension that automates filling job application forms on Workday, Greenhouse and iCIMS job sites. Save time, reduce repetitive typing, and apply to more positions faster.
+A Chrome extension that automates filling job application forms on Workday, Greenhouse, iCIMS and Paylocity job sites. Save time, reduce repetitive typing, and apply to more positions faster.
 
 ## Features
 

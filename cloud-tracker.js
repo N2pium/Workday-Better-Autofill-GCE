@@ -94,13 +94,30 @@
         };
     }
 
+    // 2000recruiting.paylocity.com/recruiting/jobs/Apply/49568/Paylocity/Enterprise-HCM-Account-Executive
+    // The page title reads "Paylocity - Enterprise HCM Account Executive Application".
+    function parsePaylocity(u, info) {
+        if (!/(^|\.)paylocity\.com$/i.test(u.hostname)) return null;
+        const m = u.pathname.match(/\/recruiting\/jobs\/(?:apply|details)\/(\d+)(?:\/([^/]+))?(?:\/([^/]+))?/i);
+        if (!m) return null;
+        const [, id, companySlug, roleSlug] = m;
+        const titled = String(info.pageTitle || '').match(/^\s*(.+?)\s+-\s+(.+?)\s+Application\s*$/i);
+        return {
+            key: `paylocity:${u.hostname.toLowerCase()}:${id}`,
+            site: 'other',
+            company: words(info.company) || (titled && titled[1]) || (companySlug ? slugToName(companySlug) : 'Unknown company'),
+            role: (titled && titled[2]) || (roleSlug ? slugToName(roleSlug) : '') || words(info.title) || 'Job application',
+            url: `https://${u.hostname}/Recruiting/Jobs/Details/${id}`
+        };
+    }
+
     /** Raw page info -> { key, site, company, role, url } or null if it isn't a job we recognise. */
     function normalizeJob(info) {
         if (!info || !info.url) return null;
         let u;
         try { u = new URL(info.url); } catch (e) { return null; }
         if (u.protocol !== 'https:') return null;
-        const job = parseWorkday(u, info) || parseGreenhouse(u, info) || parseIcims(u, info);
+        const job = parseWorkday(u, info) || parseGreenhouse(u, info) || parseIcims(u, info) || parsePaylocity(u, info);
         if (!job) return null;
         job.company = job.company.slice(0, 200) || 'Unknown company';
         job.role = job.role.slice(0, 200) || 'Job application';

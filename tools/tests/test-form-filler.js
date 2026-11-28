@@ -23,7 +23,7 @@ const PROFILE = {
   address: { street: '12 Analytical Way', city: 'Albany', state: 'New York', zip: '12207', country: 'United States of America' },
   jobPreferences: { authorizedToWork: true, requiresSponsorship: false, isAtLeast18: true, formerEmployee: false },
   demographics: { gender: 'Female', veteranStatus: 'I am not a veteran' },
-  education: [{ school: 'University of London', field: 'Mathematics' }],
+  education: [{ school: 'University of London', fieldOfStudy: 'Mathematics' }],
   workExperience: [{ company: 'Babbage & Co', title: 'Analyst' }]
 };
 
@@ -63,9 +63,9 @@ const CONTACT = `
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
 
-test('fills contact fields by label, never overwriting what is there', () => {
+test('fills contact fields by label, never overwriting what is there', async () => {
   const w = page(CONTACT);
-  const r = w.EasyApplyFormFiller.fill(w.document, PROFILE, { site: 'icims' });
+  const r = await w.EasyApplyFormFiller.fill(w.document, PROFILE, { site: 'icims' });
   const $ = (id) => w.document.getElementById(id);
   assert.equal($('PersonProfileFields.FirstName').value, 'Ada');
   assert.equal($('PersonProfileFields.MiddleName').value, '', 'middle name is not the first name');
@@ -86,7 +86,7 @@ test('fills contact fields by label, never overwriting what is there', () => {
   assert.ok(r.counts.filled >= 9, `filled ${r.counts.filled}`);
 });
 
-test('a page already filled from a previous application reports what it kept', () => {
+test('a page already filled from a previous application reports what it kept', async () => {
   const w = page(`<form>
     <label for="f">First Name</label><input id="f" value="Ada">
     <label for="l">Last Name</label><input id="l" value="Lovelace">
@@ -95,22 +95,22 @@ test('a page already filled from a previous application reports what it kept', (
     <fieldset><legend>Are you legally authorized to work in the United States?</legend>
       <input type="radio" name="auth" id="y" checked><label for="y">Yes</label><input type="radio" name="auth" id="n"><label for="n">No</label></fieldset>
   </form>`);
-  const r = w.EasyApplyFormFiller.fill(w.document, PROFILE, { site: 'icims' });
+  const r = await w.EasyApplyFormFiller.fill(w.document, PROFILE, { site: 'icims' });
   assert.equal(r.counts.filled, 0);
   assert.equal(r.counts.kept, 5, JSON.stringify(r.steps));
   assert.equal(w.document.getElementById('f').value, 'Ada');
 });
 
-test('answers yes/no questions from saved answers, radio or select', () => {
+test('answers yes/no questions from saved answers, radio or select', async () => {
   const w = page(CONTACT);
-  w.EasyApplyFormFiller.fill(w.document, PROFILE);
+  await w.EasyApplyFormFiller.fill(w.document, PROFILE);
   assert.equal(w.document.getElementById('auth_y').checked, true, 'authorized: Yes');
   assert.equal(w.document.getElementById('spon').value, 'N', 'sponsorship: No');
 });
 
-test('never guesses: no saved source and no self-ID answer are left and reported', () => {
+test('never guesses: no saved source and no self-ID answer are left and reported', async () => {
   const w = page(CONTACT);
-  const r = w.EasyApplyFormFiller.fill(w.document, PROFILE);
+  const r = await w.EasyApplyFormFiller.fill(w.document, PROFILE);
   assert.equal(w.document.getElementById('hear').value, '', 'How did you hear is not guessed');
   assert.equal(w.document.getElementById('race').value, '', 'race has no saved answer');
   assert.ok(r.steps.some((s) => s.field === 'Race' && s.status === 'skipped'));
@@ -118,38 +118,38 @@ test('never guesses: no saved source and no self-ID answer are left and reported
   assert.equal(w.document.getElementById('vet').value, 'I am not a protected veteran');
 });
 
-test('Decline all disclosures answers unanswered self-ID with the decline option', () => {
+test('Decline all disclosures answers unanswered self-ID with the decline option', async () => {
   const w = page(CONTACT);
-  w.EasyApplyFormFiller.fill(w.document, { ...PROFILE, jobPreferences: { ...PROFILE.jobPreferences, autoDisclosures: true } });
+  await w.EasyApplyFormFiller.fill(w.document, { ...PROFILE, jobPreferences: { ...PROFILE.jobPreferences, autoDisclosures: true } });
   assert.equal(w.document.getElementById('race').value, 'I do not wish to answer');
 });
 
-test('a saved answer with no matching option is reported as failed, not forced', () => {
+test('a saved answer with no matching option is reported as failed, not forced', async () => {
   const w = page(CONTACT);
-  const r = w.EasyApplyFormFiller.fill(w.document, { ...PROFILE, jobPreferences: { ...PROFILE.jobPreferences, sourceReferral: 'Glassdoor' } });
+  const r = await w.EasyApplyFormFiller.fill(w.document, { ...PROFILE, jobPreferences: { ...PROFILE.jobPreferences, sourceReferral: 'Glassdoor' } });
   assert.equal(w.document.getElementById('hear').value, '');
   assert.ok(r.steps.some((s) => s.field === 'How did you hear' && s.status === 'failed'));
 });
 
-test('required fields still empty are listed for the person', () => {
+test('required fields still empty are listed for the person', async () => {
   const w = page(CONTACT);
-  const r = w.EasyApplyFormFiller.fill(w.document, PROFILE);
+  const r = await w.EasyApplyFormFiller.fill(w.document, PROFILE);
   assert.deepEqual(JSON.parse(JSON.stringify(r.empty.map((e) => e.label))), ['Desired salary']);
   assert.equal(r.counts.emptyRequired, 1);
 });
 
-test('a sign-in page is recognised and its fields are never filled', () => {
+test('a sign-in page is recognised and its fields are never filled', async () => {
   const w = page(`<form><label for="e">Email</label><input id="e" type="email"><label for="p">Password</label><input id="p" type="password"></form>`);
   assert.equal(w.EasyApplyFormFiller.isSignInPage(w.document), true);
   const plain = page(CONTACT);
   assert.equal(plain.EasyApplyFormFiller.isSignInPage(plain.document), false);
 });
 
-test('most recent school and job fill when the page asks for one of each', () => {
+test('most recent school and job fill when the page asks for one of each', async () => {
   const w = page(`<form>
     <label for="s">School Name</label><input id="s"><label for="m">Major</label><input id="m">
     <label for="c">Employer</label><input id="c"><label for="t">Job Title</label><input id="t"></form>`);
-  w.EasyApplyFormFiller.fill(w.document, PROFILE);
+  await w.EasyApplyFormFiller.fill(w.document, PROFILE);
   const v = (id) => w.document.getElementById(id).value;
   assert.deepEqual([v('s'), v('m'), v('c'), v('t')].map(String), ['University of London', 'Mathematics', 'Babbage & Co', 'Analyst']);
 });
@@ -166,12 +166,12 @@ const SCREENING = (gpaControl) => `<form>
   <label for="Q40">Please rate your familiarity with Shure and our products *</label>
   <select id="Q40" name="Q40" required><option value="">Select</option><option>1</option><option>5</option></select>
 </form>`;
-const STUDENT = { ...PROFILE, education: [{ school: 'UIUC', gpa: '3.62', endYear: '2028' }],
+const STUDENT = { ...PROFILE, education: [{ school: 'UIUC', gpa: '3.62', endDate: { month: '05', year: '2028' } }],
   workExperience: [{ company: 'Acme Audio', title: 'Software Engineering Intern' }] };
 
-test('screening questions: GPA from the saved profile, internship only when one is saved', () => {
+test('screening questions: GPA from the saved profile, internship only when one is saved', async () => {
   const w = page(SCREENING('<input id="Q38" name="Q38" required>'));
-  const r = w.EasyApplyFormFiller.fill(w.document, STUDENT, { site: 'icims' });
+  const r = await w.EasyApplyFormFiller.fill(w.document, STUDENT, { site: 'icims' });
   const v = (id) => w.document.getElementById(id).value;
   assert.equal(v('Q38'), '3.62', 'GPA typed as saved');
   assert.equal(v('Q39'), 'Yes', 'a saved internship answers Yes');
@@ -180,27 +180,27 @@ test('screening questions: GPA from the saved profile, internship only when one 
   assert.deepEqual(JSON.parse(JSON.stringify(r.empty.map((e) => e.field))), ['Q37', 'Q40']);
 });
 
-test('no saved internship: the internship question is left, never answered No', () => {
+test('no saved internship: the internship question is left, never answered No', async () => {
   const w = page(SCREENING('<input id="Q38" name="Q38" required>'));
-  w.EasyApplyFormFiller.fill(w.document, { ...STUDENT, workExperience: [{ company: 'Cafe', title: 'Barista' }] });
+  await w.EasyApplyFormFiller.fill(w.document, { ...STUDENT, workExperience: [{ company: 'Cafe', title: 'Barista' }] });
   assert.equal(w.document.getElementById('Q39').value, '');
 });
 
-test('GPA as a dropdown of ranges picks the range that holds it', () => {
+test('GPA as a dropdown of ranges picks the range that holds it', async () => {
   const w = page(SCREENING(`<select id="Q38" name="Q38" required><option value="">Select</option>
     <option value="a">Below 2.0</option><option value="b">2.0 - 2.99</option><option value="c">3.0 - 3.49</option>
     <option value="d">3.50 - 3.99</option><option value="e">4.0 or higher</option></select>`));
-  w.EasyApplyFormFiller.fill(w.document, STUDENT);
+  await w.EasyApplyFormFiller.fill(w.document, STUDENT);
   assert.equal(w.document.getElementById('Q38').value, 'd');
 });
 
-test('no saved GPA: the GPA question is left', () => {
+test('no saved GPA: the GPA question is left', async () => {
   const w = page(SCREENING('<input id="Q38" name="Q38" required>'));
-  w.EasyApplyFormFiller.fill(w.document, { ...STUDENT, education: [{ school: 'UIUC' }] });
+  await w.EasyApplyFormFiller.fill(w.document, { ...STUDENT, education: [{ school: 'UIUC' }] });
   assert.equal(w.document.getElementById('Q38').value, '');
 });
 
-test('iCIMS job pages are recognised for the tracker', () => {
+test('iCIMS job pages are recognised for the tracker', async () => {
   const w = page('');
   w.chrome = { storage: { local: { get: async () => ({}), set: async () => {} } } };
   w.eval(fs.readFileSync(path.join(ROOT, 'cloud-tracker.js'), 'utf8'));

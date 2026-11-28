@@ -3,7 +3,7 @@
  * A site-independent filler for ordinary HTML application forms: native
  * <input>, <select>, <textarea>, radio groups and file inputs, found by the
  * label a person reads rather than by one site's element ids. Site scripts
- * (icims.js today) decide WHEN and WHERE to fill; this decides WHAT goes in
+ * (job-site.js for iCIMS and Paylocity) decide WHEN and WHERE to fill; this decides WHAT goes in
  * each field, fills it the way the page's own scripts expect (native value
  * setter, then input/change/blur), and returns a fill report in the same
  * shape content.js sends, so the side panel shows it unchanged.
@@ -17,13 +17,19 @@
  *  - Self-identification is answered only from saved answers, or "decline"
  *    when the person turned on Decline all disclosures.
  *
- * Exposes self.EasyApplyFormFiller. No DOM access at load; safe to load in
- * any frame, and in Node for tests.
+ * Besides native controls it drives two common ARIA widgets, found on
+ * React sites such as Paylocity: a combobox that owns a listbox of
+ * [role=option] (react-widgets), and a searchable select whose menu rows are
+ * [role=option] or "<input id>-select-row-N". Both open on mousedown and take a
+ * click on an option, which is verified by what the widget then shows.
+ *
+ * Exposes self.EasyApplyFormFiller. fill() is async (widgets open and close).
+ * No DOM access at load; safe to load in any frame, and in Node for tests.
  */
 (function (root) {
     'use strict';
 
-    const BUILD = 'forms-2026-11-27c';
+    const BUILD = 'forms-2026-11-28a';
 
     // ------------------------------------------------------------ text helpers
 
@@ -78,11 +84,12 @@
         const wrap = el.closest('label');
         if (wrap) parts.push(textOf(wrap));
         if (el.getAttribute('aria-label')) parts.push(el.getAttribute('aria-label'));
+        if (!parts.join('').trim() && el.getAttribute('data-for')) parts.push(el.getAttribute('data-for'));
         if (!parts.join('').trim()) {
             if (el.placeholder) parts.push(el.placeholder);
             if (el.title) parts.push(el.title);
         }
-        return clean(parts.join(' '));
+        return clean(parts.join(' ').replace(/\((required|optional)\)/gi, ' '));
     }
 
     /** The question a radio group or select asks: its legend, or the text of the
@@ -105,12 +112,12 @@
             if (own) return own;
         }
         // Walk up until an ancestor has text beyond the options themselves.
-        const optionText = el.type === 'radio'
-            ? Array.from(el.ownerDocument.querySelectorAll(`input[type="radio"][name="${el.name}"]`)).map(labelFor).join(' ')
-            : '';
+        const optionTexts = el.type === 'radio'
+            ? Array.from(el.ownerDocument.querySelectorAll('input[type="radio"]')).filter((r) => r.name === el.name).map(labelFor).filter(Boolean)
+            : [];
         for (let n = el.parentElement, i = 0; n && i < 5; n = n.parentElement, i++) {
             const t = textOf(n);
-            const extra = clean(t.replace(optionText, ''));
+            const extra = clean(optionTexts.reduce((rest, o) => rest.split(o).join(' '), t));
             if (extra.length > 3) return t.length > 400 ? t.slice(0, 400) : t;
         }
         return '';
@@ -123,7 +130,8 @@
         return norm(`${labelFor(el)} | ${name} | ${id}`) + ` ac:${(el.getAttribute('autocomplete') || '').toLowerCase()}`;
     }
 
-    const isRequired = (el) => el.required || el.getAttribute('aria-required') === 'true' || /\*\s*$/.test(labelFor(el));
+    const isRequired = (el) => el.required || el.getAttribute('aria-required') === 'true' || /\*\s*$/.test(labelFor(el))
+        || !!el.closest('.form-required') || /\(required\)/i.test(textOf(el.closest('.form-group')));
 
     // ------------------------------------------------------------ setting values
 
@@ -187,13 +195,69 @@
         return hit.r.checked;
     }
 
+    // ------------------------------------------------------------ ARIA widgets
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const UNANSWERED = /^(|-+|select\b.*|choose\b.*|please (select|choose)\b.*)$/i;
+    const isCombo = (el) => el.getAttribute('role') === 'combobox' && !/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName);
+    // A searchable select: an autocomplete input inside a select box. (An address
+    // autocomplete is a free-text box with suggestions, not one of these.)
+    const isSearch = (el) => el.tagName === 'INPUT' && el.getAttribute('aria-autocomplete') === 'list'
+        && !!el.closest('[class*="select"], [class*="Select"]');
+
+    function press(el) {
+        const win = el.ownerDocument.defaultView;
+        for (const type of ['mousedown', 'mouseup', 'click']) {
+            el.dispatchEvent(new win.MouseEvent(type, { bubbles: true, cancelable: true, button: 0, view: win }));
+        }
+    }
+
+    /** The box a searchable select draws around its input (it shows the chosen value). */
+    const searchBox = (el) => el.closest('[class*="select"][class*="container"], [class*="Select"][class*="container"]')
+        || (el.parentElement && el.parentElement.parentElement) || el;
+
+    /** What a widget currently shows as its answer ('' when unanswered). */
+    function widgetShows(el) {
+        const t = clean(isCombo(el) ? el.textContent : textOf(searchBox(el)));
+        return UNANSWERED.test(t) ? '' : t;
+    }
+
+    function widgetOptions(el) {
+        const doc = el.ownerDocument;
+        const owned = (el.getAttribute('aria-owns') || el.getAttribute('aria-controls') || '').split(/\s+/)
+            .map((id) => id && doc.getElementById(id)).filter(Boolean);
+        let opts = owned.flatMap((lb) => Array.from(lb.querySelectorAll('[role="option"]')));
+        if (!opts.length && el.id) opts = Array.from(doc.querySelectorAll('[id^="' + el.id.replace(/["\\]/g, '\\$&') + '-select-row-"]'));
+        if (!opts.length) opts = Array.from(doc.querySelectorAll('[role="option"]')).filter(isVisible);
+        return opts;
+    }
+
+    function closeWidget(el) {
+        const win = el.ownerDocument.defaultView;
+        el.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+        if (el.blur) el.blur();
+    }
+
+    /** Opens the widget, clicks the option matching the candidates, and checks it took. */
+    async function pickInWidget(el, candidates) {
+        press(isCombo(el) ? el : searchBox(el));
+        await sleep(250);
+        const options = widgetOptions(el).map((o) => ({ o, textContent: o.textContent, value: clean(o.textContent) }));
+        const hit = chooseOption(options, candidates);
+        if (!hit) { closeWidget(el); return false; }
+        press(hit.o);
+        await sleep(250);
+        return !!widgetShows(el);
+    }
+
     // ------------------------------------------------------------ answers
 
     /** The GPA to give: the current or most recent school that has one, as typed. */
     function savedGpa(p) {
         const withGpa = (p.education || []).filter((e) => e && String(e.gpa || '').trim());
         if (!withGpa.length) return '';
-        const current = withGpa.find((e) => !String(e.endYear || '').trim() || Number(e.endYear) >= new Date().getFullYear());
+        const endYear = (e) => String((e.endDate && e.endDate.year) || e.endYear || '').trim();
+        const current = withGpa.find((e) => !endYear(e) || Number(endYear(e)) >= new Date().getFullYear());
         return String((current || withGpa[0]).gpa).trim();
     }
 
@@ -256,7 +320,7 @@
             // Only asserted when the person said so; otherwise left for them.
             ['Age 18 or older', /\b18\b.*(age|old)|(age|old).*\b18\b|legal (working )?age/, null, jp.isAtLeast18 ? yesNo(true) : null, 'Work eligibility'],
             ['U.S. citizen', /\bu ?s\b.*citizen|citizen of the united states/, /dual|other/, jp.usCitizen ? yesNo(true) : null, 'Work eligibility'],
-            ['Former employee', /(previously|ever|have you) (been )?(employed|worked) (by|for|at)|former employee|worked (for|at) (us|this company) before/, /government|other (company|employer)/,
+            ['Former employee', /(previously|ever|have you) (ever )?(been )?(employed|worked) (by|for|at|with)|former employee|worked (for|at|with) (us|this company) before/, /government|other (company|employer)/,
                 yesNo(jp.formerEmployee === true), 'Work eligibility'],
             ['How did you hear', /how did you (hear|learn|find)|source|referr(al|ed) (source|by)/, /employee name|who referred/,
                 jp.sourceReferral ? [jp.sourceReferral] : null, 'Work eligibility'],
@@ -278,17 +342,18 @@
      * Fills every recognisable field in `doc` from the saved profile.
      * Returns a fill report: { site, page, build, at, counts, steps, empty }.
      */
-    function fill(doc, profile, { site = 'other', page = '' } = {}) {
+    async function fill(doc, profile, { site = 'other', page = '' } = {}) {
         const steps = [];
         const done = new Set(); // controls already handled
         const add = (status, section, field, detail) => steps.push({ status, section, field, ...(detail ? { detail } : {}) });
 
-        const controls = Array.from(doc.querySelectorAll('input, select, textarea')).filter(usable)
+        const controls = Array.from(doc.querySelectorAll('input, select, textarea, [role="combobox"]')).filter(usable)
+            .filter((el) => el.getAttribute('aria-disabled') !== 'true')
             .filter((el) => !/^(password|submit|button|image|reset|search)$/i.test(el.type))
             .filter((el) => !/captcha/i.test(`${el.name} ${el.id} ${el.className}`));
 
         // Text fields.
-        const textual = controls.filter((el) => el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && /^(text|email|tel|url|number|)$/i.test(el.type)));
+        const textual = controls.filter((el) => !isSearch(el) && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && /^(text|email|tel|url|number|)$/i.test(el.type))));
         for (const [field, want, avoid, value, section] of textRules(profile)) {
             if (!value) continue;
             const el = textual.find((c) => !done.has(c) && want.test(keysOf(c)) && !(avoid && avoid.test(norm(labelFor(c)))));
@@ -302,11 +367,15 @@
 
         // State and country: a select or a text box.
         const ad = profile.address || {};
-        const fillPlace = (field, want, candidates, text) => {
-            const el = controls.find((c) => !done.has(c) && c.type !== 'radio' && c.type !== 'checkbox' && want.test(keysOf(c)));
+        const fillPlace = async (field, want, candidates, text) => {
+            const el = controls.find((c) => !done.has(c) && !isCombo(c) && c.type !== 'radio' && c.type !== 'checkbox' && want.test(keysOf(c)));
             if (!el || !text) return;
             done.add(el);
-            if (el.tagName === 'SELECT') {
+            if (isSearch(el)) {
+                if (widgetShows(el)) { add('kept', 'Address', field); return; }
+                if (await pickInWidget(el, candidates)) add('filled', 'Address', field);
+                else add('failed', 'Address', field, `No option matched "${text}".`);
+            } else if (el.tagName === 'SELECT') {
                 if (el.value && !isPlaceholderOption(el.selectedOptions[0] || {})) { add('kept', 'Address', field); return; }
                 if (selectOption(el, candidates)) add('filled', 'Address', field);
                 else add('failed', 'Address', field, `No option matched "${text}".`);
@@ -319,9 +388,9 @@
         };
         const stateName = ad.state && (US_STATES[ad.state.toUpperCase()] || ad.state);
         const stateAbbr = stateName && Object.keys(US_STATES).find((k) => US_STATES[k].toLowerCase() === stateName.toLowerCase());
-        fillPlace('State', /\bstate\b|province|ac:address-level1/, [stateName, stateAbbr].filter(Boolean), stateName);
+        await fillPlace('State', /\bstate\b|province|ac:address-level1/, [stateName, stateAbbr].filter(Boolean), stateName);
         const isUS = ad.country && US_NAMES.includes(norm(ad.country));
-        fillPlace('Country', /\bcountry\b(?! code)|ac:country/, isUS ? ['United States', 'United States of America', 'USA', 'US'] : [ad.country], ad.country);
+        await fillPlace('Country', /\bcountry\b(?! code)|ac:country/, isUS ? ['United States', 'United States of America', 'USA', 'US'] : [ad.country], ad.country);
 
         // Questions: selects and radio groups.
         const questions = [];
@@ -329,6 +398,7 @@
         for (const el of controls) {
             if (done.has(el)) continue;
             if (el.tagName === 'SELECT') questions.push({ el, ask: questionFor(el), kind: 'select' });
+            else if (isCombo(el) || isSearch(el)) questions.push({ el, ask: labelFor(el) || questionFor(el), kind: 'widget' });
             else if (el.type === 'radio' && !seenGroups.has(el.name)) {
                 seenGroups.add(el.name);
                 questions.push({ el, ask: questionFor(el), kind: 'radio', group: radioGroup(doc, el) });
@@ -342,7 +412,11 @@
                 add('skipped', section, field, section === 'Self-identification' ? 'No saved answer.' : 'Left for you to answer.');
                 continue;
             }
-            if (q.kind === 'select') {
+            if (q.kind === 'widget') {
+                if (widgetShows(q.el)) { add('kept', section, field); continue; }
+                if (await pickInWidget(q.el, candidates)) add('filled', section, field);
+                else add('failed', section, field, 'No option matched your saved answer.');
+            } else if (q.kind === 'select') {
                 if (q.el.value && !isPlaceholderOption(q.el.selectedOptions[0] || {})) { add('kept', section, field); continue; }
                 if (selectOption(q.el, candidates)) add('filled', section, field);
                 else add('failed', section, field, 'No option matched your saved answer.');
@@ -359,7 +433,7 @@
         if (edu) {
             for (const [field, want, value] of [
                 ['School', /school|university|college|institution/, edu.school],
-                ['Field of study', /major|field of study|area of study|discipline/, edu.field]
+                ['Field of study', /major|field of study|area of study|discipline/, edu.fieldOfStudy || edu.field]
             ]) {
                 const el = value && firstWith(want, /high school diploma|graduat(ed|ion) (date|year)/);
                 if (!el) continue;
@@ -382,6 +456,29 @@
                     if (title.value) add('kept', 'Work experience', 'Job title');
                     else { setNative(title, job.title); if (title.value) add('filled', 'Work experience', 'Job title'); }
                 }
+                const typed = (field, el, value) => {
+                    if (!el || !value) return;
+                    done.add(el);
+                    if (el.value) { add('kept', 'Work experience', field); return; }
+                    setNative(el, value);
+                    if (el.value) add('filled', 'Work experience', field);
+                };
+                typed('Responsibilities', textual.find((c) => !done.has(c) && /responsibilit|duties|job description|role description/.test(keysOf(c))), job.description);
+                // Month and year, as the field's own MM/YYYY hint asks. A full date is left alone.
+                const monthYear = (d, el) => {
+                    if (!d || !d.month || !d.year || !el) return '';
+                    if (/dd/i.test(el.placeholder || '')) return '';
+                    return `${String(d.month).padStart(2, '0')}/${d.year}`;
+                };
+                const startEl = textual.find((c) => !done.has(c) && /\bstart ?date\b|\bdate started\b|\bfrom date\b/.test(keysOf(c)));
+                typed('Start date', startEl, monthYear(job.startDate, startEl));
+                if (job.isCurrentRole) {
+                    const box = controls.find((c) => c.type === 'checkbox' && !c.checked && /current(ly)? (work|employ)|i currently work|present/.test(keysOf(c)));
+                    if (box) { box.click(); if (box.checked) add('filled', 'Work experience', 'Currently working here'); }
+                } else {
+                    const endEl = textual.find((c) => !done.has(c) && /\bend ?date\b|\bdate ended\b|\bto date\b/.test(keysOf(c)));
+                    typed('End date', endEl, monthYear(job.endDate, endEl));
+                }
             }
         }
 
@@ -395,6 +492,10 @@
         const radiosSeen = new Set();
         for (const el of controls) {
             if (!isRequired(el)) continue;
+            if (isCombo(el) || isSearch(el)) {
+                if (!widgetShows(el)) empty.push({ required: true, field: el.id || el.name, label: (labelFor(el) || el.id).slice(0, 120) });
+                continue;
+            }
             if (el.type === 'radio') {
                 if (radiosSeen.has(el.name)) continue;
                 radiosSeen.add(el.name);

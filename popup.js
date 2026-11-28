@@ -629,7 +629,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Known portal hosts. We still attempt the message on unknown URLs
             // because Greenhouse forms are often embedded in an iframe on a
             // company's own careers page — the content script lives in the iframe.
-            const SUPPORTED_HOSTS = ['myworkdayjobs.com', 'boards.greenhouse.io', 'job-boards.greenhouse.io', 'icims.com'];
+            const SUPPORTED_HOSTS = ['myworkdayjobs.com', 'boards.greenhouse.io', 'job-boards.greenhouse.io', 'icims.com', 'paylocity.com'];
             const looksSupported = activeTab.url && SUPPORTED_HOSTS.some(h => activeTab.url.includes(h));
 
             chrome.tabs.sendMessage(activeTab.id, { action: 'fill_form' }, (response) => {
@@ -637,7 +637,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log("Could not send message, maybe content script isn't loaded yet.");
                     statusCtx.textContent = looksSupported
                         ? 'Error: Refresh the page and try again.'
-                        : 'Not a supported job page (Workday, Greenhouse or iCIMS).';
+                        : 'Not a supported job page (Workday, Greenhouse, iCIMS or Paylocity).';
                     statusCtx.style.color = 'var(--danger)';
                     setFillBusy(false);
                 } else {
@@ -655,7 +655,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // unregisters each site's content scripts accordingly.
     const PORTALS = [
         { toggle: 'greenhouseToggle', name: 'Greenhouse', origins: ['*://boards.greenhouse.io/*', '*://job-boards.greenhouse.io/*'] },
-        { toggle: 'icimsToggle', name: 'iCIMS', origins: ['*://*.icims.com/*'] }
+        { toggle: 'icimsToggle', name: 'iCIMS', origins: ['*://*.icims.com/*'] },
+        { toggle: 'paylocityToggle', name: 'Paylocity', origins: ['*://*.paylocity.com/*'] }
     ];
     for (const portal of PORTALS) {
         const toggle = document.getElementById(portal.toggle);
@@ -1039,13 +1040,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const job = tab && tab.url ? Tracker.normalizeJob({ url: tab.url }) : null;
         homeUi.jobCard.classList.toggle('inactive', !job);
         if (job) {
-            homeUi.site.textContent = job.key.startsWith('icims:') ? 'iCIMS application' : job.site === 'workday' ? 'Workday application' : 'Greenhouse application';
+            homeUi.site.textContent = job.key.startsWith('icims:') ? 'iCIMS application'
+                : job.key.startsWith('paylocity:') ? 'Paylocity application' : job.site === 'workday' ? 'Workday application' : 'Greenhouse application';
             homeUi.company.textContent = job.company;
             homeUi.role.textContent = job.role;
         } else {
             homeUi.site.textContent = 'This page';
             homeUi.company.textContent = 'Open a job application';
-            homeUi.role.textContent = 'On Workday, Greenhouse or iCIMS, then press Autofill.';
+            homeUi.role.textContent = 'On Workday, Greenhouse, iCIMS or Paylocity, then press Autofill.';
         }
     }
     chrome.tabs.onActivated.addListener(() => renderJobCard());

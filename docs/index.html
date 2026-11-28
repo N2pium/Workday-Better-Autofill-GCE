@@ -45,7 +45,7 @@
 <h1>Privacy Policy</h1>
 <p><strong>Effective Date:</strong> on release of version 2.1.0 (adds field-mapping updates and optional fill-failure reports; version 2.0 is covered by the policy published with it). Version 1.4 and earlier are covered by the policy dated 2026-08-17.</p>
 <h2>Overview</h2>
-<p>This extension ("Workday: Better Autofill") autofills job application forms on supported job portals (Workday and, optionally, Greenhouse, iCIMS and other supported sites).</p>
+<p>This extension ("Workday: Better Autofill") autofills job application forms on supported job portals (Workday and, optionally, Greenhouse, iCIMS, Paylocity and other supported sites).</p>
 <p>You can use it in one of two ways:</p>
 <ol>
 <li><strong>Local-only mode (the default).</strong> Everything stays in your browser, exactly as in earlier versions. No account, and nothing about you is transmitted to us. (The extension does download field-mapping updates; see below. That download sends nothing about you.)</li>
@@ -129,7 +129,7 @@
 <li><strong>identity</strong> — used only when you choose to sign in, to open the secure sign-in window.</li>
 <li><strong>alarms</strong> — schedules the background checks: profile changes from your other devices (only while signed in) and field-mapping updates.</li>
 <li><strong>Host permission <code>*://*.myworkdayjobs.com/*</code></strong> — required to autofill Workday application pages.</li>
-<li><strong>Optional host permissions for Greenhouse, iCIMS (<code>*://*.icims.com/*</code>) and other supported job sites</strong> — requested <strong>only if you enable that site</strong> in the extension's Settings, under "Job sites". You can revoke them at any time by turning the toggle off or via Chrome's extension settings.</li>
+<li><strong>Optional host permissions for Greenhouse, iCIMS (<code>*://*.icims.com/*</code>), Paylocity (<code>*://*.paylocity.com/*</code>) and other supported job sites</strong> — requested <strong>only if you enable that site</strong> in the extension's Settings, under "Job sites". For Paylocity, Chrome grants access to the whole paylocity.com domain, but the extension only runs on its job application (recruiting) pages, never on Paylocity payroll or employee sites. You can revoke them at any time by turning the toggle off or via Chrome's extension settings.</li>
 <li><strong>Access to the extension's own service</strong> — used for the cloud features above while you are signed in, and for fill-failure reports if you turn them on.</li>
 </ul>
 <p>The extension runs only on the job portal domains listed above and on its own service, and has no access to any other website.</p>
