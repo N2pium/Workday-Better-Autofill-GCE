@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.1.0 — 2026-11-27
+
+Everything planned for 2.0.1, plus a redesigned side panel.
+
+### New
+
+- **A new look.** Flat brown and gold design, with Apple system fonts (your system's own font elsewhere).
+  It adds no network requests.
+- **Dark mode.** Settings → Appearance has Dark mode and Match my computer. The Draft panel on job forms
+  follows the same setting, and the web dashboard has its own Theme button.
+- **Clearer Profile.** Sections fold into one-line summaries. Work eligibility answers are switches.
+- **Applications search and filters** by status (Applied, Interviewing, Offer, Closed).
+- **Settings regrouped**: account first, deletes last.
+- **Every action answers back.** Autofill shows progress and then a clear "Filled 23 of 26". Saves and copies
+  confirm in place. Deletes ask in place instead of in a browser pop-up. The system's reduce-motion setting
+  turns all animation off.
+
+### From 2.0.1
+
+- Autofill fixes since 2.0, always-on profile sync, signed field-mapping updates, and optional anonymous
+  fill-failure reports (off by default; see the privacy policy).
+
 ## Unreleased
 
 Four bugs reported from a real application, all with a reproduction in

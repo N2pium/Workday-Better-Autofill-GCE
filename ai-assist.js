@@ -161,33 +161,78 @@
     // ------------------------------------------------------------ UI
 
     const CSS_TEXT = `
-      :host { all: initial; }
-      * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
-      .btn { font-size: 12px; font-weight: 600; border-radius: 6px; padding: 4px 10px; cursor: pointer;
-        border: 1px solid #3a3531; background: #2d2a27; color: #f5f1ed; line-height: 1.4; }
-      .btn:hover { background: #35312d; }
-      .btn.primary { background: #d4a574; border-color: #d4a574; color: #1a1612; }
-      .btn.primary:hover { background: #bf9156; }
+      :host { all: initial;
+        /* Same tokens as popup.css and dashboard/app.css. The page cannot see into this closed root. */
+        --primary: #ffc93c; --primary-hover: #f2b52e; --on-primary: #2a1a0d;
+        --bg: #fffaee; --card-bg: #fffaee; --surface-raised: #f7efd6;
+        --text: #2a1a0d; --text-muted: #6a4f35; --border: #eadcb5;
+        --primary-ink: #8a5a1f; --accent: #6b4423; --success: #7a5a12; --danger: #a3402a;
+        --radius-s: 4px; --radius-m: 6px;
+        --dur-fast: 90ms; --dur-base: 160ms; --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+        --mono: ui-monospace, Consolas, monospace; }
+      :host([data-theme="dark"]) { --bg: #1b110a; --card-bg: #28190d; --surface-raised: #33200f;
+        --text: #f7efd6; --text-muted: #c9b48a; --border: #3b2616;
+        --primary-ink: #ffc93c; --accent: #ffc93c; --success: #ffd45c; --danger: #ec9a80; }
+      @media (prefers-color-scheme: dark) { :host(:not([data-theme="light"])) { --bg: #1b110a; --card-bg: #28190d; --surface-raised: #33200f;
+        --text: #f7efd6; --text-muted: #c9b48a; --border: #3b2616;
+        --primary-ink: #ffc93c; --accent: #ffc93c; --success: #ffd45c; --danger: #ec9a80; } }
+      * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif; }
+      .btn { position: relative; font-size: 12px; font-weight: 600; border-radius: var(--radius-s); padding: 4px 10px; cursor: pointer;
+        border: 1px solid var(--border); background: var(--card-bg); color: var(--text); line-height: 1.4;
+        transition: background-color var(--dur-base) var(--ease), transform var(--dur-fast) var(--ease); }
+      .btn:hover { background: var(--surface-raised); }
+      .btn:active { transform: translateY(1px); }
+      .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+      .btn.primary:hover { background: var(--primary-hover); }
       .btn:disabled { opacity: .55; cursor: wait; }
-      .btn:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid rgba(212,165,116,.5); outline-offset: 1px; }
-      .trigger { margin: 6px 0; }
-      .panel { margin: 6px 0 12px; padding: 12px; border-radius: 10px; background: #1a1612; color: #f5f1ed;
-        border: 1px solid #3a3531; font-size: 13px; line-height: 1.45; max-width: 720px; }
+      .btn.is-busy { opacity: 1; cursor: progress; }
+      .btn:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+      /* The trigger sits on the job site's own (light) page, so it is an outline,
+         not a fill: a crisp 1 px amber edge plus an amber glow on a pseudo-element.
+         Only the glow's opacity ever changes, so the page layout never moves. */
+      .trigger { margin: 8px 0; background: transparent; color: var(--on-primary); border-color: transparent;
+        box-shadow: 0 0 0 1px var(--primary-hover); }
+      .trigger:hover { background: transparent; }
+      .trigger:focus-visible { outline: 2px solid var(--on-primary); outline-offset: 3px; }
+      .trigger::after, .trigger::before { content: ''; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; }
+      .trigger::after { box-shadow: 0 0 8px 2px color-mix(in srgb, var(--primary) 80%, transparent); opacity: .7;
+        transition: opacity var(--dur-base) var(--ease); }
+      .trigger:hover::after, .trigger:focus-visible::after, .trigger.is-near::after { opacity: 1; }
+      .trigger.is-busy::after { animation: breathe 1.6s ease-in-out infinite alternate; }
+      @keyframes breathe { from { opacity: .3; } to { opacity: 1; } }
+      .trigger.pulse::before { animation: pulse-ring 420ms var(--ease) 1; }
+      @keyframes pulse-ring {
+        0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 85%, transparent); }
+        100% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--success) 0%, transparent); }
+      }
+
+      .panel { position: relative; margin: 6px 0 12px; padding: 12px; border-radius: var(--radius-m); background: var(--bg); color: var(--text);
+        border: 1px solid var(--border); font-size: 13px; line-height: 1.45; max-width: 720px; overflow: hidden; }
       .head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-      .kicker { font: 600 11px ui-monospace, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; color: #d4a574; }
-      .muted { color: #a29790; }
-      .x { margin-left: auto; background: none; border: 0; color: #a29790; font-size: 18px; cursor: pointer; padding: 0 4px; }
-      .match { border: 1px solid #3a3531; border-radius: 8px; padding: 8px; margin: 6px 0; background: #2d2a27; }
+      .kicker { font: 600 13px var(--fd); color: var(--text); }
+      .muted { color: var(--text-muted); }
+      .x { margin-left: auto; background: none; border: 0; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 0 4px; }
+      .x:hover { color: var(--text); }
+      .match { border: 1px solid var(--border); border-radius: var(--radius-m); padding: 8px; margin: 6px 0; background: var(--card-bg); }
       .match p { margin: 0 0 6px; white-space: pre-wrap; }
       .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-      textarea { width: 100%; min-height: 140px; margin: 8px 0 4px; padding: 8px; border-radius: 6px; resize: vertical;
-        background: #2d2a27; color: #f5f1ed; border: 1px solid #3a3531; font-size: 13px; line-height: 1.5; }
-      .count { font-size: 11px; }
-      .count.over { color: #e67873; }
+      textarea { width: 100%; min-height: 140px; margin: 8px 0 4px; padding: 8px; border-radius: var(--radius-s); resize: vertical;
+        background: var(--card-bg); color: var(--text); border: 1px solid var(--border); font-size: 13px; line-height: 1.5; }
+      .count { font-size: 11px; font-family: var(--ft); font-variant-numeric: tabular-nums; font-variant-numeric: tabular-nums; }
+      .count.over { color: var(--danger); }
       .status { min-height: 1.2em; margin-top: 6px; font-size: 12px; }
-      .status.err { color: #e67873; }
-      label.save { display: flex; gap: 6px; align-items: center; margin-right: auto; font-size: 12px; color: #a29790; cursor: pointer; }
+      .status.err { color: var(--danger); }
+      label.save { display: flex; gap: 6px; align-items: center; margin-right: auto; font-size: 12px; color: var(--text-muted); cursor: pointer; }
       .foot { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+      .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { transition-duration: 0.01ms !important; }
+        .trigger.is-busy::after { animation: none; opacity: 1; }
+        .trigger.pulse::before { animation: pulse-hold 1.5s steps(1, end) 1; }
+        @keyframes pulse-hold { 0%, 100% { box-shadow: 0 0 0 2px var(--success); } }
+      }
     `;
 
     const h = (tag, props = {}, ...kids) => {
@@ -202,16 +247,39 @@
         return n;
     };
 
+    // Appearance from the side panel's Settings: "light" or "dark" is set on each
+    // shadow host; "system" leaves it unset and CSS_TEXT follows the system.
+    let theme = 'system';
+    const hosts = new Set();
+    const themeHost = (host) => {
+        if (theme === 'light' || theme === 'dark') host.setAttribute('data-theme', theme);
+        else host.removeAttribute('data-theme');
+    };
+    chrome.storage.local.get('theme').then(({ theme: t }) => { theme = t || 'system'; hosts.forEach(themeHost); }).catch(() => {});
+
     function attach(box) {
         box.setAttribute(MARK, '1');
         const host = document.createElement('div');
         host.setAttribute('data-easyapply-ai-host', '');
+        hosts.add(host);
+        themeHost(host);
         const root = host.attachShadow({ mode: 'closed' });
         root.append(h('style', { text: CSS_TEXT }));
         const trigger = h('button', { type: 'button', class: 'btn trigger', text: '✦ Draft', title: 'Saved answers and AI drafts (Better Autofill)' });
         const slot = h('div');
-        root.append(trigger, slot);
+        const live = h('div', { class: 'sr', 'aria-live': 'polite' }); // outlives the panel
+        root.append(trigger, slot, live);
         box.insertAdjacentElement('afterend', host);
+
+        // Its question has focus: the glow strengthens (staged focus).
+        box.addEventListener('focus', () => trigger.classList.add('is-near'));
+        box.addEventListener('blur', () => trigger.classList.remove('is-near'));
+        const pulse = () => {
+            trigger.classList.remove('pulse');
+            void trigger.offsetWidth;
+            trigger.classList.add('pulse');
+            trigger.addEventListener('animationend', () => trigger.classList.remove('pulse'), { once: true });
+        };
 
         let open = false;
         trigger.addEventListener('click', (e) => {
@@ -219,11 +287,14 @@
             e.stopPropagation();
             if (open) { slot.replaceChildren(); open = false; return; }
             open = true;
-            slot.replaceChildren(buildPanel(box, () => { slot.replaceChildren(); open = false; }));
+            slot.replaceChildren(buildPanel(box, (inserted) => {
+                slot.replaceChildren(); open = false;
+                if (inserted === true) { live.textContent = 'Answer inserted.'; pulse(); }
+            }, trigger));
         });
     }
 
-    function buildPanel(box, close) {
+    function buildPanel(box, close, trigger) {
         const question = questionFor(box);
         const maxChars = maxCharsFor(box);
         let category = null;
@@ -253,9 +324,15 @@
             const before = button.textContent;
             button.disabled = true;
             button.textContent = label;
+            button.classList.add('is-busy');
+            if (trigger) trigger.classList.add('is-busy');
             try { await fn(); } catch (e) {
                 say(e.status === 429 ? e.message : e.notSignedIn ? 'Sign in again in the Better Autofill side panel.' : `Couldn't do that: ${e.message}`, true);
-            } finally { button.disabled = false; button.textContent = before; }
+            } finally {
+                button.disabled = false; button.textContent = before;
+                button.classList.remove('is-busy');
+                if (trigger) trigger.classList.remove('is-busy');
+            }
         }
 
         draftBtn.addEventListener('click', () => busy(draftBtn, 'Drafting…', async () => {
@@ -282,7 +359,7 @@
                 }).then(() => { answersPromise = null; }));
             }
             await Promise.all(jobs);
-            close();
+            close(true);
         }));
 
         // Library matches: rules first, then the tiny categoriser (cached per question).
@@ -367,6 +444,10 @@
 
     chrome.storage.onChanged.addListener((changes, area) => {
         if (area === 'local' && (changes.cloudAuth || changes.aiAssistOff)) refreshStatus();
+        if (area === 'local' && changes.theme) {
+            theme = changes.theme.newValue || 'system';
+            hosts.forEach((host) => (host.isConnected ? themeHost(host) : hosts.delete(host)));
+        }
     });
 
     // The side panel asks for the job on this page (match score).

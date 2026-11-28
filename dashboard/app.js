@@ -18,6 +18,29 @@
   let items = [];
   let cursor = null;
 
+  // ------------------------------------------------------------------ appearance
+  // Same three choices as the side panel's Appearance settings. The dashboard is
+  // a separate site, so it keeps its own choice. "auto" leaves data-theme unset
+  // and app.css follows the system, which is also what shows before this runs.
+  const THEME = 'ba.theme';
+  const THEMES = ['auto', 'dark', 'light'];
+  function applyTheme(t) {
+    const theme = THEMES.includes(t) ? t : 'auto';
+    if (theme === 'auto') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    const btn = $('themeBtn');
+    if (btn) btn.textContent = `Theme: ${theme}`;
+    return theme;
+  }
+  let theme = applyTheme(localStorage.getItem(THEME));
+  document.addEventListener('DOMContentLoaded', () => {
+    applyTheme(theme);
+    $('themeBtn').addEventListener('click', () => {
+      theme = applyTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]);
+      localStorage.setItem(THEME, theme);
+    });
+  });
+
   // ------------------------------------------------------------------ auth
   const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes)))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -443,26 +466,38 @@
     insightsTimer = setTimeout(() => { loadInsights(); }, 400);
   }
 
-  async function patch(it, fields) {
+  // A slow save shows a gold bar in its cell at once; a finished one pulses the control.
+  function pulse(node) {
+    node.classList.remove('pulse');
+    void node.offsetWidth;
+    node.classList.add('pulse');
+    node.addEventListener('animationend', () => node.classList.remove('pulse'), { once: true });
+  }
+
+  async function patch(it, fields, control) {
+    const cell = control && control.parentElement;
+    if (cell) cell.setAttribute('aria-busy', 'true');
     try {
       Object.assign(it, await api('PATCH', `/applications/${encodeURIComponent(it.id)}`, fields));
       if ('status' in fields || 'industry' in fields) refreshInsights();
       error('');
+      if (control) pulse(control);
     } catch (e) { error(e.message); }
+    finally { if (cell) cell.removeAttribute('aria-busy'); }
   }
 
   function row(it) {
     const status = el('select', { 'aria-label': `Status for ${it.company}` },
       ...STATUSES.map((s) => el('option', { value: s, textContent: label(s), selected: s === it.status })));
-    status.addEventListener('change', () => patch(it, { status: status.value }));
+    status.addEventListener('change', () => patch(it, { status: status.value }, status));
 
     const industry = el('input', { value: it.industry || '', maxLength: 60, placeholder: 'Add', className: 'industry' });
     industry.setAttribute('list', 'industryList');
     industry.setAttribute('aria-label', `Industry for ${it.company}`);
-    industry.addEventListener('change', () => patch(it, { industry: industry.value.trim() }));
+    industry.addEventListener('change', () => patch(it, { industry: industry.value.trim() }, industry));
 
     const notes = el('textarea', { value: it.notes || '', maxLength: 2000, placeholder: 'Add a note', 'aria-label': `Notes for ${it.company}` });
-    notes.addEventListener('change', () => patch(it, { notes: notes.value }));
+    notes.addEventListener('change', () => patch(it, { notes: notes.value }, notes));
 
     const del = el('button', { className: 'danger', textContent: 'Delete', title: 'Delete this application' });
     del.addEventListener('click', async () => {

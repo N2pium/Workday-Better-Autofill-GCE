@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective Date:** on release of version 2.0.1 (adds field-mapping updates and optional fill-failure reports; version 2.0 is covered by the policy published with it). Version 1.4 and earlier are covered by the policy dated 2026-08-17.
+**Effective Date:** on release of version 2.1.0 (adds field-mapping updates and optional fill-failure reports; version 2.0 is covered by the policy published with it). Version 1.4 and earlier are covered by the policy dated 2026-08-17.
 
 ## Overview
 This extension ("Workday: Better Autofill") autofills job application forms on supported job portals (Workday and, optionally, Greenhouse and other supported sites).

@@ -1,4 +1,4 @@
-# Chrome Web Store: Privacy practices tab (version 2.0.1)
+# Chrome Web Store: Privacy practices tab (version 2.1.0)
 
 Answers for the Developer Dashboard's **Privacy practices** tab. Each one was checked
 against the 2.0 code and `PRIVACY_POLICY.md`. Update this file whenever the extension
