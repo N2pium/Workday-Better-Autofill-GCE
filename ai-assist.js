@@ -247,10 +247,22 @@
         return n;
     };
 
+    // Appearance from the side panel's Settings: "light" or "dark" is set on each
+    // shadow host; "system" leaves it unset and CSS_TEXT follows the system.
+    let theme = 'system';
+    const hosts = new Set();
+    const themeHost = (host) => {
+        if (theme === 'light' || theme === 'dark') host.setAttribute('data-theme', theme);
+        else host.removeAttribute('data-theme');
+    };
+    chrome.storage.local.get('theme').then(({ theme: t }) => { theme = t || 'system'; hosts.forEach(themeHost); }).catch(() => {});
+
     function attach(box) {
         box.setAttribute(MARK, '1');
         const host = document.createElement('div');
         host.setAttribute('data-easyapply-ai-host', '');
+        hosts.add(host);
+        themeHost(host);
         const root = host.attachShadow({ mode: 'closed' });
         root.append(h('style', { text: CSS_TEXT }));
         const trigger = h('button', { type: 'button', class: 'btn trigger', text: '✦ Draft', title: 'Saved answers and AI drafts (Better Autofill)' });
@@ -432,6 +444,10 @@
 
     chrome.storage.onChanged.addListener((changes, area) => {
         if (area === 'local' && (changes.cloudAuth || changes.aiAssistOff)) refreshStatus();
+        if (area === 'local' && changes.theme) {
+            theme = changes.theme.newValue || 'system';
+            hosts.forEach((host) => (host.isConnected ? themeHost(host) : hosts.delete(host)));
+        }
     });
 
     // The side panel asks for the job on this page (match score).

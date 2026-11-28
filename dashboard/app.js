@@ -18,6 +18,29 @@
   let items = [];
   let cursor = null;
 
+  // ------------------------------------------------------------------ appearance
+  // Same three choices as the side panel's Appearance settings. The dashboard is
+  // a separate site, so it keeps its own choice. "auto" leaves data-theme unset
+  // and app.css follows the system, which is also what shows before this runs.
+  const THEME = 'ba.theme';
+  const THEMES = ['auto', 'dark', 'light'];
+  function applyTheme(t) {
+    const theme = THEMES.includes(t) ? t : 'auto';
+    if (theme === 'auto') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    const btn = $('themeBtn');
+    if (btn) btn.textContent = `Theme: ${theme}`;
+    return theme;
+  }
+  let theme = applyTheme(localStorage.getItem(THEME));
+  document.addEventListener('DOMContentLoaded', () => {
+    applyTheme(theme);
+    $('themeBtn').addEventListener('click', () => {
+      theme = applyTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]);
+      localStorage.setItem(THEME, theme);
+    });
+  });
+
   // ------------------------------------------------------------------ auth
   const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes)))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');

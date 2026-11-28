@@ -150,3 +150,9 @@ tbody tr:has(:is(input, select, textarea):focus) td:first-child::before { conten
   .pulse { animation: pulse-hold 1.5s steps(1, end) 1; }
   @keyframes pulse-hold { 0%, 100% { box-shadow: 0 0 0 2px var(--success); } }
 }
+
+/* Controls on the brown bar: pale gold, so they read in both themes. */
+.bar .muted { color: #e2cf9e; }
+.bar .ghost { color: var(--pale-gold); border-color: rgba(247, 239, 214, 0.3); }
+.bar .ghost:hover { background: rgba(255, 255, 255, 0.08); }
+.bar .ghost:focus-visible { outline-color: var(--gold); }

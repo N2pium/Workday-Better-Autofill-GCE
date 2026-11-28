@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Workday Autofill</title>
   <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="motion.css">
 </head>
 
 <body>
@@ -13,12 +14,12 @@
        without an account" (cloudChoice). Logic in popup.js, Cloud Account block. -->
   <div id="welcome" class="welcome" hidden>
     <div class="welcome-inner">
-      <h2 class="welcome-title">Fill job applications in one click.</h2>
-      <p class="helper">An account keeps your profile in sync across devices. Without one, everything stays
+      <h1 class="page-title welcome-title">Fill job applications in one click.</h1>
+      <p class="lede">An account keeps your profile in sync across devices. Without one, everything stays
         on this device. Self-identification answers never leave this device either way.</p>
-      <button type="button" id="welcomeSignInBtn" class="autofill-btn">Sign in</button>
-      <button type="button" id="welcomeSignUpBtn" class="add-btn">Create account</button>
-      <button type="button" id="welcomeGuestBtn" class="welcome-guest">Continue without an account</button>
+      <button type="button" id="welcomeSignInBtn" class="btn btn-primary">Sign in</button>
+      <button type="button" id="welcomeSignUpBtn" class="btn btn-secondary">Create account</button>
+      <button type="button" id="welcomeGuestBtn" class="btn btn-text welcome-guest">Continue without an account</button>
       <p class="helper welcome-status" id="welcomeStatus" aria-live="polite"></p>
     </div>
   </div>
@@ -28,91 +29,123 @@
     </header>
 
     <main class="tab-scroll">
+      <!-- Sync choice: shown above whichever tab is open when this device and the
+           account both hold a profile. Replaces two browser confirm() pop-ups. -->
+      <div class="sync-choice" id="syncChoice" role="region" aria-labelledby="syncChoiceTitle" hidden>
+        <h3 class="card-title" id="syncChoiceTitle">Which profile should this device use?</h3>
+        <p class="helper" id="syncChoiceText"></p>
+        <div class="btn-row stack">
+          <button type="button" class="btn btn-primary" data-choice="cloud">Use the synced profile</button>
+          <button type="button" class="btn btn-secondary" data-choice="device">Upload this device's profile</button>
+          <button type="button" class="btn btn-text" data-choice="later">Decide later</button>
+        </div>
+      </div>
+
       <!-- HOME: the page you're on, your profile at a glance, recent applications -->
       <div class="tab-panel" id="tab-home">
         <div class="job-card">
           <p class="job-company" id="jobCompany">Open a job application</p>
           <p class="job-role" id="jobRole">Workday or Greenhouse</p>
           <p class="job-site" id="jobSite">This page</p>
-          <button id="autofillBtn" class="autofill-btn">Autofill this page</button>
+          <div class="cta-wrap">
+            <button id="autofillBtn" class="btn btn-primary autofill-btn">
+              <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/></svg>
+              <span class="btn-label">Autofill this page</span>
+            </button>
+          </div>
         </div>
 
-        <div class="panel-card" id="fillReport" hidden>
-          <div class="card-head">
-            <h3 class="kicker">Fill report</h3>
-            <button type="button" class="link-btn no-arrow" id="fillReportCopy">Copy report</button>
+        <section class="group" id="fillReport" hidden>
+          <div class="group-head">
+            <h2 class="group-title" id="fillReportSummary">Fill report</h2>
+            <button type="button" class="btn btn-text btn-small" id="fillReportCopy"><span class="btn-label">Copy report</span></button>
           </div>
-          <p class="card-title" id="fillReportSummary"></p>
-          <ul class="report-list" id="fillReportList"></ul>
+          <ul class="list report-list" id="fillReportList"></ul>
           <p class="helper">Lists what autofill couldn't do on this page. Copy report shares only field names and
             what happened, never your answers.</p>
-        </div>
+        </section>
 
-        <div class="panel-card" id="matchCard" hidden>
-          <div class="card-head">
-            <h3 class="kicker">Match score</h3>
+        <div class="panel-card match-card" id="matchCard" hidden>
+          <div class="match-top">
+            <div class="match-ring" id="matchRing" aria-hidden="true"><span></span></div>
+            <div class="match-text">
+              <h3 class="card-title">Match score</h3>
+              <p class="helper" id="matchHelp">How well your profile fits the job on this page, with what to highlight and what is missing.</p>
+            </div>
           </div>
-          <p class="helper" id="matchHelp">How well your profile fits the job on this page, with what to highlight and what is missing.</p>
           <div class="match-result" id="matchResult" hidden>
             <p class="match-score"><b id="matchScore">0</b><span>/100</span></p>
             <p class="helper" id="matchSummary"></p>
-            <h3 class="kicker small">Strengths</h3><ul class="match-list" id="matchStrengths"></ul>
-            <h3 class="kicker small">Gaps</h3><ul class="match-list" id="matchGaps"></ul>
+            <h4 class="sub-title">Strengths</h4><ul class="match-list" id="matchStrengths"></ul>
+            <h4 class="sub-title">Gaps</h4><ul class="match-list" id="matchGaps"></ul>
           </div>
-          <button type="button" id="matchBtn" class="secondary-btn">Check my match</button>
+          <button type="button" id="matchBtn" class="btn btn-secondary wide">Check my match</button>
         </div>
 
-        <div class="panel-card">
-          <div class="card-head">
-            <h3 class="kicker">Your profile</h3>
-            <button type="button" class="link-btn" data-goto="profile">Edit</button>
+        <section class="group">
+          <div class="group-head">
+            <h2 class="group-title">Your profile</h2>
+            <button type="button" class="btn btn-text btn-small" data-goto="profile">Edit</button>
           </div>
-          <p class="card-title" id="homeProfileName">Not set up yet</p>
-          <p class="helper" id="homeProfileStats">Add your details once and every application fills itself.</p>
-        </div>
+          <div class="list">
+            <button type="button" class="row" data-goto="profile">
+              <span class="avatar" id="homeProfileAvatar" aria-hidden="true"></span>
+              <span class="row-text">
+                <b id="homeProfileName">Not set up yet</b>
+                <span id="homeProfileStats">Add your details once and every application fills itself.</span>
+              </span>
+              <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+        </section>
 
-        <div class="panel-card">
-          <div class="card-head">
-            <h3 class="kicker">Recent applications</h3>
-            <button type="button" class="link-btn" data-goto="apps">See all</button>
+        <section class="group">
+          <div class="group-head">
+            <h2 class="group-title">Recent applications</h2>
+            <button type="button" class="btn btn-text btn-small" data-goto="apps">See all</button>
           </div>
-          <ul class="app-list compact" id="homeAppsList"></ul>
+          <ul class="list app-list compact" id="homeAppsList"></ul>
           <p class="helper" id="homeAppsEmpty">Sign in and every job you autofill is listed here.</p>
-        </div>
+        </section>
       </div>
 
       <!-- PROFILE: fill from a resume, then the form autofill reads -->
       <div class="tab-panel" id="tab-profile" hidden>
-        <div class="panel-card resume-import" id="resumeImport">
-          <h3 class="kicker">Fill from your resume</h3>
+        <div class="page-head">
+          <h1 class="page-title">Profile</h1>
+          <p class="lede">Fill this once and every application fills itself.</p>
+        </div>
+
+        <div class="panel-card feature-card resume-import" id="resumeImport">
+          <h3 class="card-title">Fill from your resume</h3>
           <p class="helper" id="resumeImportHelp">Upload a PDF or Word resume and your profile fills itself.
             You review everything before saving. The file is read once and not stored.</p>
           <input type="file" id="resumeImportFile" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
-          <button type="button" id="resumeImportBtn" class="autofill-btn">Upload resume</button>
+          <button type="button" id="resumeImportBtn" class="btn btn-primary wide">Upload resume</button>
           <p class="helper import-status" id="resumeImportStatus" aria-live="polite"></p>
         </div>
 
         <div class="panel-card" id="vaultCard" hidden>
           <div class="card-head">
-            <h3 class="kicker">Resume versions</h3>
+            <h3 class="card-title">Resume versions</h3>
             <span class="count-badge" id="vaultCount"></span>
           </div>
           <p class="helper">Keep a resume per kind of job (up to 10) in your account, encrypted. Pick one with
             "Use for autofill" before you apply. Delete removes the file from your account.</p>
-          <ul class="app-list" id="vaultList"></ul>
+          <ul class="list app-list" id="vaultList"></ul>
           <input type="file" id="vaultFile" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
-          <button type="button" id="vaultAddBtn" class="secondary-btn">Add a resume version</button>
+          <button type="button" id="vaultAddBtn" class="btn btn-secondary wide">Add a resume version</button>
           <p class="helper import-status" id="vaultStatus" aria-live="polite"></p>
         </div>
 
         <div class="panel-card" id="answersCard" hidden>
           <div class="card-head">
-            <h3 class="kicker">Saved answers</h3>
+            <h3 class="card-title">Saved answers</h3>
             <span class="count-badge" id="answersCount"></span>
           </div>
           <p class="helper" id="answersHelp">Answers you save from the &#10022; Draft button on job forms. They are offered first
             next time, for free. <code>{company}</code> and <code>{role}</code> are filled in for each job.</p>
-          <ul class="app-list" id="answersList"></ul>
+          <ul class="list app-list" id="answersList"></ul>
         </div>
 
         <form id="profileForm">
@@ -121,16 +154,20 @@
            hidden entirely when nothing is blank. -->
       <div id="blankSummary" class="blank-summary" hidden></div>
 
-      <!-- Personal Information -->
-      <section>
-        <h2>Personal Information</h2>
-        <div class="input-group">
-          <label for="firstName">First Name</label>
-          <input type="text" id="firstName" placeholder="e.g. Jane" />
-        </div>
-        <div class="input-group">
-          <label for="lastName">Last Name</label>
-          <input type="text" id="lastName" placeholder="e.g. Doe" />
+      <!-- Each section is a group with a header row that opens and closes it.
+           Personal information and Work eligibility start open; the rest show a
+           one-line summary until opened (popup.js, sectionSummaries). -->
+      <section data-sec="personal">
+        <h2>Personal information</h2>
+        <div class="two">
+          <div class="input-group">
+            <label for="firstName">First name</label>
+            <input type="text" id="firstName" placeholder="e.g. Jane" autocomplete="given-name" />
+          </div>
+          <div class="input-group">
+            <label for="lastName">Last name</label>
+            <input type="text" id="lastName" placeholder="e.g. Doe" autocomplete="family-name" />
+          </div>
         </div>
         <div class="input-group">
           <label for="phone">Phone</label>
@@ -145,29 +182,72 @@
           <input type="url" id="linkedinUrl" placeholder="https://linkedin.com/in/..." />
         </div>
         <div class="input-group">
-          <label for="websiteUrl">Website / Portfolio URL</label>
+          <label for="websiteUrl">Website or portfolio URL</label>
           <input type="url" id="websiteUrl" placeholder="https://yoursite.com" />
         </div>
       </section>
 
-      <!-- Address -->
-      <section>
+      <section data-sec="eligibility">
+        <h2>Work eligibility</h2>
+        <div class="switch-list">
+          <div class="switch-row">
+            <label for="isAtLeast18"><b>I am 18 or older</b><span>Off leaves the question for you to answer.</span></label>
+            <input type="checkbox" role="switch" id="isAtLeast18" />
+          </div>
+          <div class="switch-row">
+            <label for="usCitizen"><b>I am a U.S. citizen</b><span>Off leaves citizenship questions for you.</span></label>
+            <input type="checkbox" role="switch" id="usCitizen" />
+          </div>
+          <div class="switch-row">
+            <label for="authorizedToWork"><b>Authorized to work in the country</b></label>
+            <input type="checkbox" role="switch" id="authorizedToWork" checked />
+          </div>
+          <div class="switch-row">
+            <label for="requiresSponsorship"><b>I need visa sponsorship</b></label>
+            <input type="checkbox" role="switch" id="requiresSponsorship" />
+          </div>
+          <div class="switch-row">
+            <label for="formerEmployee"><b>I used to work at this company</b><span>Some employers ask this on their forms.</span></label>
+            <input type="checkbox" role="switch" id="formerEmployee" />
+          </div>
+          <div class="switch-row">
+            <label for="autoDisclosures"><b>Decline all disclosures</b><span>Picks "I decline to self-identify" for any
+              self-identification question you left blank.</span></label>
+            <input type="checkbox" role="switch" id="autoDisclosures" />
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="sourceReferral">How did you hear about us?</label>
+          <select id="sourceReferral">
+            <option value="">Select...</option>
+            <option value="Company Website">Company Website</option>
+            <option value="LinkedIn">LinkedIn</option>
+            <option value="Indeed">Indeed</option>
+            <option value="Glassdoor">Glassdoor</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </section>
+
+      <section data-sec="address">
         <h2>Address</h2>
         <div class="input-group">
-          <label for="street">Street Address</label>
+          <label for="street">Street address</label>
           <input type="text" id="street" placeholder="e.g. 123 Main St" />
         </div>
-        <div class="input-group">
-          <label for="city">City</label>
-          <input type="text" id="city" placeholder="e.g. New York" />
+        <div class="two">
+          <div class="input-group">
+            <label for="city">City</label>
+            <input type="text" id="city" placeholder="e.g. New York" />
+          </div>
+          <div class="input-group">
+            <label for="zip">Zip or postal code</label>
+            <input type="text" id="zip" placeholder="e.g. 10001" />
+          </div>
         </div>
         <div class="input-group">
-          <label for="state">State (Full Name)</label>
+          <label for="state">State (full name)</label>
           <input type="text" id="state" placeholder="e.g. New York" />
-        </div>
-        <div class="input-group">
-          <label for="zip">Zip / Postal Code</label>
-          <input type="text" id="zip" placeholder="e.g. 10001" />
         </div>
         <div class="input-group">
           <label for="country">Country</label>
@@ -175,32 +255,27 @@
         </div>
       </section>
 
-      <!-- Education -->
-      <section>
+      <section data-sec="education">
         <h2>Education</h2>
         <div id="education-container"></div>
-        <button type="button" id="addEduBtn" class="add-btn">+ Add Education</button>
+        <button type="button" id="addEduBtn" class="btn btn-secondary wide">Add education</button>
       </section>
 
-      <!-- Work Experience -->
-      <section>
-        <h2>Work Experience</h2>
+      <section data-sec="work">
+        <h2>Work experience</h2>
         <div id="work-container"></div>
-        <button type="button" id="addWorkBtn" class="add-btn">+ Add Work Experience</button>
+        <button type="button" id="addWorkBtn" class="btn btn-secondary wide">Add work experience</button>
       </section>
 
-      <!-- Skills -->
-      <section>
-        <h2>Skills</h2>
-        <p class="helper">Comma separated (e.g. Java, Python, React)</p>
-        <textarea id="skills" rows="3" placeholder="e.g. Java, Python, Project Management"></textarea>
-      </section>
-
-      <!-- Languages -->
-      <section>
-        <h2>Languages</h2>
+      <section data-sec="skills">
+        <h2>Skills and languages</h2>
         <div class="input-group">
-          <label for="languageInput">Primary Language</label>
+          <label for="skills">Skills</label>
+          <textarea id="skills" rows="3" placeholder="e.g. Java, Python, Project Management"></textarea>
+          <p class="helper">Separate them with commas.</p>
+        </div>
+        <div class="input-group">
+          <label for="languageInput">Primary language</label>
           <input type="text" id="languageInput" list="languages" placeholder="Select a language" />
           <datalist id="languages">
             <option value="English">
@@ -255,16 +330,17 @@
             <option value="Malayalam">
           </datalist>
         </div>
-        <div class="input-group checkbox-group">
-          <input type="checkbox" id="nativeSpeaker" />
-          <label for="nativeSpeaker">I am a Native Speaker</label>
+        <div class="switch-list">
+          <div class="switch-row">
+            <label for="nativeSpeaker"><b>I am a native speaker</b></label>
+            <input type="checkbox" role="switch" id="nativeSpeaker" />
+          </div>
         </div>
       </section>
 
-      <!-- Demographics -->
-      <section>
-        <h2>Demographics</h2>
-        <p class="helper">These are used for voluntary self-identification questions</p>
+      <section data-sec="selfid">
+        <h2>Self-identification</h2>
+        <p class="helper">Used for voluntary self-identification questions. These answers never leave this device.</p>
 
         <div class="input-group">
           <label for="gender">Gender</label>
@@ -325,166 +401,177 @@
         </div>
       </section>
 
-      <!-- Job Preferences -->
-      <section>
-        <h2>Job Preferences</h2>
-
-        <div class="attestation">
-          <input type="checkbox" id="isAtLeast18" />
-          <label for="isAtLeast18">
-            <span class="attestation-title">I am 18 years of age or older</span>
-            <span class="attestation-note">Leave this unticked and the question is left for you to answer
-              yourself.</span>
-          </label>
-        </div>
-
-        <div class="attestation">
-          <input type="checkbox" id="usCitizen" />
-          <label for="usCitizen">
-            <span class="attestation-title">I am a U.S. citizen</span>
-            <span class="attestation-note">Leave this unticked and citizenship questions are left for you to
-              answer yourself.</span>
-          </label>
-        </div>
-
-        <div class="input-group checkbox-group">
-          <input type="checkbox" id="formerEmployee" />
-          <label for="formerEmployee">I am a Former Employee</label>
-        </div>
-
-        <div class="input-group checkbox-group">
-          <input type="checkbox" id="authorizedToWork" checked />
-          <label for="authorizedToWork">Legally Authorized to Work in Country</label>
-        </div>
-
-        <div class="input-group checkbox-group">
-          <input type="checkbox" id="requiresSponsorship" />
-          <label for="requiresSponsorship">I Require Sponsorship</label>
-        </div>
-
-        <div class="input-group">
-          <label for="sourceReferral">How Did You Hear About Us?</label>
-          <select id="sourceReferral">
-            <option value="">Select...</option>
-            <option value="Company Website">Company Website</option>
-            <option value="LinkedIn">LinkedIn</option>
-            <option value="Indeed">Indeed</option>
-            <option value="Glassdoor">Glassdoor</option>
-            <option value="Other">Other</option>
-          </select>
-        </div>
-
-        <div class="input-group checkbox-group divider-above">
-          <input type="checkbox" id="autoDisclosures" />
-          <label for="autoDisclosures"><strong>Decline all disclosures</strong></label>
-        </div>
-        <p class="helper">
-          Selects "I decline to self-identify" for any self-identification question you have not answered above.
-        </p>
-      </section>
-
-      <!-- Resume -->
-      <section>
-        <h2>Resume</h2>
+      <section data-sec="resume">
+        <h2>Resume file</h2>
         <p class="helper">The file autofill attaches to applications. PDF or Word, up to 3 MB.</p>
         <input type="file" id="resume" accept=".pdf,.doc,.docx" />
         <div id="resumeStatus" class="helper resume-status"></div>
       </section>
 
           <div class="sticky-footer">
-            <button type="submit" id="saveBtn">Save profile</button>
+            <button type="submit" id="saveBtn" class="btn btn-primary wide"><span class="btn-label">Save profile</span></button>
           </div>
         </form>
       </div>
 
       <!-- APPLICATIONS: every job you autofilled while signed in -->
       <div class="tab-panel" id="tab-apps" hidden>
-        <div class="card-head">
-          <h3 class="kicker">Applications</h3>
-          <span class="count-badge" id="appsCount"></span>
+        <div class="page-head">
+          <div class="card-head">
+            <h1 class="page-title">Applications</h1>
+            <span class="count-badge" id="appsCount"></span>
+          </div>
+          <p class="lede">Every job you autofill lands here.</p>
         </div>
-        <div class="panel-card" id="appsSignedOut" hidden>
-          <p class="card-title">Track every application</p>
+        <div class="panel-card feature-card" id="appsSignedOut" hidden>
+          <h3 class="card-title">Track every application</h3>
           <p class="helper">Sign in and each job you autofill is added here automatically, with its link and status.</p>
-          <button type="button" class="add-btn" data-goto="settings">Sign in</button>
+          <button type="button" class="btn btn-primary wide" data-goto="settings">Sign in</button>
         </div>
-        <ul class="app-list" id="appsList"></ul>
+        <div class="apps-tools" id="appsTools" hidden>
+          <label for="appsSearch" class="sr-only">Search applications</label>
+          <input type="search" id="appsSearch" placeholder="Search company or role" autocomplete="off" />
+          <div class="chips" id="appsChips" role="group" aria-label="Filter by status"></div>
+        </div>
+        <ul class="list app-list" id="appsList"></ul>
+        <p class="helper" id="appsNoMatch" hidden>No applications match this filter.</p>
         <p class="helper" id="appsEmpty" hidden>No applications yet. Autofill a job application and it appears here.</p>
-        <button type="button" class="add-btn" id="appsMore" hidden>Load more</button>
+        <button type="button" class="btn btn-secondary wide" id="appsMore" hidden>Load more</button>
       </div>
 
-      <!-- SETTINGS: account and sync, job sites, backup -->
+      <!-- SETTINGS: ordered by how often things change; account at the top,
+           destructive actions at the bottom. -->
       <div class="tab-panel" id="tab-settings" hidden>
-      <!-- Cloud Account (optional; see cloud-auth.js and PRIVACY_POLICY.md) -->
-      <section id="cloudSection">
-        <h2>Cloud Account</h2>
-        <div id="cloudSignedOut">
-          <p class="helper">Optional. Sign in to sync your profile across devices and keep a list of the jobs
-            you apply to. Without an account everything stays on this device, exactly as it does now.
-            Self-identification answers never leave this device.</p>
-          <button type="button" id="cloudSignInBtn" class="add-btn">Sign in</button>
+        <div class="page-head">
+          <h1 class="page-title">Settings</h1>
         </div>
-        <div id="cloudSignedIn" hidden>
-          <p class="helper">Signed in as <strong id="cloudEmail"></strong></p>
-          <p class="helper" id="cloudConnection" aria-live="polite"></p>
-          <p class="helper">Your profile syncs across every device you sign in on: personal info, address,
-            education, work experience, skills, languages and job preferences. Self-identification answers and
-            your resume file stay on this device. Sign out to stop syncing on this device.</p>
-          <div class="switch-row">
-            <label for="aiAssistToggle">Show &#10022; Draft buttons on job forms</label>
-            <input type="checkbox" role="switch" id="aiAssistToggle" checked />
+
+        <!-- Cloud Account (optional; see cloud-auth.js and PRIVACY_POLICY.md) -->
+        <section class="group" id="cloudSection">
+          <h2 class="group-title">Account</h2>
+          <div id="cloudSignedOut" class="list">
+            <div class="row">
+              <span class="row-text"><b>Optional</b>
+                <span>Sign in to sync your profile across devices and keep a list of the jobs you apply to. Without an
+                  account everything stays on this device. Self-identification answers never leave this device.</span></span>
+            </div>
+            <div class="row">
+              <button type="button" id="cloudSignInBtn" class="btn btn-primary wide">Sign in</button>
+            </div>
           </div>
-          <p class="helper">Saved answers and AI drafts for free-text questions. Nothing is sent until you press a button in them.</p>
-          <div class="row">
-            <button type="button" id="cloudSignOutBtn" class="add-btn half">Sign out</button>
-            <button type="button" id="cloudDeleteBtn" class="add-btn half cloud-danger">Delete cloud account</button>
+          <div id="cloudSignedIn" class="list" hidden>
+            <div class="row">
+              <span class="avatar" id="cloudAvatar" aria-hidden="true"></span>
+              <span class="row-text"><b id="cloudEmail"></b><span id="cloudConnection" aria-live="polite"></span></span>
+            </div>
+            <div class="row">
+              <span class="row-text"><b>Profile sync</b>
+                <span>Personal info, address, education, work, skills, languages and preferences sync to every device
+                  you sign in on. Self-identification answers and your resume file stay here. Sign out to stop syncing
+                  on this device.</span></span>
+            </div>
+            <div class="row">
+              <button type="button" id="cloudSignOutBtn" class="btn btn-secondary">Sign out</button>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- Supported Portals -->
-      <section>
-        <h2>Supported Portals</h2>
-        <p class="helper">Workday is always enabled. Turn on other portals below — Chrome will ask you to approve
-          access to that site.</p>
-        <div class="switch-row">
-          <label for="greenhouseToggle">Greenhouse (boards.greenhouse.io)</label>
-          <input type="checkbox" role="switch" id="greenhouseToggle" />
-        </div>
-        <p class="helper">After enabling, refresh any Greenhouse tab that is already open.</p>
-      </section>
+        <section class="group" id="aiSection" hidden>
+          <h2 class="group-title">On job forms</h2>
+          <div class="list switch-list">
+            <div class="switch-row">
+              <label for="aiAssistToggle"><b>Draft buttons</b><span>Saved answers and AI drafts next to free-text
+                questions. Nothing is sent until you press a button in them.</span></label>
+              <input type="checkbox" role="switch" id="aiAssistToggle" checked />
+            </div>
+          </div>
+        </section>
 
-      <!-- Anonymous fill-failure reports (cloud-telemetry.js; off by default) -->
-      <section id="telemetrySection">
-        <h2>Help Improve Autofill</h2>
-        <div class="switch-row">
-          <label for="telemetryToggle">Send anonymous fill-failure reports</label>
-          <input type="checkbox" role="switch" id="telemetryToggle" />
-        </div>
-        <p class="helper" id="telemetryHelp">Off unless you turn it on. After each autofill it sends only: which of the
-          extension's own steps failed or were skipped and why (for example "Work Experience: did not change"), the
-          form's internal ID and type for required fields left empty, the site's host name (like
-          company.wd1.myworkdayjobs.com) and the extension version. Never sent: your answers or profile, question
-          text, names, the job or page address, self-identification, or your account. Reports are not signed in
-          and are kept for up to 12 months.</p>
-      </section>
+        <!-- Supported Portals -->
+        <section class="group">
+          <h2 class="group-title">Job sites</h2>
+          <div class="list switch-list">
+            <div class="switch-row is-locked">
+              <label for="workdayAlways"><b>Workday</b><span>myworkdayjobs.com. Always on.</span></label>
+              <input type="checkbox" role="switch" id="workdayAlways" checked disabled />
+            </div>
+            <div class="switch-row">
+              <label for="greenhouseToggle"><b>Greenhouse</b><span>boards.greenhouse.io. Chrome asks you to allow the
+                site; then refresh any Greenhouse tab that is already open.</span></label>
+              <input type="checkbox" role="switch" id="greenhouseToggle" />
+            </div>
+          </div>
+        </section>
 
-      <!-- Backup -->
-      <section>
-        <h2>Backup</h2>
-        <p class="helper">Save your profile to a file, or restore it on another computer</p>
-        <div class="row">
-          <button type="button" id="exportBtn" class="add-btn half">Export</button>
-          <button type="button" id="importBtn" class="add-btn half">Import</button>
-        </div>
-        <input type="file" id="importFile" accept=".json,application/json" style="display:none" />
-      </section>
+        <section class="group" id="appearanceSection">
+          <h2 class="group-title">Appearance</h2>
+          <div class="list switch-list">
+            <div class="switch-row">
+              <label for="darkModeToggle"><b>Dark mode</b><span>Espresso background with pale gold text, in the side
+                panel and the Draft panel.</span></label>
+              <input type="checkbox" role="switch" id="darkModeToggle" />
+            </div>
+            <div class="switch-row">
+              <label for="matchSystemToggle"><b>Match my computer</b><span>Follows your system's light or dark setting.
+                Turning dark mode on or off by hand turns this off.</span></label>
+              <input type="checkbox" role="switch" id="matchSystemToggle" checked />
+            </div>
+          </div>
+        </section>
 
-      <section>
-        <h2>Danger Zone</h2>
-        <p class="helper">Wipes everything stored on this device. Your cloud account is separate.</p>
-        <button type="button" id="deleteBtn" class="danger-btn">Delete all data</button>
-      </section>
+        <!-- Anonymous fill-failure reports (cloud-telemetry.js; off by default) -->
+        <section class="group" id="telemetrySection">
+          <h2 class="group-title">Privacy</h2>
+          <div class="list switch-list">
+            <div class="switch-row">
+              <label for="telemetryToggle"><b>Send anonymous fill-failure reports</b><span>Off unless you turn it on. Helps
+                fix fields that autofill misses.</span></label>
+              <input type="checkbox" role="switch" id="telemetryToggle" />
+            </div>
+            <details class="disclosure">
+              <summary>What is sent, and what never is</summary>
+              <p class="helper" id="telemetryHelp">After each autofill it sends only: which of the
+                extension's own steps failed or were skipped and why (for example "Work Experience: did not change"), the
+                form's internal ID and type for required fields left empty, the site's host name (like
+                company.wd1.myworkdayjobs.com) and the extension version. Never sent: your answers or profile, question
+                text, names, the job or page address, self-identification, or your account. Reports are not signed in
+                and are kept for up to 12 months.</p>
+            </details>
+          </div>
+        </section>
+
+        <!-- Backup -->
+        <section class="group">
+          <h2 class="group-title">Backup</h2>
+          <div class="list">
+            <div class="row">
+              <span class="row-text"><span>Save your profile to a file, or restore it on another computer.</span></span>
+            </div>
+            <div class="row btn-row">
+              <button type="button" id="exportBtn" class="btn btn-secondary">Export</button>
+              <button type="button" id="importBtn" class="btn btn-secondary">Import</button>
+            </div>
+          </div>
+          <input type="file" id="importFile" accept=".json,application/json" style="display:none" />
+        </section>
+
+        <section class="group">
+          <h2 class="group-title">Delete</h2>
+          <div class="list">
+            <div class="row danger-row" id="cloudDeleteRow" hidden>
+              <span class="row-text"><b>Cloud account</b><span>Deletes your account and everything stored in it.
+                Your data on this device stays.</span></span>
+              <button type="button" id="cloudDeleteBtn" class="btn btn-danger">Delete</button>
+            </div>
+            <div class="row danger-row">
+              <span class="row-text"><b>This device</b><span>Wipes everything stored on this device. Your cloud
+                account is separate.</span></span>
+              <button type="button" id="deleteBtn" class="btn btn-danger">Delete all data</button>
+            </div>
+          </div>
+        </section>
+
+        <p class="version-line"><span id="versionLine">Better Autofill</span><span>No third-party requests. Fonts are your system's own.</span></p>
       </div>
     </main>
 
@@ -492,19 +579,19 @@
 
     <nav class="tabbar" aria-label="Sections">
       <button type="button" class="tab active" data-tab="home" aria-controls="tab-home" aria-current="page">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 11H5v10h5v-6h4v6h5V11h2.5z"/></svg>
         <span>Home</span>
       </button>
       <button type="button" class="tab" data-tab="profile" aria-controls="tab-profile">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4.5"/><path d="M3 21c0-5 4-8 9-8s9 3 9 8z"/></svg>
         <span>Profile</span>
       </button>
       <button type="button" class="tab" data-tab="apps" aria-controls="tab-apps">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/></svg>
         <span>Applications</span>
       </button>
       <button type="button" class="tab" data-tab="settings" aria-controls="tab-settings">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="2.6" rx="1.3"/><circle cx="9" cy="7.3" r="3.2"/><rect x="3" y="15.4" width="18" height="2.6" rx="1.3"/><circle cx="15.5" cy="16.7" r="3.2"/></svg>
         <span>Settings</span>
       </button>
     </nav>
@@ -539,30 +626,30 @@
         </select>
       </div>
       <div class="input-group">
-        <label>Field of Study</label>
+        <label>Field of study</label>
         <input type="text" class="edu-field" placeholder="e.g. Computer Science" />
       </div>
       <div class="input-group">
         <label>GPA</label>
         <input type="text" class="edu-gpa" placeholder="e.g. 3.5" />
       </div>
-      <div class="row">
-        <div class="input-group half">
-          <label>Start Month</label>
+      <div class="two">
+        <div class="input-group">
+          <label>Start month</label>
           <input type="text" class="edu-start-month" placeholder="MM" />
         </div>
-        <div class="input-group half">
-          <label>Start Year</label>
+        <div class="input-group">
+          <label>Start year</label>
           <input type="text" class="edu-start-year" placeholder="YYYY" />
         </div>
       </div>
-      <div class="row">
-        <div class="input-group half">
-          <label>End Month</label>
+      <div class="two">
+        <div class="input-group">
+          <label>End month</label>
           <input type="text" class="edu-end-month" placeholder="MM" />
         </div>
-        <div class="input-group half">
-          <label>End Year</label>
+        <div class="input-group">
+          <label>End year</label>
           <input type="text" class="edu-end-year" placeholder="YYYY" />
         </div>
       </div>
@@ -580,7 +667,7 @@
         <input type="text" class="work-company" placeholder="e.g. Tech Corp" />
       </div>
       <div class="input-group">
-        <label>Job Title</label>
+        <label>Job title</label>
         <input type="text" class="work-title" placeholder="e.g. Software Engineer" />
       </div>
       <div class="input-group">
@@ -588,36 +675,37 @@
         <input type="text" class="work-location" placeholder="e.g. New York, NY" />
       </div>
       <div class="input-group">
-        <label>Role Description</label>
+        <label>Role description</label>
         <textarea class="work-desc" rows="3" placeholder="e.g. Developed web apps..."></textarea>
       </div>
-      <div class="row">
-        <div class="input-group half">
-          <label>Start Month</label>
+      <div class="two">
+        <div class="input-group">
+          <label>Start month</label>
           <input type="text" class="work-start-month" placeholder="MM" />
         </div>
-        <div class="input-group half">
-          <label>Start Year</label>
+        <div class="input-group">
+          <label>Start year</label>
           <input type="text" class="work-start-year" placeholder="YYYY" />
         </div>
       </div>
-      <div class="row">
-        <div class="input-group half">
-          <label>End Month</label>
+      <div class="two">
+        <div class="input-group">
+          <label>End month</label>
           <input type="text" class="work-end-month" placeholder="MM or Present" />
         </div>
-        <div class="input-group half">
-          <label>End Year</label>
+        <div class="input-group">
+          <label>End year</label>
           <input type="text" class="work-end-year" placeholder="YYYY or Present" />
         </div>
       </div>
-      <div class="input-group checkbox-group">
-        <input type="checkbox" class="work-current" />
-        <label>I currently work here</label>
-      </div>
+      <label class="switch-row">
+        <span class="switch-text"><b>I currently work here</b></span>
+        <input type="checkbox" role="switch" class="work-current" />
+      </label>
     </div>
   </template>
 
+  
   <script src="cloud-config.js"></script>
   <script src="cloud-auth.js"></script>
   <script src="cloud-sync.js"></script>
