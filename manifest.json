@@ -18,6 +18,7 @@
     "optional_host_permissions": [
         "*://boards.greenhouse.io/*",
         "*://job-boards.greenhouse.io/*",
+        "*://*.icims.com/*",
         "https://cfswo4fym6.execute-api.us-east-2.amazonaws.com/*",
         "https://better-autofill.auth.us-east-2.amazoncognito.com/*",
         "https://easyapply-data-resumesb6263180-1qd2ewprnfb4.s3.us-east-2.amazonaws.com/*"

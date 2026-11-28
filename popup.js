@@ -629,7 +629,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Known portal hosts. We still attempt the message on unknown URLs
             // because Greenhouse forms are often embedded in an iframe on a
             // company's own careers page — the content script lives in the iframe.
-            const SUPPORTED_HOSTS = ['myworkdayjobs.com', 'boards.greenhouse.io', 'job-boards.greenhouse.io'];
+            const SUPPORTED_HOSTS = ['myworkdayjobs.com', 'boards.greenhouse.io', 'job-boards.greenhouse.io', 'icims.com'];
             const looksSupported = activeTab.url && SUPPORTED_HOSTS.some(h => activeTab.url.includes(h));
 
             chrome.tabs.sendMessage(activeTab.id, { action: 'fill_form' }, (response) => {
@@ -637,7 +637,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log("Could not send message, maybe content script isn't loaded yet.");
                     statusCtx.textContent = looksSupported
                         ? 'Error: Refresh the page and try again.'
-                        : 'Not a supported job page (Workday / Greenhouse).';
+                        : 'Not a supported job page (Workday, Greenhouse or iCIMS).';
                     statusCtx.style.color = 'var(--danger)';
                     setFillBusy(false);
                 } else {
@@ -649,38 +649,32 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Supported Portals: Greenhouse opt-in via optional host permissions.
+    // Job sites: Greenhouse and iCIMS are opt-in via optional host permissions.
     // The permission request MUST come from a user gesture (this click).
     // background.js watches permissions.onAdded/onRemoved and registers or
-    // unregisters the Greenhouse content script accordingly.
-    const GH_ORIGINS = ['*://boards.greenhouse.io/*', '*://job-boards.greenhouse.io/*'];
-    const ghToggle = document.getElementById('greenhouseToggle');
-
-    chrome.permissions.contains({ origins: GH_ORIGINS }, (granted) => {
-        ghToggle.checked = !!granted;
-    });
-
-    ghToggle.addEventListener('change', () => {
-        if (ghToggle.checked) {
-            chrome.permissions.request({ origins: GH_ORIGINS }, (granted) => {
-                ghToggle.checked = !!granted;
-                statusCtx.textContent = granted
-                    ? 'Greenhouse support enabled.'
-                    : 'Permission declined — Greenhouse stays off.';
-                statusCtx.style.color = granted ? 'var(--success)' : 'var(--primary)';
-                setTimeout(() => { statusCtx.textContent = ''; }, 4000);
-            });
-        } else {
-            chrome.permissions.remove({ origins: GH_ORIGINS }, (removed) => {
-                ghToggle.checked = !removed;
-                if (removed) {
-                    statusCtx.textContent = 'Greenhouse support disabled.';
-                    statusCtx.style.color = 'var(--text-muted)';
-                    setTimeout(() => { statusCtx.textContent = ''; }, 3000);
-                }
-            });
-        }
-    });
+    // unregisters each site's content scripts accordingly.
+    const PORTALS = [
+        { toggle: 'greenhouseToggle', name: 'Greenhouse', origins: ['*://boards.greenhouse.io/*', '*://job-boards.greenhouse.io/*'] },
+        { toggle: 'icimsToggle', name: 'iCIMS', origins: ['*://*.icims.com/*'] }
+    ];
+    for (const portal of PORTALS) {
+        const toggle = document.getElementById(portal.toggle);
+        chrome.permissions.contains({ origins: portal.origins }, (granted) => { toggle.checked = !!granted; });
+        toggle.addEventListener('change', () => {
+            if (toggle.checked) {
+                chrome.permissions.request({ origins: portal.origins }, (granted) => {
+                    toggle.checked = !!granted;
+                    flash(granted ? `${portal.name} support turned on.` : `Permission declined. ${portal.name} stays off.`,
+                        granted ? 'var(--success)' : 'var(--primary)');
+                });
+            } else {
+                chrome.permissions.remove({ origins: portal.origins }, (removed) => {
+                    toggle.checked = !removed;
+                    if (removed) flash(`${portal.name} support turned off.`, 'var(--text-muted)', 3000);
+                });
+            }
+        });
+    }
 
     // Cloud Account (optional). Signed out = today's local-only behaviour.
     // Host access to the API and sign-in domains is an optional permission,
@@ -1045,13 +1039,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const job = tab && tab.url ? Tracker.normalizeJob({ url: tab.url }) : null;
         homeUi.jobCard.classList.toggle('inactive', !job);
         if (job) {
-            homeUi.site.textContent = job.site === 'workday' ? 'Workday application' : 'Greenhouse application';
+            homeUi.site.textContent = job.key.startsWith('icims:') ? 'iCIMS application' : job.site === 'workday' ? 'Workday application' : 'Greenhouse application';
             homeUi.company.textContent = job.company;
             homeUi.role.textContent = job.role;
         } else {
             homeUi.site.textContent = 'This page';
             homeUi.company.textContent = 'Open a job application';
-            homeUi.role.textContent = 'On Workday or Greenhouse, then press Autofill.';
+            homeUi.role.textContent = 'On Workday, Greenhouse or iCIMS, then press Autofill.';
         }
     }
     chrome.tabs.onActivated.addListener(() => renderJobCard());
@@ -1748,6 +1742,12 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.runtime.onMessage.addListener((msg, sender) => {
         if (msg.action === 'fill_complete') {
             setFillBusy(false);
+            // A sign-in or account page (iCIMS): nothing was filled, say what to do.
+            if (msg.report && msg.report.page === 'Sign in') {
+                const step = (msg.report.steps || [])[0];
+                flash(step && step.detail ? step.detail : 'Sign in first, then press Autofill.', 'var(--text-muted)', 8000);
+                return;
+            }
             landAutofill(msg.report);
             if (msg.report) renderFillReport(msg.report);
             if (msg.report) {

@@ -4,107 +4,107 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
     .catch((err) => console.error('Workday Autofill: sidePanel setup failed', err));
 
 /**
- * GREENHOUSE SUPPORT (opt-in)
+ * OPT-IN JOB SITES (Greenhouse, iCIMS)
  *
- * Greenhouse access is an optional host permission the user grants from the
- * side panel ("Supported Portals" section). The content script is registered
+ * Each site's access is an optional host permission the user grants from the
+ * side panel (Settings > Job sites). Its content scripts are registered
  * dynamically only after the permission is granted, and unregistered if the
  * user revokes it. This keeps the extension least-privilege: installing it
- * never requests Greenhouse access, and updates never disable the extension
- * for existing users.
+ * never requests access to these sites, and updates never disable the
+ * extension for existing users.
  *
- * allFrames is required because many companies embed the Greenhouse form in
- * an iframe on their own careers page — the iframe still loads from
- * greenhouse.io, so the granted origin covers it.
+ * allFrames is required because companies embed these forms in an iframe on
+ * their own careers page; the iframe still loads from the site's own domain,
+ * so the granted origin covers it.
  */
-const GREENHOUSE_ORIGINS = [
-    '*://boards.greenhouse.io/*',
-    '*://job-boards.greenhouse.io/*'
-];
-
-// Two scripts: greenhouse.js (isolated world — chrome APIs, messaging, text
-// fields) and greenhouse-main.js (MAIN world — drives react-select components
-// on job-boards.greenhouse.io via React internals, which are invisible from
-// the isolated world). They communicate over window.postMessage.
-const GREENHOUSE_SCRIPTS = [
+const PORTALS = [
     {
-        id: 'greenhouse-autofill',
-        matches: GREENHOUSE_ORIGINS,
-        js: ['greenhouse.js', 'cloud-library.js', 'ai-assist.js'],
-        runAt: 'document_end',
-        allFrames: true
+        name: 'Greenhouse',
+        origins: ['*://boards.greenhouse.io/*', '*://job-boards.greenhouse.io/*'],
+        // greenhouse.js (isolated world: chrome APIs, messaging, text fields) and
+        // greenhouse-main.js (MAIN world: drives react-select components on
+        // job-boards.greenhouse.io via React internals, invisible from the
+        // isolated world). They talk over window.postMessage.
+        scripts: [
+            { id: 'greenhouse-autofill', js: ['greenhouse.js', 'cloud-library.js', 'ai-assist.js'] },
+            { id: 'greenhouse-autofill-main', js: ['greenhouse-main.js'], world: 'MAIN' }
+        ]
     },
     {
-        id: 'greenhouse-autofill-main',
-        matches: GREENHOUSE_ORIGINS,
-        js: ['greenhouse-main.js'],
-        runAt: 'document_end',
-        allFrames: true,
-        world: 'MAIN'
+        name: 'iCIMS',
+        origins: ['*://*.icims.com/*'],
+        // form-filler.js is the shared label-based filler; icims.js decides
+        // which frame fills and leaves iCIMS sign-in pages alone.
+        scripts: [
+            { id: 'icims-autofill', js: ['form-filler.js', 'icims.js', 'cloud-library.js', 'ai-assist.js'] }
+        ]
     }
 ];
 
-async function syncGreenhouseRegistration() {
-    try {
-        const granted = await chrome.permissions.contains({ origins: GREENHOUSE_ORIGINS });
-        const ids = GREENHOUSE_SCRIPTS.map(s => s.id);
-        const registered = await chrome.scripting.getRegisteredContentScripts({ ids });
+const registrationFor = (portal) => portal.scripts.map((s) => ({
+    id: s.id, matches: portal.origins, js: s.js, runAt: 'document_end', allFrames: true, ...(s.world ? { world: s.world } : {})
+}));
 
-        if (granted && registered.length < GREENHOUSE_SCRIPTS.length) {
-            const missing = GREENHOUSE_SCRIPTS.filter(s => !registered.some(r => r.id === s.id));
+async function syncPortalRegistration(portal) {
+    try {
+        const scripts = registrationFor(portal);
+        const granted = await chrome.permissions.contains({ origins: portal.origins });
+        const registered = await chrome.scripting.getRegisteredContentScripts({ ids: scripts.map((s) => s.id) });
+
+        if (granted && registered.length < scripts.length) {
+            const missing = scripts.filter((s) => !registered.some((r) => r.id === s.id));
             await chrome.scripting.registerContentScripts(missing);
-            console.log('Workday Autofill: Greenhouse content scripts registered.');
+            console.log(`Better Autofill: ${portal.name} content scripts registered.`);
         }
         // Registrations survive extension updates with their OLD file lists, so
         // bring existing ones up to date (e.g. ai-assist.js added in 2.0).
         if (granted && registered.length > 0) {
-            const existing = GREENHOUSE_SCRIPTS.filter(s => registered.some(r => r.id === s.id));
+            const existing = scripts.filter((s) => registered.some((r) => r.id === s.id));
             await chrome.scripting.updateContentScripts(existing);
         } else if (!granted && registered.length > 0) {
-            await chrome.scripting.unregisterContentScripts({ ids: registered.map(r => r.id) });
-            console.log('Workday Autofill: Greenhouse content scripts unregistered.');
+            await chrome.scripting.unregisterContentScripts({ ids: registered.map((r) => r.id) });
+            console.log(`Better Autofill: ${portal.name} content scripts unregistered.`);
         }
     } catch (err) {
-        console.error('Workday Autofill: Greenhouse registration sync failed', err);
+        console.error(`Better Autofill: ${portal.name} registration sync failed`, err);
     }
 }
 
-// When the user grants the permission, also inject into Greenhouse tabs that
-// are already open, so autofill works immediately without a manual refresh.
-// (Both scripts are no-ops if already present — they guard with a window flag.)
-async function injectIntoOpenGreenhouseTabs() {
+// When the user grants a permission, also inject into that site's tabs that are
+// already open, so autofill works without a manual refresh. (Every script is a
+// no-op if already present: each guards with a window flag.)
+async function injectIntoOpenTabs(portal) {
     try {
-        const granted = await chrome.permissions.contains({ origins: GREENHOUSE_ORIGINS });
+        const granted = await chrome.permissions.contains({ origins: portal.origins });
         if (!granted) return;
-
-        const tabs = await chrome.tabs.query({ url: GREENHOUSE_ORIGINS });
+        const tabs = await chrome.tabs.query({ url: portal.origins });
         for (const tab of tabs) {
-            try {
-                await chrome.scripting.executeScript({
-                    target: { tabId: tab.id, allFrames: true },
-                    files: ['greenhouse.js', 'cloud-library.js', 'ai-assist.js']
-                });
-                await chrome.scripting.executeScript({
-                    target: { tabId: tab.id, allFrames: true },
-                    files: ['greenhouse-main.js'],
-                    world: 'MAIN'
-                });
-            } catch (e) { /* tab may be discarded or navigating */ }
+            for (const s of portal.scripts) {
+                try {
+                    await chrome.scripting.executeScript({
+                        target: { tabId: tab.id, allFrames: true },
+                        files: s.js,
+                        ...(s.world ? { world: s.world } : {})
+                    });
+                } catch (e) { /* tab may be discarded or navigating */ }
+            }
         }
     } catch (err) {
-        console.error('Workday Autofill: injection into open tabs failed', err);
+        console.error(`Better Autofill: injection into open ${portal.name} tabs failed`, err);
     }
 }
+
+const syncAllPortals = () => Promise.all(PORTALS.map(syncPortalRegistration));
 
 async function onPermissionsChanged() {
-    await syncGreenhouseRegistration();
-    await injectIntoOpenGreenhouseTabs();
+    await syncAllPortals();
+    await Promise.all(PORTALS.map(injectIntoOpenTabs));
 }
 
 chrome.runtime.onInstalled.addListener(onPermissionsChanged);
-chrome.runtime.onStartup.addListener(syncGreenhouseRegistration);
+chrome.runtime.onStartup.addListener(syncAllPortals);
 chrome.permissions.onAdded.addListener(onPermissionsChanged);
-chrome.permissions.onRemoved.addListener(syncGreenhouseRegistration);
+chrome.permissions.onRemoved.addListener(syncAllPortals);
 
 /**
  * CLOUD RELAY for the on-page Draft button (ai-assist.js).

@@ -1,0 +1,404 @@
+// Better Autofill - shared form filler
+/**
+ * A site-independent filler for ordinary HTML application forms: native
+ * <input>, <select>, <textarea>, radio groups and file inputs, found by the
+ * label a person reads rather than by one site's element ids. Site scripts
+ * (icims.js today) decide WHEN and WHERE to fill; this decides WHAT goes in
+ * each field, fills it the way the page's own scripts expect (native value
+ * setter, then input/change/blur), and returns a fill report in the same
+ * shape content.js sends, so the side panel shows it unchanged.
+ *
+ * Rules it never breaks:
+ *  - Never overwrites a field that already has a value (the site or the
+ *    person put it there).
+ *  - Never guesses: a question with no saved answer, or no option that
+ *    matches it, is left for the person and reported.
+ *  - Never touches passwords, sign-in fields, captchas, or the submit button.
+ *  - Self-identification is answered only from saved answers, or "decline"
+ *    when the person turned on Decline all disclosures.
+ *
+ * Exposes self.EasyApplyFormFiller. No DOM access at load; safe to load in
+ * any frame, and in Node for tests.
+ */
+(function (root) {
+    'use strict';
+
+    const BUILD = 'forms-2026-11-27a';
+
+    // ------------------------------------------------------------ text helpers
+
+    const norm = (s) => String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
+    const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+
+    const US_STATES = {
+        AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado', CT: 'Connecticut',
+        DE: 'Delaware', DC: 'District of Columbia', FL: 'Florida', GA: 'Georgia', HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois',
+        IN: 'Indiana', IA: 'Iowa', KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland',
+        MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota', MS: 'Mississippi', MO: 'Missouri', MT: 'Montana',
+        NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey', NM: 'New Mexico', NY: 'New York',
+        NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio', OK: 'Oklahoma', OR: 'Oregon', PA: 'Pennsylvania',
+        PR: 'Puerto Rico', RI: 'Rhode Island', SC: 'South Carolina', SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas',
+        UT: 'Utah', VT: 'Vermont', VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming'
+    };
+    const US_NAMES = ['united states', 'united states of america', 'usa', 'us', 'u s a', 'u s'];
+
+    // ------------------------------------------------------------ DOM helpers
+
+    function isVisible(el) {
+        if (!el || el.type === 'hidden') return false;
+        const win = el.ownerDocument.defaultView;
+        for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+            if (n.hidden) return false;
+            const cs = win.getComputedStyle(n);
+            if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+        }
+        return true;
+    }
+
+    const usable = (el) => isVisible(el) && !el.disabled && !el.readOnly;
+
+    function textOf(el) {
+        if (!el) return '';
+        // Ignore the controls inside a label (a select's options, a nested input).
+        const copy = el.cloneNode(true);
+        copy.querySelectorAll('select, option, input, textarea, script, style, button').forEach((n) => n.remove());
+        return clean(copy.textContent);
+    }
+
+    /** What a person reads as this control's label. */
+    function labelFor(el) {
+        const doc = el.ownerDocument;
+        const parts = [];
+        const by = el.getAttribute('aria-labelledby');
+        if (by) by.split(/\s+/).forEach((id) => { const n = doc.getElementById(id); if (n) parts.push(textOf(n)); });
+        if (el.id) {
+            const esc = (root.CSS && root.CSS.escape) ? root.CSS.escape(el.id) : el.id.replace(/["\\]/g, '\\$&');
+            doc.querySelectorAll(`label[for="${esc}"]`).forEach((l) => parts.push(textOf(l)));
+        }
+        const wrap = el.closest('label');
+        if (wrap) parts.push(textOf(wrap));
+        if (el.getAttribute('aria-label')) parts.push(el.getAttribute('aria-label'));
+        if (!parts.join('').trim()) {
+            if (el.placeholder) parts.push(el.placeholder);
+            if (el.title) parts.push(el.title);
+        }
+        return clean(parts.join(' '));
+    }
+
+    /** The question a radio group or select asks: its legend, or the text of the
+        nearest ancestor that holds more than the control's own label. */
+    function questionFor(el) {
+        const fs = el.closest('fieldset');
+        if (fs) {
+            const legend = fs.querySelector('legend');
+            if (legend && textOf(legend)) return textOf(legend);
+        }
+        const grouped = el.closest('[role="radiogroup"], [role="group"]');
+        if (grouped) {
+            const by = grouped.getAttribute('aria-labelledby');
+            const n = by && el.ownerDocument.getElementById(by.split(/\s+/)[0]);
+            if (n) return textOf(n);
+            if (grouped.getAttribute('aria-label')) return grouped.getAttribute('aria-label');
+        }
+        if (el.type !== 'radio' && el.type !== 'checkbox') {
+            const own = labelFor(el);
+            if (own) return own;
+        }
+        // Walk up until an ancestor has text beyond the options themselves.
+        const optionText = el.type === 'radio'
+            ? Array.from(el.ownerDocument.querySelectorAll(`input[type="radio"][name="${el.name}"]`)).map(labelFor).join(' ')
+            : '';
+        for (let n = el.parentElement, i = 0; n && i < 5; n = n.parentElement, i++) {
+            const t = textOf(n);
+            const extra = clean(t.replace(optionText, ''));
+            if (extra.length > 3) return t.length > 400 ? t.slice(0, 400) : t;
+        }
+        return '';
+    }
+
+    /** One lower-case string to match rules against: label, name, id, autocomplete. */
+    function keysOf(el) {
+        const name = String(el.name || '').replace(/([a-z])([A-Z])/g, '$1 $2');
+        const id = String(el.id || '').replace(/([a-z])([A-Z])/g, '$1 $2');
+        return norm(`${labelFor(el)} | ${name} | ${id}`) + ` ac:${(el.getAttribute('autocomplete') || '').toLowerCase()}`;
+    }
+
+    const isRequired = (el) => el.required || el.getAttribute('aria-required') === 'true' || /\*\s*$/.test(labelFor(el));
+
+    // ------------------------------------------------------------ setting values
+
+    function setNative(el, value) {
+        const win = el.ownerDocument.defaultView;
+        const proto = el.tagName === 'TEXTAREA' ? win.HTMLTextAreaElement.prototype
+            : el.tagName === 'SELECT' ? win.HTMLSelectElement.prototype : win.HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+        el.focus && el.focus();
+        setter.call(el, value);
+        el.dispatchEvent(new win.Event('input', { bubbles: true }));
+        el.dispatchEvent(new win.Event('change', { bubbles: true }));
+        el.dispatchEvent(new win.Event('blur', { bubbles: true }));
+    }
+
+    const isPlaceholderOption = (o) => !o.value || /^(select|choose|please select|--|- ?select)/i.test(clean(o.textContent));
+
+    /** Picks the first option matching any candidate, in candidate order.
+        A candidate is a string (exact, then prefix, then whole-word match) or a RegExp. */
+    function chooseOption(options, candidates) {
+        const opts = options.filter((o) => !isPlaceholderOption(o));
+        for (const c of candidates) {
+            if (c instanceof RegExp) {
+                const hit = opts.find((o) => c.test(clean(o.textContent)) || c.test(o.value));
+                if (hit) return hit;
+                continue;
+            }
+            const want = norm(c);
+            if (!want) continue;
+            const hit = opts.find((o) => norm(o.textContent) === want || norm(o.value) === want)
+                || opts.find((o) => norm(o.textContent).startsWith(want + ' '))
+                || (want.length > 3 && opts.find((o) => (' ' + norm(o.textContent) + ' ').includes(' ' + want + ' ')));
+            if (hit) return hit;
+        }
+        return null;
+    }
+
+    function selectOption(select, candidates) {
+        const opt = chooseOption(Array.from(select.options), candidates);
+        if (!opt) return false;
+        setNative(select, opt.value);
+        return select.value === opt.value;
+    }
+
+    function radioGroup(doc, radio) {
+        return Array.from(doc.querySelectorAll('input[type="radio"]')).filter((r) => r.name === radio.name && (r.form === radio.form));
+    }
+
+    function chooseRadio(group, candidates) {
+        const asOptions = group.map((r) => ({ r, textContent: labelFor(r) || r.value, value: r.value }));
+        const hit = chooseOption(asOptions, candidates);
+        if (!hit) return false;
+        const win = hit.r.ownerDocument.defaultView;
+        hit.r.click();
+        if (!hit.r.checked) { hit.r.checked = true; hit.r.dispatchEvent(new win.Event('change', { bubbles: true })); }
+        return hit.r.checked;
+    }
+
+    // ------------------------------------------------------------ answers
+
+    const DECLINE = /decline|do not wish|don ?t wish|not wish to|prefer not|choose not|not to (answer|disclose|self.?identify)|i do not want/i;
+    const yesNo = (b) => (b ? [/^\s*yes\b/i] : [/^\s*no\b/i]);
+
+    /** Text fields: rule name, what the label must look like, what must not appear, the value. */
+    function textRules(p) {
+        const pi = p.personalInfo || {};
+        const ad = p.address || {};
+        const fullName = [pi.firstName, pi.lastName].filter(Boolean).join(' ');
+        return [
+            ['First name', /\b(first|given|fore) ?name\b|\bfname\b|ac:given-name/, /middle|last|preferred|nick/, pi.firstName, 'Personal information'],
+            ['Last name', /\b(last|family|sur) ?name\b|\blname\b|ac:family-name/, /first|middle|maiden|previous|preferred/, pi.lastName, 'Personal information'],
+            ['Full name', /^(full |legal |your )?name\b|ac:name$/, /first|last|middle|company|employer|school|reference|manager|user ?name|file|preferred|nick/, fullName, 'Personal information'],
+            ['Email', /e ?mail|ac:email/, /confirm|verify|re ?enter|manager|reference|alternate|secondary/, pi.email, 'Personal information'],
+            ['Phone', /phone|mobile|cell|telephone|ac:tel/, /type|extension|\bext\b|country code|manager|reference|alternate|secondary|fax/, pi.phone, 'Personal information'],
+            ['Street address', /address ?(line)? ?1\b|street|address1|addressstreet ?1|^address\b|ac:address-line1|ac:street-address/, /line ?2|street ?2|address ?2|e ?mail|city|state|zip|postal|country|web|url/, ad.street, 'Address'],
+            ['City', /\bcity\b|\btown\b|ac:address-level2/, /state|country|zip|postal|birth/, ad.city, 'Address'],
+            ['Zip or postal code', /\bzip\b|postal|post code|postcode|ac:postal-code/, /country/, ad.zip, 'Address'],
+            ['LinkedIn', /linked ?in/, null, pi.linkedinUrl, 'Links'],
+            ['Website', /website|portfolio|personal (url|site|web)|home ?page|\bblog\b/, /linked ?in|company|employer/, pi.websiteUrl, 'Links']
+        ];
+    }
+
+    /** Questions answered by choosing (select or radio group). Returns candidates, or null to leave it. */
+    function questionRules(p) {
+        const jp = p.jobPreferences || {};
+        const dm = p.demographics || {};
+        const decline = jp.autoDisclosures === true;
+        const selfId = (value, map) => {
+            if (value && DECLINE.test(value)) return [DECLINE];
+            if (value) return map(value);
+            return decline ? [DECLINE] : null;
+        };
+        return [
+            ['Work authorization', /(legally )?(authori[sz]ed|eligible|permitted) to work|right to work|work authori[sz]ation/, /sponsor/,
+                jp.authorizedToWork === undefined ? null : yesNo(jp.authorizedToWork !== false), 'Work eligibility'],
+            ['Visa sponsorship', /sponsor/, null, yesNo(jp.requiresSponsorship === true), 'Work eligibility'],
+            // Only asserted when the person said so; otherwise left for them.
+            ['Age 18 or older', /\b18\b.*(age|old)|(age|old).*\b18\b|legal (working )?age/, null, jp.isAtLeast18 ? yesNo(true) : null, 'Work eligibility'],
+            ['U.S. citizen', /\bu ?s\b.*citizen|citizen of the united states/, /dual|other/, jp.usCitizen ? yesNo(true) : null, 'Work eligibility'],
+            ['Former employee', /(previously|ever|have you) (been )?(employed|worked) (by|for|at)|former employee|worked (for|at) (us|this company) before/, /government|other (company|employer)/,
+                yesNo(jp.formerEmployee === true), 'Work eligibility'],
+            ['How did you hear', /how did you (hear|learn|find)|source|referr(al|ed) (source|by)/, /employee name|who referred/,
+                jp.sourceReferral ? [jp.sourceReferral] : null, 'Work eligibility'],
+            ['Gender', /\bgender\b|\bsex\b/, /orientation|identity.*trans/, selfId(dm.gender, (v) => /^m/i.test(v) ? ['Male', 'Man'] : /^f/i.test(v) ? ['Female', 'Woman'] : [v]), 'Self-identification'],
+            ['Hispanic or Latino', /hispanic|latin[oax]/, null, selfId(dm.hispanicLatino, (v) => /^y/i.test(v)
+                ? [/^\s*yes\b/i, /^\s*hispanic/i] : [/^\s*no\b/i, /not hispanic/i]), 'Self-identification'],
+            ['Race', /\brace\b|ethnic/, /hispanic or latino\s*\??$/, selfId(dm.race, (v) => [v, ...v.split(/\s+or\s+/)]), 'Self-identification'],
+            ['Veteran status', /veteran/, null, selfId(dm.veteranStatus, (v) => /not a veteran/i.test(v) ? [/not a (protected )?veteran|i am not a veteran|^\s*no\b/i]
+                : /not a protected/i.test(v) ? [/not a protected/i] : [/^(?!.*\bnot\b).*protected veteran/i, /^\s*yes\b/i]), 'Self-identification'],
+            ['Disability', /disabilit/, null, selfId(dm.disabilityStatus, (v) => /^y/i.test(v) ? [/^\s*yes\b/i] : [/^\s*no\b/i]), 'Self-identification']
+        ];
+    }
+
+    // ------------------------------------------------------------ the fill
+
+    /**
+     * Fills every recognisable field in `doc` from the saved profile.
+     * Returns a fill report: { site, page, build, at, counts, steps, empty }.
+     */
+    function fill(doc, profile, { site = 'other', page = '' } = {}) {
+        const steps = [];
+        const done = new Set(); // controls already handled
+        const add = (status, section, field, detail) => steps.push({ status, section, field, ...(detail ? { detail } : {}) });
+
+        const controls = Array.from(doc.querySelectorAll('input, select, textarea')).filter(usable)
+            .filter((el) => !/^(password|submit|button|image|reset|search)$/i.test(el.type))
+            .filter((el) => !/captcha/i.test(`${el.name} ${el.id} ${el.className}`));
+
+        // Text fields.
+        const textual = controls.filter((el) => el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && /^(text|email|tel|url|number|)$/i.test(el.type)));
+        for (const [field, want, avoid, value, section] of textRules(profile)) {
+            if (!value) continue;
+            const el = textual.find((c) => !done.has(c) && want.test(keysOf(c)) && !(avoid && avoid.test(norm(labelFor(c)))));
+            if (!el) continue;
+            done.add(el);
+            if (el.value && el.value.trim()) continue; // the site or the person already filled it
+            setNative(el, value);
+            if (el.value === String(value)) add('filled', section, field);
+            else add('failed', section, field, 'The page did not keep the value.');
+        }
+
+        // State and country: a select or a text box.
+        const ad = profile.address || {};
+        const fillPlace = (field, want, candidates, text) => {
+            const el = controls.find((c) => !done.has(c) && c.type !== 'radio' && c.type !== 'checkbox' && want.test(keysOf(c)));
+            if (!el || !text) return;
+            done.add(el);
+            if (el.tagName === 'SELECT') {
+                if (el.value && !isPlaceholderOption(el.selectedOptions[0] || {})) return;
+                if (selectOption(el, candidates)) add('filled', 'Address', field);
+                else add('failed', 'Address', field, `No option matched "${text}".`);
+            } else if (!el.value) {
+                setNative(el, text);
+                if (el.value) add('filled', 'Address', field);
+            }
+        };
+        const stateName = ad.state && (US_STATES[ad.state.toUpperCase()] || ad.state);
+        const stateAbbr = stateName && Object.keys(US_STATES).find((k) => US_STATES[k].toLowerCase() === stateName.toLowerCase());
+        fillPlace('State', /\bstate\b|province|ac:address-level1/, [stateName, stateAbbr].filter(Boolean), stateName);
+        const isUS = ad.country && US_NAMES.includes(norm(ad.country));
+        fillPlace('Country', /\bcountry\b(?! code)|ac:country/, isUS ? ['United States', 'United States of America', 'USA', 'US'] : [ad.country], ad.country);
+
+        // Questions: selects and radio groups.
+        const questions = [];
+        const seenGroups = new Set();
+        for (const el of controls) {
+            if (done.has(el)) continue;
+            if (el.tagName === 'SELECT') questions.push({ el, ask: questionFor(el), kind: 'select' });
+            else if (el.type === 'radio' && !seenGroups.has(el.name)) {
+                seenGroups.add(el.name);
+                questions.push({ el, ask: questionFor(el), kind: 'radio', group: radioGroup(doc, el) });
+            }
+        }
+        for (const [field, want, avoid, candidates, section] of questionRules(profile)) {
+            const q = questions.find((x) => !x.used && want.test(norm(x.ask)) && !(avoid && avoid.test(norm(x.ask))));
+            if (!q) continue;
+            q.used = true;
+            if (!candidates) {
+                add('skipped', section, field, section === 'Self-identification' ? 'No saved answer.' : 'Left for you to answer.');
+                continue;
+            }
+            if (q.kind === 'select') {
+                if (q.el.value && !isPlaceholderOption(q.el.selectedOptions[0] || {})) continue;
+                if (selectOption(q.el, candidates)) add('filled', section, field);
+                else add('failed', section, field, 'No option matched your saved answer.');
+            } else {
+                if (q.group.some((r) => r.checked)) continue;
+                if (chooseRadio(q.group, candidates)) add('filled', section, field);
+                else add('failed', section, field, 'No option matched your saved answer.');
+            }
+        }
+
+        // Most recent school and job, when the page asks for one of each.
+        const firstWith = (want, avoid) => textual.find((c) => !done.has(c) && want.test(norm(labelFor(c) || keysOf(c))) && !(avoid && avoid.test(norm(labelFor(c)))));
+        const edu = (profile.education || [])[0];
+        if (edu) {
+            for (const [field, want, value] of [
+                ['School', /school|university|college|institution/, edu.school],
+                ['Field of study', /major|field of study|area of study|discipline/, edu.field]
+            ]) {
+                const el = value && firstWith(want, /high school diploma|graduat(ed|ion) (date|year)/);
+                if (!el) continue;
+                done.add(el);
+                if (el.value) continue;
+                setNative(el, value);
+                if (el.value) add('filled', 'Education', field);
+            }
+        }
+        const job = (profile.workExperience || [])[0];
+        if (job) {
+            const employer = job.company && firstWith(/employer|company( name)?$|^company\b/, /current company you are applying|reference/);
+            if (employer) {
+                done.add(employer);
+                if (!employer.value) { setNative(employer, job.company); if (employer.value) add('filled', 'Work experience', 'Employer'); }
+                const title = job.title && firstWith(/job title|position( title)?|^title$/, /applying|desired/);
+                if (title) { done.add(title); if (!title.value) { setNative(title, job.title); if (title.value) add('filled', 'Work experience', 'Job title'); } }
+            }
+        }
+
+        // Resume.
+        const resume = attachResume(doc, controls, profile);
+        if (resume) add(resume.status, 'Resume', 'Resume file', resume.detail);
+
+        // Required fields still empty: what the person must finish.
+        const empty = [];
+        const radiosSeen = new Set();
+        for (const el of controls) {
+            if (!isRequired(el)) continue;
+            if (el.type === 'radio') {
+                if (radiosSeen.has(el.name)) continue;
+                radiosSeen.add(el.name);
+                if (radioGroup(doc, el).some((r) => r.checked)) continue;
+                empty.push({ required: true, field: el.name, label: clean(questionFor(el)).slice(0, 120) || el.name });
+            } else if (el.type === 'checkbox') {
+                continue; // attestations are the person's to tick
+            } else if (el.type === 'file' ? !el.files || !el.files.length : !String(el.value || '').trim() || (el.tagName === 'SELECT' && isPlaceholderOption(el.selectedOptions[0] || {}))) {
+                empty.push({ required: true, field: el.name || el.id, label: (labelFor(el) || el.name || el.id).replace(/\s*\*\s*$/, '').slice(0, 120) });
+            }
+        }
+
+        const counts = {
+            filled: steps.filter((s) => s.status === 'filled').length,
+            failed: steps.filter((s) => s.status === 'failed').length,
+            emptyRequired: empty.length
+        };
+        return { site, page, build: BUILD, at: new Date().toISOString(), counts, steps, empty };
+    }
+
+    function attachResume(doc, controls, profile) {
+        const files = controls.filter((el) => el.type === 'file');
+        if (!files.length || !profile.resume || !profile.resumeMeta) return null;
+        const target = files.find((f) => /resume|\bcv\b|curriculum/.test(keysOf(f))) || (files.length === 1 ? files[0] : null);
+        if (!target || (target.files && target.files.length)) return null;
+        const win = doc.defaultView;
+        try {
+            const [head, data] = profile.resume.split(',');
+            const mime = head.split(':')[1].split(';')[0];
+            const bin = win.atob(data);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            const file = new win.File([bytes], profile.resumeMeta.name, { type: mime, lastModified: profile.resumeMeta.lastModified });
+            const dt = new win.DataTransfer();
+            dt.items.add(file);
+            target.files = dt.files;
+            target.dispatchEvent(new win.Event('change', { bubbles: true }));
+            return target.files.length ? { status: 'filled' } : { status: 'failed', detail: 'Attach your resume yourself.' };
+        } catch (e) {
+            return { status: 'failed', detail: 'Attach your resume yourself.' };
+        }
+    }
+
+    /** True when the page is a sign-in or account step: autofill leaves those alone. */
+    function isSignInPage(doc) {
+        return Array.from(doc.querySelectorAll('input[type="password"]')).some(isVisible);
+    }
+
+    root.EasyApplyFormFiller = { BUILD, fill, isSignInPage, labelFor, questionFor, chooseOption, isVisible };
+})(typeof self !== 'undefined' ? self : this);
