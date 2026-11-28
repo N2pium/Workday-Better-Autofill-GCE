@@ -29,7 +29,7 @@
 (function (root) {
     'use strict';
 
-    const BUILD = 'forms-2026-11-28c';
+    const BUILD = 'forms-2026-11-28d';
 
     // ------------------------------------------------------------ text helpers
 
@@ -102,6 +102,11 @@
         if (wrap) parts.push(textOf(wrap));
         if (el.getAttribute('aria-label')) parts.push(el.getAttribute('aria-label'));
         if (!parts.join('').trim() && el.getAttribute('data-for')) parts.push(el.getAttribute('data-for'));
+        if (!parts.join('').trim()) {
+            const group = el.closest('.form-group, [class*="form-group"], [class*="FormGroup"]');
+            const own = group && group.querySelector('label, legend, .control-label');
+            if (own && !own.contains(el) && !own.getAttribute('for')) parts.push(textOf(own));
+        }
         if (!parts.join('').trim()) {
             if (el.placeholder) parts.push(el.placeholder);
             if (el.title) parts.push(el.title);
@@ -233,7 +238,7 @@
 
     /** What a widget currently shows as its answer ('' when unanswered). */
     function widgetShows(el) {
-        const t = clean(isCombo(el) ? el.textContent : textOf(searchBox(el)));
+        const t = clean(textOf(isCombo(el) ? el : searchBox(el)));
         return UNANSWERED.test(t) ? '' : t;
     }
 
@@ -253,9 +258,9 @@
         if (el.blur) el.blur();
     }
 
-    async function waitForOptions(el) {
+    async function waitForOptions(el, tries = 8) {
         let found = [];
-        for (let i = 0; i < 8 && !found.length; i++) {
+        for (let i = 0; i < tries && !found.length; i++) {
             await sleep(i ? 200 : 150);
             found = widgetOptions(el);
         }
@@ -263,10 +268,11 @@
     }
 
     /** Opens the widget, chooses the option matching the candidates, and checks it took.
-        Searchable selects (verified live on Paylocity): open with a mousedown on the
-        box while the input is NOT focused (a focused input ignores it); if no option
-        matches yet, type the first plain candidate to filter the list; then hover the
-        row (its onMouseEnter makes it the active row) and press it with mousedown. */
+        Searchable selects (verified live on Paylocity, 2026-11-28): typing into the
+        focused input opens the menu and filters it; then the row is hovered (its
+        onMouseEnter makes it the active row) and pressed with mousedown (rows have
+        no click handler). A mousedown on the box is the fallback for answers that
+        cannot be typed. */
     async function pickInWidget(el, candidates) {
         const win = el.ownerDocument.defaultView;
         if (isCombo(el)) {
@@ -278,14 +284,23 @@
             return !!widgetShows(el);
         }
         const doc = el.ownerDocument;
-        if (doc.activeElement && doc.activeElement.blur) doc.activeElement.blur();
+        if (doc.activeElement && doc.activeElement !== el && doc.activeElement.blur) doc.activeElement.blur();
         const box = searchBox(el);
-        box.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, view: win }));
-        let hit = chooseOption(await waitForOptions(el), candidates);
-        const typed = candidates.find((c) => typeof c === 'string' && c.trim());
-        if (!hit && typed) {
+        let hit = null;
+        // Type each plain candidate in turn ("Indiana", then "IN"): typing opens
+        // the menu and filters it, which a mousedown on the box does not always do.
+        for (const c of candidates.filter((x) => typeof x === 'string' && x.trim())) {
             el.focus();
-            setTyped(el, typed);
+            setTyped(el, c);
+            hit = chooseOption(await waitForOptions(el, 4), candidates);
+            if (hit) break;
+        }
+        // Answers that cannot be typed (patterns): open the menu and look.
+        if (!hit) {
+            if (el.value) setTyped(el, '');
+            if (el.blur) el.blur();
+            await sleep(100);
+            box.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, view: win }));
             hit = chooseOption(await waitForOptions(el), candidates);
         }
         if (!hit) {

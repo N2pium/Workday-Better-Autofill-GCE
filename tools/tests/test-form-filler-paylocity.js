@@ -66,7 +66,8 @@ const BEHAVIOUR = `
     }));
   });
   // Paylocity's searchable select, as observed live on 2026-11-28:
-  //  - mousedown on the control opens the menu, unless its input is focused;
+  //  - mousedown on the control opens the menu only sometimes (on one load it
+  //    just focused the input), so the fixture models the worse case: focus only;
   //    a click on the open control closes it;
   //  - typing filters the rows; rows have onMouseEnter (active row) and
   //    onMouseDown (choose the active row), no click handler;
@@ -79,7 +80,7 @@ const BEHAVIOUR = `
     const rows = [...menu.querySelectorAll('[role="listitem"]')];
     let active = null;
     const visible = () => rows.filter((r) => !r.hidden);
-    control.addEventListener('mousedown', () => { if (document.activeElement !== input) { menu.hidden = false; active = visible()[0]; } });
+    control.addEventListener('mousedown', () => { input.focus(); });
     control.addEventListener('click', () => { menu.hidden = true; });
     input.addEventListener('input', () => {
       menu.hidden = false;
