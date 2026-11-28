@@ -14,5 +14,8 @@ self.EASYAPPLY_CLOUD_CONFIG = Object.freeze({
     scopes: ['openid', 'email', 'profile'],
     // Signed Workday adapter pack (data only; see adapters/ and background.js).
     // Fetched without a host permission: CloudFront sends Access-Control-Allow-Origin: *.
-    adapterPackUrl: 'https://d3sun3zkns70tc.cloudfront.net/adapters/workday.json'
+    adapterPackUrl: 'https://d3sun3zkns70tc.cloudfront.net/adapters/workday.json',
+    // The web dashboard (EasyApply-Web): application flow chart and insights.
+    // Opened as an ordinary link from the Applications tab; nothing is sent with it.
+    dashboardUrl: 'https://d3sun3zkns70tc.cloudfront.net/'
 });

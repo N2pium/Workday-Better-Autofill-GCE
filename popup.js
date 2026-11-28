@@ -1176,8 +1176,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return li;
     }
 
+    // The web dashboard: the application flow (Sankey) chart and insights. It has
+    // its own sign-in with the same account, so only signed-in users see the link.
+    const appsDashboard = document.getElementById('appsDashboard');
+    const DASHBOARD_URL = (window.EASYAPPLY_CLOUD_CONFIG || {}).dashboardUrl;
+    if (DASHBOARD_URL && /^https:\/\//.test(DASHBOARD_URL)) appsDashboard.href = DASHBOARD_URL;
+
     async function renderApps(append = false) {
         appsUi.signedOut.hidden = signedInNow;
+        appsDashboard.hidden = !signedInNow || !appsDashboard.href;
         if (!signedInNow) {
             appsUi.list.replaceChildren();
             appsUi.more.hidden = true;
