@@ -3,7 +3,7 @@
 **Effective Date:** on release of version 2.1.0 (adds field-mapping updates and optional fill-failure reports; version 2.0 is covered by the policy published with it). Version 1.4 and earlier are covered by the policy dated 2026-08-17.
 
 ## Overview
-This extension ("Workday: Better Autofill") autofills job application forms on supported job portals (Workday and, optionally, Greenhouse and other supported sites).
+This extension ("Workday: Better Autofill") autofills job application forms on supported job portals (Workday and, optionally, Greenhouse, iCIMS, Paylocity and other supported sites).
 
 You can use it in one of two ways:
 
@@ -82,7 +82,7 @@ When you use an AI feature — parsing a resume into your profile, drafting an a
 - **identity** — used only when you choose to sign in, to open the secure sign-in window.
 - **alarms** — schedules the background checks: profile changes from your other devices (only while signed in) and field-mapping updates.
 - **Host permission `*://*.myworkdayjobs.com/*`** — required to autofill Workday application pages.
-- **Optional host permissions for Greenhouse and other supported job sites** — requested **only if you enable that site** in the extension's "Supported Portals" settings. You can revoke them at any time by turning the toggle off or via Chrome's extension settings.
+- **Optional host permissions for Greenhouse, iCIMS (`*://*.icims.com/*`), Paylocity (`*://*.paylocity.com/*`) and other supported job sites** — requested **only if you enable that site** in the extension's Settings, under "Job sites". For Paylocity, Chrome grants access to the whole paylocity.com domain, but the extension only runs on its job application (recruiting) pages, never on Paylocity payroll or employee sites. You can revoke them at any time by turning the toggle off or via Chrome's extension settings.
 - **Access to the extension's own service** — used for the cloud features above while you are signed in, and for fill-failure reports if you turn them on.
 
 The extension runs only on the job portal domains listed above and on its own service, and has no access to any other website.

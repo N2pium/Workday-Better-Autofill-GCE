@@ -6,7 +6,7 @@ starts handling something new.
 
 ## Single purpose
 
-> Autofills job applications on Workday (and, if you turn it on, Greenhouse) from a
+> Autofills job applications on Workday (and, if you turn them on, Greenhouse, iCIMS and Paylocity) from a
 > profile you enter once, with an optional account that syncs that profile, tracks
 > your applications and drafts answers to application questions.
 
@@ -16,12 +16,14 @@ starts handling something new.
 |---|---|
 | `storage` | Saves the user's profile, settings and sign-in session locally so they are not re-typed for every application. |
 | `activeTab` | Lets the extension fill the application form in the tab the user is viewing when they click Autofill. |
-| `scripting` | Injects the autofill script into a supported job page when the user clicks Autofill, and into Greenhouse pages only after the user turns Greenhouse on. |
+| `scripting` | Injects the autofill script into a supported job page when the user clicks Autofill, and into Greenhouse, iCIMS or Paylocity pages only after the user turns that site on. |
 | `sidePanel` | Shows the extension's interface in the side panel so it stays open while the user works through a multi-page form. |
 | `identity` | Opens the secure sign-in window (Amazon Cognito, email or Google) when the user chooses to sign in. Not used otherwise. |
 | `alarms` | Schedules two background checks: while the user is signed in, profile changes made on their other devices (every few minutes); and, for every install, a download of the signed field-mapping data (adapter pack, every 6 hours). |
 | Host `*://*.myworkdayjobs.com/*` | Workday application pages are where the extension fills forms, reads the job title, company and description for the tracker and AI features, and shows the Draft button. |
-| Optional host: Greenhouse domains | Requested only when the user turns on Greenhouse under Supported Portals, to fill Greenhouse forms. Revoked when they turn it off. |
+| Optional host: Greenhouse domains | Requested only when the user turns on Greenhouse under Settings > Job sites, to fill Greenhouse forms. Revoked when they turn it off. |
+| Optional host: `*://*.icims.com/*` | Requested only when the user turns on iCIMS under Settings > Job sites, to fill iCIMS application forms (which companies host on their own icims.com subdomain). Revoked when they turn it off. |
+| Optional host: `*://*.paylocity.com/*` | Requested only when the user turns on Paylocity under Settings > Job sites. Companies host Paylocity applications on their own paylocity.com subdomain (e.g. `2000recruiting.paylocity.com`), which a narrower pattern cannot match. The content script is registered only for `/Recruiting/` paths, so it never runs on Paylocity payroll or employee pages. Revoked when they turn it off. |
 | Optional host: extension's API, sign-in domain and resume storage (`execute-api…`, `…amazoncognito.com`, `…s3…amazonaws.com`) | The extension's own backend. API and sign-in access are requested when the user signs in; resume storage access is requested the first time they add a resume version. Used for sync, application tracking, resume versions and AI features, and for anonymous fill-failure reports if the user turns them on (API host only). |
 
 ## Remote code

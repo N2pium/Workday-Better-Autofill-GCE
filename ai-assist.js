@@ -57,6 +57,10 @@
     const text = (el) => (el && el.textContent ? el.textContent.replace(/\s+/g, ' ').trim() : '');
 
     function jobKey() {
+        const icims = /(^|\.)icims\.com$/i.test(location.hostname) && location.pathname.match(/\/jobs\/(\d+)/);
+        if (icims) return `${location.origin}/jobs/${icims[1]}`.toLowerCase();
+        const paylocity = /(^|\.)paylocity\.com$/i.test(location.hostname) && location.pathname.match(/\/jobs\/(?:details|apply)\/(\d+)/i);
+        if (paylocity) return `${location.origin}/jobs/${paylocity[1]}`.toLowerCase();
         const path = location.pathname.split(/\/apply(\/|$)/)[0].replace(/\/$/, '');
         return (location.origin + path).toLowerCase();
     }
@@ -69,10 +73,15 @@
         const ghCompany = document.querySelector('.company-name, .job__company, [class*="company-name"]');
         const site = document.querySelector('meta[property="og:site_name"]');
         const desc = document.querySelector(
-            '[data-automation-id="jobPostingDescription"], #content .job__description, .job__description, #content #gh_jid ~ *, [class*="job-description"], #content'
+            '[data-automation-id="jobPostingDescription"], .iCIMS_JobContent, .iCIMS_Expandable_Text, #content .job__description, .job__description, #content #gh_jid ~ *, [class*="job-description"], #content'
         );
         let company = (logo && logo.alt) || text(ghCompany).replace(/^at\s+/i, '') || (site && site.content) || '';
-        if (/^(logo|company logo|careers?|home|workday)$/i.test(company.trim())) company = '';
+        if (/^(logo|company logo|careers?|home|workday|external|internal|jobs?)$/i.test(company.trim())) company = '';
+        if (!company && /(^|\.)icims\.com$/i.test(location.hostname)) {
+            company = location.hostname.split('.')[0]
+                .replace(/^(?:(?:us|uk|ca|global|external|internal|ext|int)?-?(?:careers|jobs|career|recruiting|apply)-)/i, '')
+                .replace(/[-_]+/g, ' ').replace(/\b[a-z]/g, (m) => m.toUpperCase());
+        }
         if (!company && /\.myworkdayjobs\.com$/i.test(location.hostname)) {
             company = location.hostname.split('.')[0].replace(/[-_]+/g, ' ').replace(/\b[a-z]/g, (m) => m.toUpperCase());
         }
@@ -453,7 +462,11 @@
     // The side panel asks for the job on this page (match score).
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         if (msg && msg.action === 'get_job_context') {
-            jobContext().then(sendResponse, () => sendResponse(null));
+            // The outer iCIMS page holds the job in #icims_content_iframe: let it answer.
+            const hasLive = !document.getElementById('icims_content_iframe') && !!readJobFromPage().description;
+            if (!hasLive && window !== window.top) return false;
+            const answer = () => jobContext().then(sendResponse, () => sendResponse(null));
+            if (hasLive) answer(); else setTimeout(answer, 400);
             return true;
         }
         return false;

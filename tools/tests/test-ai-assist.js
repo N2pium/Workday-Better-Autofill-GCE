@@ -45,18 +45,19 @@ check('questionKey is stable and ignores punctuation/case',
   Lib.questionKey('Why us?') === Lib.questionKey('  why US '), true);
 
 // ---------------------------------------------------------------- ai-assist (DOM)
-function boot(body, { signedIn = true, answersList = [] } = {}) {
-  const dom = new JSDOM(`<!doctype html><html><body>${body}</body></html>`, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'https://acme.wd5.myworkdayjobs.com/en-US/careers/job/Remote/Data-Analyst_R123/apply/applyManually' });
+function boot(body, { signedIn = true, answersList = [], url = 'https://acme.wd5.myworkdayjobs.com/en-US/careers/job/Remote/Data-Analyst_R123/apply/applyManually', store: seed = {} } = {}) {
+  const dom = new JSDOM(`<!doctype html><html><head><meta property="og:site_name" content="External"></head><body>${body}</body></html>`, { runScripts: 'outside-only', pretendToBeVisual: true, url });
   const w = dom.window;
   Object.defineProperty(w.HTMLElement.prototype, 'offsetParent', { configurable: true, get() { return this.hidden ? null : this.ownerDocument.body; } });
   if (!w.CSS) w.CSS = {};
   if (!w.CSS.escape) w.CSS.escape = (s) => String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => String.fromCharCode(92) + c);
-  const store = {};
+  const store = { ...seed };
   const relayed = [];
+  const listeners = [];
   w.chrome = {
     runtime: {
       lastError: null,
-      onMessage: { addListener() {} },
+      onMessage: { addListener(f) { listeners.push(f); } },
       sendMessage(msg, cb) {
         relayed.push(msg.op);
         const data = { status: { signedIn }, listAnswers: { items: answersList }, categorise: { category: 'custom' } }[msg.op];
@@ -74,7 +75,13 @@ function boot(body, { signedIn = true, answersList = [] } = {}) {
   w.console.log = () => {};
   w.eval(fs.readFileSync(path.join(ROOT, 'cloud-library.js'), 'utf8'));
   w.eval(fs.readFileSync(path.join(ROOT, 'ai-assist.js'), 'utf8'));
-  return { w, relayed, store };
+  // What the side panel gets back for get_job_context (null if this frame stays quiet).
+  const askJob = () => new Promise((resolve) => {
+    let answered = false;
+    const kept = listeners.map((f) => f({ action: 'get_job_context' }, {}, (r) => { answered = true; resolve(r); }));
+    if (!kept.some((k) => k === true) && !answered) resolve(null);
+  });
+  return { w, relayed, store, askJob };
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -110,6 +117,31 @@ const FORM = `
   const cache = posting.store.aiJobCache || {};
   const entry = Object.values(cache)[0] || {};
   check('posting page: job description cached', [entry.role, entry.description && entry.description.startsWith('We need SQL.')], ['Data Analyst', true]);
+
+  // iCIMS (layout read from a live iCIMS job page, 2026-11-28): the job sits in
+  // #icims_content_iframe; inside it the title is the h1 and the description
+  // .iCIMS_JobContent; og:site_name is "External"; the company is in the host.
+  const ICIMS = 'https://careers-shure.icims.com/jobs/5109/engineer-senior%2c-digital-signal-processing/job?in_iframe=1';
+  const overview = boot(`<div class="iCIMS_MainWrapper iCIMS_JobPage"><div class="iCIMS_JobContainer"><h1>Engineer Senior, Digital Signal Processing</h1>
+    <div class="iCIMS_JobContent"><div class="iCIMS_Expandable_Container"><div class="iCIMS_Expandable_Text">${'Design DSP algorithms in C. '.repeat(20)}</div></div></div></div></div>`, { url: ICIMS });
+  const job = overview.w.__easyApplyAiAssistTest.readJobFromPage();
+  check('iCIMS overview: title, company from the host (not "External"), description', [job.role, job.company, job.description.startsWith('Design DSP')],
+    ['Engineer Senior, Digital Signal Processing', 'Shure', true]);
+  check('iCIMS: one cache key per job, overview or apply page', overview.w.__easyApplyAiAssistTest.jobKey(), 'https://careers-shure.icims.com/jobs/5109');
+  const asked = await overview.askJob();
+  check('iCIMS overview answers Check my match with the description', !!(asked && asked.description.startsWith('Design DSP')), true);
+  await wait(600);
+  const remembered = overview.store.aiJobCache && overview.store.aiJobCache['https://careers-shure.icims.com/jobs/5109'];
+  check('iCIMS overview description remembered for the application pages', !!(remembered && remembered.description), true);
+
+  const apply = boot('<form><label for="q">Why Shure?</label><textarea id="q"></textarea></form>',
+    { url: 'https://careers-shure.icims.com/jobs/5109/engineer-senior%2c-digital-signal-processing/candidate?in_iframe=1', store: overview.store });
+  const fromCache = await apply.askJob();
+  check('iCIMS application page answers from the remembered overview', !!(fromCache && fromCache.description.startsWith('Design DSP')), true);
+
+  const outer = boot(`<main>${'Shure careers site text. '.repeat(20)}</main><iframe id="icims_content_iframe"></iframe>`, { url: 'https://careers-shure.icims.com/jobs/5109/engineer/job' });
+  const outerAnswer = await outer.askJob();
+  check('outer iCIMS page answers only after waiting, never with its own page text', !!(outerAnswer && outerAnswer.description), false);
 
   console.log(failures ? `\n${failures} FAILED` : '\nall passed');
   process.exit(failures ? 1 : 0);

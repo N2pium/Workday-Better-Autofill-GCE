@@ -74,13 +74,50 @@
         };
     }
 
+    // careers-acme.icims.com/jobs/1234/data-analyst/job?... -> Acme, Data Analyst, job 1234.
+    // The API's site list has no 'icims' yet, so these are stored as 'other'.
+    const ICIMS_HOST_PREFIX = /^(?:(?:us|uk|ca|global|external|internal|ext|int)?-?(?:careers|jobs|career|recruiting|apply)-)/i;
+    function parseIcims(u, info) {
+        if (!/(^|\.)icims\.com$/i.test(u.hostname)) return null;
+        const parts = u.pathname.split('/').filter(Boolean);
+        const j = parts.indexOf('jobs');
+        const id = j >= 0 && /^\d+$/.test(parts[j + 1] || '') ? parts[j + 1] : null;
+        if (!id) return null;
+        const slug = parts[j + 2] && !/^(job|login|candidate|apply|search)$/i.test(parts[j + 2]) ? parts[j + 2] : '';
+        const tenant = u.hostname.split('.')[0].replace(ICIMS_HOST_PREFIX, '');
+        return {
+            key: `icims:${u.hostname.toLowerCase()}:${id}`,
+            site: 'other',
+            company: words(info.company) || slugToName(tenant),
+            role: words(info.title) || (slug ? slugToName(slug) : 'Job application'),
+            url: `https://${u.hostname}/jobs/${id}/${slug ? `${slug}/` : ''}job`
+        };
+    }
+
+    // 2000recruiting.paylocity.com/recruiting/jobs/Apply/49568/Paylocity/Enterprise-HCM-Account-Executive
+    // The page title reads "Paylocity - Enterprise HCM Account Executive Application".
+    function parsePaylocity(u, info) {
+        if (!/(^|\.)paylocity\.com$/i.test(u.hostname)) return null;
+        const m = u.pathname.match(/\/recruiting\/jobs\/(?:apply|details)\/(\d+)(?:\/([^/]+))?(?:\/([^/]+))?/i);
+        if (!m) return null;
+        const [, id, companySlug, roleSlug] = m;
+        const titled = String(info.pageTitle || '').match(/^\s*(.+?)\s+-\s+(.+?)\s+Application\s*$/i);
+        return {
+            key: `paylocity:${u.hostname.toLowerCase()}:${id}`,
+            site: 'other',
+            company: words(info.company) || (titled && titled[1]) || (companySlug ? slugToName(companySlug) : 'Unknown company'),
+            role: (titled && titled[2]) || (roleSlug ? slugToName(roleSlug) : '') || words(info.title) || 'Job application',
+            url: `https://${u.hostname}/Recruiting/Jobs/Details/${id}`
+        };
+    }
+
     /** Raw page info -> { key, site, company, role, url } or null if it isn't a job we recognise. */
     function normalizeJob(info) {
         if (!info || !info.url) return null;
         let u;
         try { u = new URL(info.url); } catch (e) { return null; }
         if (u.protocol !== 'https:') return null;
-        const job = parseWorkday(u, info) || parseGreenhouse(u, info);
+        const job = parseWorkday(u, info) || parseGreenhouse(u, info) || parseIcims(u, info) || parsePaylocity(u, info);
         if (!job) return null;
         job.company = job.company.slice(0, 200) || 'Unknown company';
         job.role = job.role.slice(0, 200) || 'Job application';

@@ -45,7 +45,7 @@
       <div class="tab-panel" id="tab-home">
         <div class="job-card">
           <p class="job-company" id="jobCompany">Open a job application</p>
-          <p class="job-role" id="jobRole">Workday or Greenhouse</p>
+          <p class="job-role" id="jobRole">Workday, Greenhouse, iCIMS or Paylocity</p>
           <p class="job-site" id="jobSite">This page</p>
           <div class="cta-wrap">
             <button id="autofillBtn" class="btn btn-primary autofill-btn">
@@ -503,6 +503,16 @@
               <label for="greenhouseToggle"><b>Greenhouse</b><span>boards.greenhouse.io. Chrome asks you to allow the
                 site; then refresh any Greenhouse tab that is already open.</span></label>
               <input type="checkbox" role="switch" id="greenhouseToggle" />
+            </div>
+            <div class="switch-row">
+              <label for="icimsToggle"><b>iCIMS</b><span>Company sites on icims.com. Chrome asks you to allow the site.
+                Sign in to iCIMS yourself, then press Autofill on each page of the application.</span></label>
+              <input type="checkbox" role="switch" id="icimsToggle" />
+            </div>
+            <div class="switch-row">
+              <label for="paylocityToggle"><b>Paylocity</b><span>Company job applications on paylocity.com. Autofill runs
+                only on recruiting pages, never on Paylocity payroll or employee sites.</span></label>
+              <input type="checkbox" role="switch" id="paylocityToggle" />
             </div>
           </div>
         </section>
