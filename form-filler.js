@@ -29,7 +29,7 @@
 (function (root) {
     'use strict';
 
-    const BUILD = 'forms-2026-11-28b';
+    const BUILD = 'forms-2026-11-28c';
 
     // ------------------------------------------------------------ text helpers
 
@@ -99,21 +99,16 @@
             doc.querySelectorAll(`label[for="${esc}"]`).forEach((l) => parts.push(textOf(l)));
         }
         const wrap = el.closest('label');
-        if (wrap) {
-            let t = textOf(wrap);
-            if (isSearch(el)) {
-                const shown = textOf(searchBox(el));
-                if (shown) t = clean(t.split(shown).join(' '));
-            }
-            parts.push(t);
-        }
+        if (wrap) parts.push(textOf(wrap));
         if (el.getAttribute('aria-label')) parts.push(el.getAttribute('aria-label'));
         if (!parts.join('').trim() && el.getAttribute('data-for')) parts.push(el.getAttribute('data-for'));
         if (!parts.join('').trim()) {
             if (el.placeholder) parts.push(el.placeholder);
             if (el.title) parts.push(el.title);
         }
-        const unique = [...new Set(parts.map((x) => clean(x.replace(/\((required|optional)\)/gi, ' '))).filter(Boolean))];
+        const shown = isSearch(el) ? textOf(searchBox(el)) : '';
+        const tidy = (x) => clean((shown ? x.split(shown).join(' ') : x).replace(/\((required|optional)\)/gi, ' '));
+        const unique = [...new Set(parts.map(tidy).filter(Boolean))];
         return clean(unique.join(' '));
     }
 
@@ -258,24 +253,61 @@
         if (el.blur) el.blur();
     }
 
-    /** Opens the widget, clicks the option matching the candidates, and checks it took. */
-    async function pickInWidget(el, candidates) {
-        if (isCombo(el)) press(el);
-        else {
-            const win = el.ownerDocument.defaultView;
-            searchBox(el).dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, view: win }));
-        }
+    async function waitForOptions(el) {
         let found = [];
         for (let i = 0; i < 8 && !found.length; i++) {
             await sleep(i ? 200 : 150);
             found = widgetOptions(el);
         }
-        const options = found.map((o) => ({ o, textContent: o.textContent, value: clean(o.textContent) }));
-        const hit = chooseOption(options, candidates);
-        if (!hit) { closeWidget(el); return false; }
-        press(hit.o);
-        await sleep(250);
+        return found.map((o) => ({ o, textContent: o.textContent, value: clean(o.textContent) }));
+    }
+
+    /** Opens the widget, chooses the option matching the candidates, and checks it took.
+        Searchable selects (verified live on Paylocity): open with a mousedown on the
+        box while the input is NOT focused (a focused input ignores it); if no option
+        matches yet, type the first plain candidate to filter the list; then hover the
+        row (its onMouseEnter makes it the active row) and press it with mousedown. */
+    async function pickInWidget(el, candidates) {
+        const win = el.ownerDocument.defaultView;
+        if (isCombo(el)) {
+            press(el);
+            const hit = chooseOption(await waitForOptions(el), candidates);
+            if (!hit) { closeWidget(el); return false; }
+            press(hit.o);
+            await sleep(250);
+            return !!widgetShows(el);
+        }
+        const doc = el.ownerDocument;
+        if (doc.activeElement && doc.activeElement.blur) doc.activeElement.blur();
+        const box = searchBox(el);
+        box.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, view: win }));
+        let hit = chooseOption(await waitForOptions(el), candidates);
+        const typed = candidates.find((c) => typeof c === 'string' && c.trim());
+        if (!hit && typed) {
+            el.focus();
+            setTyped(el, typed);
+            hit = chooseOption(await waitForOptions(el), candidates);
+        }
+        if (!hit) {
+            if (el.value) setTyped(el, '');
+            closeWidget(el);
+            return false;
+        }
+        hit.o.dispatchEvent(new win.MouseEvent('mouseover', { bubbles: true, cancelable: true, view: win, relatedTarget: box }));
+        await sleep(100);
+        hit.o.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, view: win }));
+        hit.o.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, view: win }));
+        await sleep(300);
+        if (el.blur) el.blur();
+        await sleep(100);
         return !!widgetShows(el);
+    }
+
+    /** Types into a search box (input event only: change/blur would commit or close it). */
+    function setTyped(el, value) {
+        const win = el.ownerDocument.defaultView;
+        Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set.call(el, value);
+        el.dispatchEvent(new win.Event('input', { bubbles: true }));
     }
 
     // ------------------------------------------------------------ answers
@@ -374,6 +406,8 @@
         const steps = [];
         const done = new Set(); // controls already handled
         const add = (status, section, field, detail) => steps.push({ status, section, field, ...(detail ? { detail } : {}) });
+        const typedIn = []; // [element, value, step] for every text value written
+
 
         const controls = Array.from(doc.querySelectorAll('input, select, textarea, [role="combobox"]')).filter(usable)
             .filter((el) => el.getAttribute('aria-disabled') !== 'true')
@@ -392,7 +426,7 @@
             done.add(el);
             if (el.value && el.value.trim()) { add('kept', section, field); continue; } // the site or the person already filled it
             setNative(el, value);
-            if (el.value === String(value)) add('filled', section, field);
+            if (el.value === String(value)) { add('filled', section, field); typedIn.push([el, String(value), steps[steps.length - 1]]); }
             else add('failed', section, field, 'The page did not keep the value.');
         }
 
@@ -558,6 +592,20 @@
         const resume = attachResume(doc, controls, profile);
         // A resume the site already has on file counts as kept.
         if (resume) add(resume.status, 'Resume', 'Resume file', resume.detail);
+
+        // Did the page keep what was typed? Some address boxes clear on blur or when
+        // another control opens. One retry, then the truth goes in the report.
+        if (typedIn.length) {
+            await sleep(300);
+            const lost = typedIn.filter(([el, v]) => el.isConnected && el.value !== v);
+            for (const [el, v] of lost) setNative(el, v);
+            if (lost.length) await sleep(400);
+            for (const [el, v, step] of lost) {
+                if (el.value === v) continue;
+                step.status = 'failed';
+                step.detail = 'The page cleared it after it was typed. Type it yourself.';
+            }
+        }
 
         // Required fields still empty: what the person must finish.
         const empty = [];

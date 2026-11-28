@@ -65,16 +65,34 @@ const BEHAVIOUR = `
       cb.textContent = li.textContent; lb.hidden = true; cb.setAttribute('aria-expanded', 'false');
     }));
   });
+  // Paylocity's searchable select, as observed live on 2026-11-28:
+  //  - mousedown on the control opens the menu, unless its input is focused;
+  //    a click on the open control closes it;
+  //  - typing filters the rows; rows have onMouseEnter (active row) and
+  //    onMouseDown (choose the active row), no click handler;
+  //  - the chosen value shows in the single-value element.
   document.querySelectorAll('.pcty-input-select-full-container').forEach((box) => {
     const menu = box.querySelector('.pcty-input-select__menu-list');
     const shown = box.querySelector('.pcty-input-select__single-value');
+    const input = box.querySelector('input');
     const control = box.querySelector('.pcty-input-select-input-container');
-    control.addEventListener('mousedown', () => { menu.hidden = false; });
-    // Live behaviour seen in the first report: a click on the open control closes the menu.
+    const rows = [...menu.querySelectorAll('[role="listitem"]')];
+    let active = null;
+    const visible = () => rows.filter((r) => !r.hidden);
+    control.addEventListener('mousedown', () => { if (document.activeElement !== input) { menu.hidden = false; active = visible()[0]; } });
     control.addEventListener('click', () => { menu.hidden = true; });
-    menu.querySelectorAll('[role="listitem"]').forEach((row) => row.addEventListener('click', () => {
-      shown.textContent = row.textContent; menu.hidden = true;
-    }));
+    input.addEventListener('input', () => {
+      menu.hidden = false;
+      rows.forEach((r) => { r.hidden = !r.textContent.toLowerCase().startsWith(input.value.toLowerCase()); });
+      active = visible()[0];
+    });
+    rows.forEach((row) => {
+      row.addEventListener('mouseover', (e) => { if (!row.contains(e.relatedTarget)) active = row; });
+      row.addEventListener('mousedown', () => {
+        if (active) shown.textContent = active.textContent;
+        input.value = ''; rows.forEach((r) => { r.hidden = false; }); menu.hidden = true;
+      });
+    });
   });`;
 
 function page() {
@@ -174,6 +192,18 @@ test('required fields left are listed: SMS consent and county', async () => {
   assert.ok(labels.some((l) => /permission to text/.test(l)), labels.join(' | '));
   assert.ok(labels.some((l) => /County/.test(l)), labels.join(' | '));
   assert.ok(!labels.some((l) => /State|First Name|worked with us/.test(l)), labels.join(' | '));
+});
+
+test('a value the page clears after typing is reported as failed, not filled', async () => {
+  const w = page();
+  // Seen live on one Paylocity form: City and Address Line 1 emptied after the fill.
+  const city = w.document.getElementById('public-site-address-city');
+  city.addEventListener('blur', () => { setTimeout(() => { city.value = ''; }, 50); });
+  const r = await w.EasyApplyFormFiller.fill(w.document, PROFILE);
+  const step = r.steps.find((s) => s.field === 'City');
+  assert.equal(step.status, 'failed', JSON.stringify(step));
+  assert.match(step.detail, /cleared/);
+  assert.equal(r.steps.find((s) => s.field === 'Zip or postal code').status, 'filled');
 });
 
 test('Paylocity job pages are recognised for the tracker', async () => {
