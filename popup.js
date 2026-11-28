@@ -594,9 +594,9 @@ document.addEventListener('DOMContentLoaded', () => {
         void autofillBtn.offsetWidth; // replay if two frames finish back to back
         autofillBtn.classList.add('is-done');
         const check = checkIcon();
-        autofillLabel.textContent = report
-            ? (total > c.filled ? `Filled ${c.filled || 0} of ${total}` : `Filled ${plural(c.filled || 0, 'field')}`)
-            : 'Autofill complete';
+        autofillLabel.textContent = !report ? 'Autofill complete'
+            : !c.filled && c.kept ? `${plural(c.kept, 'field')} already filled`
+            : total > c.filled ? `Filled ${c.filled || 0} of ${total}` : `Filled ${plural(c.filled || 0, 'field')}`;
         autofillBtn.replaceChildren(check, autofillLabel);
         const wrap = autofillBtn.parentElement;
         wrap.querySelectorAll('.spark').forEach((s) => s.remove());
@@ -1664,6 +1664,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const c = r.counts || {};
         reportUi.card.hidden = false;
         const parts = [`${c.filled || 0} filled`];
+        if (c.kept) parts.push(`${c.kept} already filled`);
         if (c.failed) parts.push(`${c.failed} didn't work`);
         if (c.emptyRequired) parts.push(`${c.emptyRequired} required still empty`);
         reportUi.summary.textContent = parts.join(' · ');

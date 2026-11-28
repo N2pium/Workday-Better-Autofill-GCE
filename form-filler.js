@@ -23,7 +23,7 @@
 (function (root) {
     'use strict';
 
-    const BUILD = 'forms-2026-11-27b';
+    const BUILD = 'forms-2026-11-27c';
 
     // ------------------------------------------------------------ text helpers
 
@@ -294,7 +294,7 @@
             const el = textual.find((c) => !done.has(c) && want.test(keysOf(c)) && !(avoid && avoid.test(norm(labelFor(c)))));
             if (!el) continue;
             done.add(el);
-            if (el.value && el.value.trim()) continue; // the site or the person already filled it
+            if (el.value && el.value.trim()) { add('kept', section, field); continue; } // the site or the person already filled it
             setNative(el, value);
             if (el.value === String(value)) add('filled', section, field);
             else add('failed', section, field, 'The page did not keep the value.');
@@ -307,10 +307,12 @@
             if (!el || !text) return;
             done.add(el);
             if (el.tagName === 'SELECT') {
-                if (el.value && !isPlaceholderOption(el.selectedOptions[0] || {})) return;
+                if (el.value && !isPlaceholderOption(el.selectedOptions[0] || {})) { add('kept', 'Address', field); return; }
                 if (selectOption(el, candidates)) add('filled', 'Address', field);
                 else add('failed', 'Address', field, `No option matched "${text}".`);
-            } else if (!el.value) {
+            } else if (el.value) {
+                add('kept', 'Address', field);
+            } else {
                 setNative(el, text);
                 if (el.value) add('filled', 'Address', field);
             }
@@ -341,11 +343,11 @@
                 continue;
             }
             if (q.kind === 'select') {
-                if (q.el.value && !isPlaceholderOption(q.el.selectedOptions[0] || {})) continue;
+                if (q.el.value && !isPlaceholderOption(q.el.selectedOptions[0] || {})) { add('kept', section, field); continue; }
                 if (selectOption(q.el, candidates)) add('filled', section, field);
                 else add('failed', section, field, 'No option matched your saved answer.');
             } else {
-                if (q.group.some((r) => r.checked)) continue;
+                if (q.group.some((r) => r.checked)) { add('kept', section, field); continue; }
                 if (chooseRadio(q.group, candidates)) add('filled', section, field);
                 else add('failed', section, field, 'No option matched your saved answer.');
             }
@@ -362,7 +364,7 @@
                 const el = value && firstWith(want, /high school diploma|graduat(ed|ion) (date|year)/);
                 if (!el) continue;
                 done.add(el);
-                if (el.value) continue;
+                if (el.value) { add('kept', 'Education', field); continue; }
                 setNative(el, value);
                 if (el.value) add('filled', 'Education', field);
             }
@@ -372,14 +374,20 @@
             const employer = job.company && firstWith(/employer|company( name)?$|^company\b/, /current company you are applying|reference/);
             if (employer) {
                 done.add(employer);
-                if (!employer.value) { setNative(employer, job.company); if (employer.value) add('filled', 'Work experience', 'Employer'); }
+                if (employer.value) add('kept', 'Work experience', 'Employer');
+                else { setNative(employer, job.company); if (employer.value) add('filled', 'Work experience', 'Employer'); }
                 const title = job.title && firstWith(/job title|position( title)?|^title$/, /applying|desired/);
-                if (title) { done.add(title); if (!title.value) { setNative(title, job.title); if (title.value) add('filled', 'Work experience', 'Job title'); } }
+                if (title) {
+                    done.add(title);
+                    if (title.value) add('kept', 'Work experience', 'Job title');
+                    else { setNative(title, job.title); if (title.value) add('filled', 'Work experience', 'Job title'); }
+                }
             }
         }
 
         // Resume.
         const resume = attachResume(doc, controls, profile);
+        // A resume the site already has on file counts as kept.
         if (resume) add(resume.status, 'Resume', 'Resume file', resume.detail);
 
         // Required fields still empty: what the person must finish.
@@ -402,6 +410,7 @@
         const counts = {
             filled: steps.filter((s) => s.status === 'filled').length,
             failed: steps.filter((s) => s.status === 'failed').length,
+            kept: steps.filter((s) => s.status === 'kept').length,
             emptyRequired: empty.length
         };
         return { site, page, build: BUILD, at: new Date().toISOString(), counts, steps, empty };
@@ -411,7 +420,8 @@
         const files = controls.filter((el) => el.type === 'file');
         if (!files.length || !profile.resume || !profile.resumeMeta) return null;
         const target = files.find((f) => /resume|\bcv\b|curriculum/.test(keysOf(f))) || (files.length === 1 ? files[0] : null);
-        if (!target || (target.files && target.files.length)) return null;
+        if (!target) return null;
+        if (target.files && target.files.length) return { status: 'kept' };
         const win = doc.defaultView;
         try {
             const [head, data] = profile.resume.split(',');

@@ -86,6 +86,21 @@ test('fills contact fields by label, never overwriting what is there', () => {
   assert.ok(r.counts.filled >= 9, `filled ${r.counts.filled}`);
 });
 
+test('a page already filled from a previous application reports what it kept', () => {
+  const w = page(`<form>
+    <label for="f">First Name</label><input id="f" value="Ada">
+    <label for="l">Last Name</label><input id="l" value="Lovelace">
+    <label for="e">Email</label><input id="e" type="email" value="ada@example.com">
+    <label for="s">State</label><select id="s"><option value="">Select</option><option value="NY" selected>NY</option></select>
+    <fieldset><legend>Are you legally authorized to work in the United States?</legend>
+      <input type="radio" name="auth" id="y" checked><label for="y">Yes</label><input type="radio" name="auth" id="n"><label for="n">No</label></fieldset>
+  </form>`);
+  const r = w.EasyApplyFormFiller.fill(w.document, PROFILE, { site: 'icims' });
+  assert.equal(r.counts.filled, 0);
+  assert.equal(r.counts.kept, 5, JSON.stringify(r.steps));
+  assert.equal(w.document.getElementById('f').value, 'Ada');
+});
+
 test('answers yes/no questions from saved answers, radio or select', () => {
   const w = page(CONTACT);
   w.EasyApplyFormFiller.fill(w.document, PROFILE);
