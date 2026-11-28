@@ -210,7 +210,7 @@
       .panel { position: relative; margin: 6px 0 12px; padding: 12px; border-radius: var(--radius-m); background: var(--bg); color: var(--text);
         border: 1px solid var(--border); font-size: 13px; line-height: 1.45; max-width: 720px; overflow: hidden; }
       .head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-      .kicker { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--primary-ink); }
+      .kicker { font: 600 13px var(--fd); color: var(--text); }
       .muted { color: var(--text-muted); }
       .x { margin-left: auto; background: none; border: 0; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 0 4px; }
       .x:hover { color: var(--text); }
@@ -219,7 +219,7 @@
       .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
       textarea { width: 100%; min-height: 140px; margin: 8px 0 4px; padding: 8px; border-radius: var(--radius-s); resize: vertical;
         background: var(--card-bg); color: var(--text); border: 1px solid var(--border); font-size: 13px; line-height: 1.5; }
-      .count { font-size: 11px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+      .count { font-size: 11px; font-family: var(--ft); font-variant-numeric: tabular-nums; font-variant-numeric: tabular-nums; }
       .count.over { color: var(--danger); }
       .status { min-height: 1.2em; margin-top: 6px; font-size: 12px; }
       .status.err { color: var(--danger); }
